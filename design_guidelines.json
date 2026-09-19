@@ -1,0 +1,43 @@
+{
+  "project_name": "Productify Marketplace & GPU Rental Platform",
+  "app_type": "hybrid_fullstack",
+  "theme": "dark_cyber_tech",
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Plus Jakarta Sans, sans-serif",
+    "mono_font": "JetBrains Mono, monospace"
+  },
+  "colors": {
+    "primary": "#6366F1",
+    "primary_hover": "#4F46E5",
+    "accent": "#10B981",
+    "background": "#090A0F",
+    "surface": "#12141C",
+    "surface_card": "#181B26",
+    "border": "#272A38",
+    "text_primary": "#F3F4F6",
+    "text_secondary": "#9CA3AF"
+  },
+  "image_urls": {
+    "gpu_hardware": "https://images.unsplash.com/photo-1695668548342-c0c1ad479aee?q=80&w=1000&auto=format&fit=crop",
+    "server_rack": "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000&auto=format&fit=crop",
+    "developer_dashboard": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1000&auto=format&fit=crop",
+    "datacenter": "https://images.unsplash.com/photo-1744868562210-fffb7fa882d9?q=80&w=1000&auto=format&fit=crop"
+  },
+  "key_functionalities": [
+    "Marketplace homepage with category discovery, featured digital software, and verified GPU rental nodes",
+    "Advanced search, multi-filter by price, VRAM, category, and instant search bar",
+    "Digital product/software store pages with instant MOCK download/checkout",
+    "GPU / System rental marketplace with hourly/daily rates, VRAM specs, and instant booking modal",
+    "User authentication supporting Google social login and email/password with role switching (Buyer / Seller / Admin)",
+    "Seller dashboard for publishing digital software and submitting GPU rigs for admin verification & approval",
+    "Admin dashboard for reviewing GPU verification documents, approving/rejecting listings, and monitoring platform metrics",
+    "Cart and MOCK Checkout system with interactive payment simulation and success toasts via Sonner",
+    "Order history & active rental sessions management with telemetry graphs and live uptime status"
+  ],
+  "accessibility_and_testing": {
+    "interactive_elements_test_id": "All interactive elements, buttons, inputs, and tabs include data-testid attributes",
+    "contrast_compliance": "APCA contrast ratios met for all dark mode text over surfaces (#F3F4F6 on #12141C)"
+  },
+  "instructions_to_main_agent": "Ensure all components adhere to Tailwind CSS v3 classes, make use of Lucide icons, implement reactive state management for cart, auth, and rental bookings, and provide robust mock data for initial browsing."
+}
