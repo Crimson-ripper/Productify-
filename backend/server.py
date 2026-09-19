@@ -23,6 +23,10 @@ class AuthInput(BaseModel):
     name: Optional[str] = None
     role: str = "buyer"
 
+class GoogleInput(BaseModel):
+    email: str
+    name: Optional[str] = None
+
 class ProductInput(BaseModel):
     title: str
     category: str
@@ -80,7 +84,7 @@ async def login(data: AuthInput):
     return {"user": public_user(user), "token": token_for(user)}
 
 @api.post("/auth/google")
-async def google_demo(data: AuthInput):
+async def google_demo(data: GoogleInput):
     email = data.email.lower().strip()
     user = await db.users.find_one({"email": email})
     if not user:
