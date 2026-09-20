@@ -4,6 +4,7 @@ import { ArrowRight, ShieldCheck, Tag } from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useCart } from "@/contexts/CartContext";
 import SEO from "@/components/SEO";
+import ReportButton from "@/components/ReportButton";
 import { toast } from "sonner";
 
 export default function ProductDetail() {
@@ -43,6 +44,7 @@ export default function ProductDetail() {
           <div className="detail-actions">
             <button className="primary-button" onClick={() => { add(p, "product"); toast.success("Added to bag"); }} data-testid="detail-add-button">Add to bag <ArrowRight size={16} /></button>
             <Link to="/cart" className="text-button text-button-dark">Go to bag <ArrowRight size={14} /></Link>
+            <ReportButton listingId={p.id} listingKind="product" />
           </div>
           <div className="detail-features">
             <div><ShieldCheck size={16} /><span><b>Instant download</b><small>Delivered to your account</small></span></div>

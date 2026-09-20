@@ -120,6 +120,23 @@ class ConsentInput(BaseModel):
     metadata: Optional[dict] = {}
 
 
+class ReportInput(BaseModel):
+    listing_id: str
+    listing_kind: str  # product | rental
+    reason: str        # illegal | infringing | malware | scam | csam | other
+    details: Optional[str] = ""
+    reporter_email: Optional[str] = None
+
+
+class ReportResolveInput(BaseModel):
+    decision: str  # dismiss | remove_listing
+    notes: Optional[str] = ""
+
+
+class PolicyVersionsInput(BaseModel):
+    versions: dict  # {"terms": "2026-03-01", ...}
+
+
 def public_user(u):
     return {
         "id": u.get("id"),
@@ -583,6 +600,141 @@ async def admin_consents(user=Depends(current_user), q: str = "", limit: int = 2
     return await db.consents.find(query, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(1000, limit)))
 
 
+# ============== POLICY VERSIONS & BUMP PROMPT ==============
+POLICY_TYPES = ("terms", "privacy", "refunds", "acceptable_use", "cookies")
+
+
+async def get_current_versions():
+    doc = await db.policy_versions.find_one({"id": "current"}, {"_id": 0})
+    return (doc or {}).get("versions", {})
+
+
+@api.get("/policies/versions")
+async def policies_versions():
+    return await get_current_versions()
+
+
+@api.post("/admin/policies/versions")
+async def admin_set_versions(data: PolicyVersionsInput, user=Depends(current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    versions = {k: str(v) for k, v in data.versions.items() if k in POLICY_TYPES}
+    if not versions:
+        raise HTTPException(400, "No valid policy versions provided")
+    current = await get_current_versions()
+    current.update(versions)
+    await db.policy_versions.update_one(
+        {"id": "current"},
+        {"$set": {"id": "current", "versions": current, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"versions": current}
+
+
+@api.get("/consents/status")
+async def consent_status(user=Depends(current_user)):
+    """Returns list of policies the user must re-accept based on the latest published versions."""
+    current = await get_current_versions()
+    pending = []
+    for ct, ver in current.items():
+        latest = await db.consents.find_one(
+            {"user_id": user["id"], "consent_type": ct, "choice": "accepted"},
+            {"_id": 0}, sort=[("created_at", -1)],
+        )
+        accepted_version = latest.get("version") if latest else None
+        if accepted_version != ver:
+            pending.append({"consent_type": ct, "current_version": ver, "accepted_version": accepted_version})
+    return {"pending": pending, "current_versions": current}
+
+
+# ============== ABUSE REPORTS ==============
+ALLOWED_REPORT_REASONS = {"illegal", "infringing", "malware", "scam", "csam", "other"}
+ALLOWED_REPORT_STATUS = {"open", "dismissed", "removed"}
+
+
+@api.post("/reports")
+async def file_report(data: ReportInput, request: Request):
+    if data.listing_kind not in ("product", "rental"):
+        raise HTTPException(400, "Invalid listing_kind")
+    if data.reason not in ALLOWED_REPORT_REASONS:
+        raise HTTPException(400, "Invalid reason")
+    coll = db.products if data.listing_kind == "product" else db.rentals
+    listing = await coll.find_one({"id": data.listing_id}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    # Try to attribute to signed-in user (optional)
+    reporter = None
+    try:
+        reporter = await current_user(request)
+    except HTTPException:
+        pass
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "listing_id": data.listing_id,
+        "listing_kind": data.listing_kind,
+        "listing_title": listing.get("title"),
+        "reason": data.reason,
+        "details": (data.details or "")[:2000],
+        "reporter_id": reporter["id"] if reporter else None,
+        "reporter_email": reporter.get("email") if reporter else (data.reporter_email or None),
+        "ip": ip,
+        "user_agent": request.headers.get("user-agent"),
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.abuse_reports.insert_one(doc)
+    # Do NOT auto-hide the listing — only mark it as under review, increment counter, and let admin decide.
+    await coll.update_one(
+        {"id": data.listing_id},
+        {"$set": {"under_review": True, "last_reported_at": doc["created_at"]},
+         "$inc": {"reports_count": 1}},
+    )
+    return {"id": doc["id"], "status": doc["status"]}
+
+
+@api.get("/admin/reports")
+async def admin_reports(user=Depends(current_user), status: str = "open", limit: int = 200):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    if status not in ALLOWED_REPORT_STATUS and status != "all":
+        raise HTTPException(400, "Invalid status")
+    query = {} if status == "all" else {"status": status}
+    return await db.abuse_reports.find(query, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(1000, limit)))
+
+
+@api.post("/admin/reports/{report_id}/resolve")
+async def resolve_report(report_id: str, data: ReportResolveInput, user=Depends(current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    if data.decision not in ("dismiss", "remove_listing"):
+        raise HTTPException(400, "Invalid decision")
+    report = await db.abuse_reports.find_one({"id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(404, "Report not found")
+    new_status = "dismissed" if data.decision == "dismiss" else "removed"
+    await db.abuse_reports.update_one(
+        {"id": report_id},
+        {"$set": {"status": new_status, "review_notes": data.notes, "admin_id": user["id"], "resolved_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    coll = db.products if report["listing_kind"] == "product" else db.rentals
+    if data.decision == "remove_listing":
+        # Take down the listing (products.approved -> False, rentals.status -> rejected)
+        update = {"under_review": False, "removed_by_admin": True, "removed_reason": report["reason"]}
+        if report["listing_kind"] == "product":
+            update["approved"] = False
+        else:
+            update["status"] = "rejected"
+        await coll.update_one({"id": report["listing_id"]}, {"$set": update})
+    else:
+        # Dismiss — clear under_review only if no other open reports remain
+        remaining = await db.abuse_reports.count_documents({"listing_id": report["listing_id"], "status": "open"})
+        if remaining == 0:
+            await coll.update_one({"id": report["listing_id"]}, {"$set": {"under_review": False}})
+    return {"status": new_status, "decision": data.decision}
+
+
 # ============== RENTAL WORKSPACE (file transfer for GPU service) ==============
 class WorkspaceFileInput(BaseModel):
     rental_id: str
@@ -631,6 +783,13 @@ async def seed():
             "role": "admin",
             "password_hash": bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode(),
             "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    # Seed current policy versions if missing
+    if not await db.policy_versions.find_one({"id": "current"}):
+        await db.policy_versions.insert_one({
+            "id": "current",
+            "versions": {"terms": "2026-02-20", "privacy": "2026-02-20", "refunds": "2026-02-20", "acceptable_use": "2026-02-20", "cookies": "2026-02-20"},
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         })
     if await db.products.count_documents({}) == 0:
         await db.products.insert_many([

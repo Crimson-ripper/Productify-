@@ -4,6 +4,7 @@ import { ArrowRight, Cpu, ShieldCheck } from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useCart } from "@/contexts/CartContext";
 import SEO from "@/components/SEO";
+import ReportButton from "@/components/ReportButton";
 import { toast } from "sonner";
 
 export default function RentalDetail() {
@@ -40,6 +41,7 @@ export default function RentalDetail() {
           <div className="detail-actions">
             <button className="primary-button" onClick={() => { add(r, "rental"); toast.success("Rental added to bag"); }} data-testid="rental-detail-add-button">Add to bag <ArrowRight size={16} /></button>
             <Link to="/cart" className="text-button text-button-dark">Go to bag <ArrowRight size={14} /></Link>
+            <ReportButton listingId={r.id} listingKind="rental" />
           </div>
         </div>
       </section>

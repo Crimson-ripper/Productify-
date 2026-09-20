@@ -31,6 +31,7 @@ import Cookies from "@/pages/policies/Cookies";
 import AcceptableUse from "@/pages/policies/AcceptableUse";
 import Contact from "@/pages/policies/Contact";
 import CookieBanner from "@/components/CookieBanner";
+import PolicyBumpModal from "@/components/PolicyBumpModal";
 
 function AppRouter() {
   const location = useLocation();
@@ -68,6 +69,7 @@ function AppRouter() {
       </main>
       <Footer />
       <CookieBanner />
+      <PolicyBumpModal />
       <Toaster position="bottom-center" richColors closeButton />
     </div>
   );
