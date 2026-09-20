@@ -409,6 +409,46 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .report-badge small{font:9px 'DM Mono';letter-spacing:.08em}
 .report-link{display:inline-block;margin-top:10px;color:var(--violet);font-size:11px;font-weight:700;text-decoration:underline}
 
+/* Seller report history */
+.report-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.rs-card{padding:20px;background:#fff;border:1px solid var(--line);text-align:left}
+.rs-card b{display:block;font:600 30px 'Space Grotesk';letter-spacing:-.03em;line-height:1}
+.rs-card small{display:block;margin-top:8px;font:10px 'DM Mono';letter-spacing:.08em;color:#7a7c76;text-transform:uppercase}
+.rs-card.open{border-color:#f0d6a0;background:#fff8ec}
+.rs-card.open b{color:#a56b1a}
+.rs-card.dismissed{border-color:#c8e0d0;background:#e9f3e5}
+.rs-card.dismissed b{color:#2e6b46}
+.rs-card.removed{border-color:#f1c8c8;background:#fdeaea}
+.rs-card.removed b{color:#963f3f}
+.reports-hint{display:flex;align-items:center;gap:8px;font-size:12px;color:#7a7c76;margin:0 0 20px;padding:10px 14px;background:#f4f4ee}
+.reports-hint svg{color:#a56b1a}
+.seller-reports-list{display:flex;flex-direction:column;gap:14px}
+.seller-report-item{display:grid;grid-template-columns:100px 1fr;gap:20px;padding:18px;border:1px solid var(--line);background:#fff;align-items:flex-start}
+.seller-report-item img{width:100px;height:100px;object-fit:cover}
+.seller-report-item.under-review{border-color:#f0d6a0;background:#fffaf1}
+.seller-report-item.removed{border-color:#f1c8c8;background:#fdeaea;opacity:.9}
+.sri-title{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.sri-title b{font:600 15px 'Space Grotesk';color:var(--ink)}
+.sri-title a:hover b{color:var(--violet)}
+.sri-info>small{display:block;font:10px 'DM Mono';color:#8a8b85;margin-bottom:12px}
+.status-pill{padding:4px 10px;font:9px 'DM Mono';letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.status-pill.status-ok{background:#e9f3e5;color:#2e6b46}
+.status-pill.status-review{background:#fff8ec;color:#a56b1a}
+.status-pill.status-removed{background:#fdeaea;color:#963f3f}
+.reason-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.reason-badge{padding:5px 10px;font:10px 'DM Mono';font-weight:700;background:#f4f4ee;color:#4a4a45;letter-spacing:.03em}
+.reason-badge.reason-illegal,.reason-badge.reason-csam{background:#fdeaea;color:#963f3f}
+.reason-badge.reason-infringing{background:#f0e7fb;color:#5340b7}
+.reason-badge.reason-malware{background:#fff4e0;color:#a56b1a}
+.reason-badge.reason-scam{background:#fff2ea;color:#8a3a10}
+.recent-reports{margin-top:14px;font-size:12px}
+.recent-reports summary{cursor:pointer;color:var(--violet);font-weight:700;padding:6px 0}
+.recent-reports ul{list-style:none;padding:8px 0 0;margin:0;display:flex;flex-direction:column;gap:8px}
+.recent-reports li{padding:10px 12px;background:#f7f7f2;font-size:12px;line-height:1.55;color:#4a4a45}
+.recent-reports li b{color:var(--ink)}
+.recent-reports li i{font-style:normal;color:#7a7c76;text-transform:capitalize}
+.recent-reports li time{font:10px 'DM Mono';color:#8a8b85}
+
 .empty-state.large{padding:120px 20px;display:flex;flex-direction:column;gap:16px;align-items:center}
 .empty-state.large .primary-button{margin-top:10px}
 .empty-state p{font-size:13px}
@@ -463,6 +503,7 @@ footer .brand{color:#f6f7f1;margin-bottom:16px}
   .checkout-summary{position:static}
   .trust-band{padding:24px 7%;grid-template-columns:1fr;gap:18px}
   .pillars,.how-it-works ol,.buyer-tiles{grid-template-columns:1fr}
+  .report-summary{grid-template-columns:repeat(2,1fr)}
   .sell-section{display:block}
   .sell-stat{margin-top:30px}
   .footer-grid{grid-template-columns:1fr 1fr}

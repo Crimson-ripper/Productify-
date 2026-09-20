@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Package, Cpu } from "lucide-react";
-import { api } from "@/lib/api";
+import { ArrowRight, Package, Cpu, Flag, ShieldAlert, ShieldCheck } from "lucide-react";
+import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import ImageUpload from "@/components/ImageUpload";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
 
 const CATS = ["Software", "Design", "Development", "Creative"];
+const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
 
 export default function SellerDashboard() {
   const { user } = useAuth();
@@ -20,6 +21,15 @@ export default function SellerDashboard() {
   const [rPrice, setRPrice] = useState(""); const [rLoc, setRLoc] = useState(""); const [rDesc, setRDesc] = useState("");
   const [rImage, setRImage] = useState("");
   const [busy, setBusy] = useState(false);
+  // reports on my listings
+  const [reportsData, setReportsData] = useState(null);
+  const [reportsLoading, setReportsLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "reports") return;
+    setReportsLoading(true);
+    api.get("/seller/reports").then((r) => setReportsData(r.data)).catch(() => setReportsData({ listings: [], totals: {} })).finally(() => setReportsLoading(false));
+  }, [tab]);
 
   const submitProduct = async (e) => {
     e.preventDefault(); setBusy(true);
@@ -58,9 +68,12 @@ export default function SellerDashboard() {
         <div className="dashboard-tabs">
           <button className={tab === "product" ? "selected" : ""} onClick={() => setTab("product")} data-testid="dashboard-product-tab"><Package size={14} /> Digital product</button>
           <button className={tab === "rental" ? "selected" : ""} onClick={() => setTab("rental")} data-testid="dashboard-rental-tab"><Cpu size={14} /> GPU / system</button>
+          <button className={tab === "reports" ? "selected" : ""} onClick={() => setTab("reports")} data-testid="dashboard-reports-tab"><Flag size={14} /> Reports on my listings</button>
         </div>
 
-        {tab === "product" ? (
+        {tab === "reports" ? (
+          <SellerReports data={reportsData} loading={reportsLoading} />
+        ) : tab === "product" ? (
           <form className="dashboard-form" onSubmit={submitProduct}>
             <label>Listing title<input value={pTitle} onChange={(e) => setPTitle(e.target.value)} required data-testid="dashboard-product-title-input" /></label>
             <label>Description<textarea value={pDesc} onChange={(e) => setPDesc(e.target.value)} required data-testid="dashboard-product-desc-input" /></label>
@@ -91,5 +104,60 @@ export default function SellerDashboard() {
         )}
       </section>
     </>
+  );
+}
+
+function SellerReports({ data, loading }) {
+  if (loading || !data) return <div className="loading-block">Loading your report history…</div>;
+  const t = data.totals || {};
+  if (!data.listings || data.listings.length === 0) {
+    return (
+      <div className="empty-state" data-testid="seller-reports-empty">
+        <ShieldCheck size={30} />
+        <p>No reports on any of your listings. Great work — keep it up.</p>
+      </div>
+    );
+  }
+  return (
+    <div data-testid="seller-reports">
+      <div className="report-summary">
+        <div className="rs-card"><b>{t.total || 0}</b><small>Total reports</small></div>
+        <div className="rs-card open"><b>{t.open || 0}</b><small>Open · awaiting review</small></div>
+        <div className="rs-card dismissed"><b>{t.dismissed || 0}</b><small>Dismissed by admin</small></div>
+        <div className="rs-card removed"><b>{t.removed || 0}</b><small>Listings removed</small></div>
+      </div>
+      <p className="reports-hint"><ShieldAlert size={14} /> A report doesn't hide your listing automatically. Use this feedback to self-correct before an admin decides.</p>
+      <div className="seller-reports-list">
+        {data.listings.map((l) => (
+          <div key={l.listing_id} className={`seller-report-item ${l.removed_by_admin ? "removed" : l.under_review ? "under-review" : ""}`} data-testid={`seller-report-item-${l.listing_id}`}>
+            <img src={l.image} alt="" />
+            <div className="sri-info">
+              <div className="sri-title">
+                <a href={l.listing_kind === "product" ? `/product/${l.listing_id}` : `/rental/${l.listing_id}`} target="_blank" rel="noreferrer"><b>{l.title}</b></a>
+                <span className={`status-pill status-${l.removed_by_admin ? "removed" : l.under_review ? "review" : "ok"}`}>
+                  {l.removed_by_admin ? "Removed by admin" : l.under_review ? "Under review" : "Live"}
+                </span>
+              </div>
+              <small>{l.listing_kind === "product" ? "Digital product" : "GPU rental"} · {money(l.price)}</small>
+              <div className="reason-badges">
+                {Object.entries(l.reasons).map(([k, v]) => (
+                  <span className={`reason-badge reason-${k}`} key={k}>{REASON_LABEL[k] || k} × {v}</span>
+                ))}
+              </div>
+              {l.recent && l.recent.length > 0 && (
+                <details className="recent-reports">
+                  <summary>Recent reports ({l.open} open · {l.resolved} resolved)</summary>
+                  <ul>
+                    {l.recent.map((r, i) => (
+                      <li key={i}><b>{REASON_LABEL[r.reason] || r.reason}</b> · <i>{r.status}</i> · <span>{r.details || "No details provided"}</span> · <time>{new Date(r.created_at).toLocaleString()}</time></li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

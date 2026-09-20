@@ -224,8 +224,8 @@ async def register(data: AuthInput, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(u)
-    # Registration implies acceptance of Terms, Privacy Policy and Acceptable Use.
-    for ct in ("terms", "privacy", "acceptable_use"):
+    # Registration implies acceptance of all currently-published policies.
+    for ct in POLICY_TYPES:
         try:
             await _log_consent(user=u, data=ConsentInput(consent_type=ct, choice="accepted", metadata={"source": "register"}), request=request)
         except Exception:
@@ -282,7 +282,7 @@ async def create_session(data: SessionInput, response: Response, request: Reques
     })
     set_session_cookie(response, session_token)
     if is_new:
-        for ct in ("terms", "privacy", "acceptable_use"):
+        for ct in POLICY_TYPES:
             try:
                 await _log_consent(user=u, data=ConsentInput(consent_type=ct, choice="accepted", metadata={"source": "google_signup"}), request=request)
             except Exception:
@@ -733,6 +733,58 @@ async def resolve_report(report_id: str, data: ReportResolveInput, user=Depends(
         if remaining == 0:
             await coll.update_one({"id": report["listing_id"]}, {"$set": {"under_review": False}})
     return {"status": new_status, "decision": data.decision}
+
+
+@api.get("/seller/reports")
+async def seller_report_history(user=Depends(current_user)):
+    """Report history + counts on the current seller's listings, so they can self-correct."""
+    if user.get("role") not in ("seller", "admin"):
+        raise HTTPException(403, "Seller access required")
+    uid = user["id"]
+    # Fetch this seller's listings (products via seller_id, rentals via owner_id)
+    products = await db.products.find({"seller_id": uid}, {"_id": 0}).to_list(500)
+    rentals = await db.rentals.find({"owner_id": uid}, {"_id": 0}).to_list(500)
+    ids = [p["id"] for p in products] + [r["id"] for r in rentals]
+    if not ids:
+        return {"listings": [], "totals": {"open": 0, "dismissed": 0, "removed": 0, "total": 0}}
+    reports = await db.abuse_reports.find({"listing_id": {"$in": ids}}, {"_id": 0, "ip": 0, "user_agent": 0, "reporter_id": 0, "reporter_email": 0}).sort("created_at", -1).to_list(2000)
+    by_listing = {}
+    totals = {"open": 0, "dismissed": 0, "removed": 0, "total": 0}
+    for r in reports:
+        totals["total"] += 1
+        totals[r.get("status", "open")] = totals.get(r.get("status", "open"), 0) + 1
+        entry = by_listing.setdefault(r["listing_id"], {"reasons": {}, "recent": [], "open": 0, "resolved": 0})
+        entry["reasons"][r["reason"]] = entry["reasons"].get(r["reason"], 0) + 1
+        if r.get("status") == "open":
+            entry["open"] += 1
+        else:
+            entry["resolved"] += 1
+        if len(entry["recent"]) < 5:
+            entry["recent"].append({"reason": r["reason"], "status": r.get("status"), "details": r.get("details"), "created_at": r.get("created_at")})
+    listings_out = []
+    for src, kind in ((products, "product"), (rentals, "rental")):
+        for l in src:
+            agg = by_listing.get(l["id"])
+            if not agg and (l.get("reports_count", 0) or 0) == 0:
+                continue  # skip clean listings for a focused view
+            listings_out.append({
+                "listing_id": l["id"],
+                "listing_kind": kind,
+                "title": l.get("title"),
+                "image": l.get("image"),
+                "price": l.get("price"),
+                "status": l.get("status") if kind == "rental" else ("approved" if l.get("approved") else "unapproved"),
+                "under_review": bool(l.get("under_review")),
+                "removed_by_admin": bool(l.get("removed_by_admin")),
+                "reports_count": l.get("reports_count", 0),
+                "reasons": agg["reasons"] if agg else {},
+                "open": agg["open"] if agg else 0,
+                "resolved": agg["resolved"] if agg else 0,
+                "recent": agg["recent"] if agg else [],
+            })
+    # Order most-reported first
+    listings_out.sort(key=lambda x: (-x["open"], -x["reports_count"]))
+    return {"listings": listings_out, "totals": totals}
 
 
 # ============== RENTAL WORKSPACE (file transfer for GPU service) ==============
