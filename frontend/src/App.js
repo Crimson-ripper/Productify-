@@ -24,6 +24,13 @@ import Profile from "@/pages/Profile";
 import Orders from "@/pages/Orders";
 import DashboardHome from "@/pages/DashboardHome";
 import NotFound from "@/pages/NotFound";
+import PrivacyPolicy from "@/pages/policies/PrivacyPolicy";
+import Terms from "@/pages/policies/Terms";
+import Refund from "@/pages/policies/Refund";
+import Cookies from "@/pages/policies/Cookies";
+import AcceptableUse from "@/pages/policies/AcceptableUse";
+import Contact from "@/pages/policies/Contact";
+import CookieBanner from "@/components/CookieBanner";
 
 function AppRouter() {
   const location = useLocation();
@@ -50,10 +57,17 @@ function AppRouter() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+          <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+          <Route path="/legal/terms" element={<Terms />} />
+          <Route path="/legal/refunds" element={<Refund />} />
+          <Route path="/legal/cookies" element={<Cookies />} />
+          <Route path="/legal/acceptable-use" element={<AcceptableUse />} />
+          <Route path="/legal/contact" element={<Contact />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <Footer />
+      <CookieBanner />
       <Toaster position="bottom-center" richColors closeButton />
     </div>
   );

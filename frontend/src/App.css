@@ -326,6 +326,52 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 
 /* Utility */
 .empty-state{text-align:center;padding:60px 20px;color:#8c8d87}
+
+/* Policy pages */
+.policy-hero{padding:60px 8% 40px}
+.policy-hero h1{font:600 clamp(42px,4vw,60px) 'Space Grotesk';letter-spacing:-.06em;margin:14px 0 12px}
+.policy-hero p{color:#a4a69f;max-width:640px;font-size:14px;line-height:1.65}
+.policy-updated{display:block;margin-top:16px;font:10px 'DM Mono';color:#7a7c76;letter-spacing:.1em}
+.policy-shell{display:grid;grid-template-columns:260px 1fr;gap:48px;padding:60px 8% 120px;background:#fff;align-items:start}
+.policy-nav{position:sticky;top:110px;display:flex;flex-direction:column;padding-right:16px;border-right:1px solid var(--line)}
+.policy-nav-label{font:10px 'DM Mono';letter-spacing:.15em;color:#8a8b85;margin-bottom:14px}
+.policy-nav-link{padding:11px 0;font-size:13px;color:#4a4a45;border-bottom:1px dashed transparent;transition:color .2s}
+.policy-nav-link:hover{color:var(--violet)}
+.policy-nav-link.active{color:var(--violet);font-weight:700;border-bottom-color:var(--violet)}
+.policy-content{max-width:760px;line-height:1.75;color:#3a3a35;font-size:14.5px}
+.policy-content h2{font:600 22px 'Space Grotesk';letter-spacing:-.02em;margin:44px 0 12px;color:var(--ink)}
+.policy-content h2:first-of-type{margin-top:24px}
+.policy-content h3{font:600 16px 'Space Grotesk';margin:24px 0 8px;color:var(--ink)}
+.policy-content p{margin:0 0 14px}
+.policy-content ul,.policy-content ol{padding-left:22px;margin:0 0 18px}
+.policy-content li{margin-bottom:8px}
+.policy-content a{color:var(--violet);text-decoration:underline;text-underline-offset:2px}
+.policy-content a:hover{color:#4a3fca}
+.policy-content b{color:var(--ink)}
+.policy-disclaimer{display:flex;gap:12px;padding:16px 18px;background:#fff8ec;border:1px solid #f0d6a0;color:#7a5312;margin-bottom:36px;align-items:flex-start}
+.policy-disclaimer svg{flex-shrink:0;margin-top:2px}
+.policy-disclaimer b{display:block;font-size:12px;margin-bottom:4px;color:#5c3d0a}
+.policy-disclaimer span{display:block;font-size:12.5px;line-height:1.6}
+.contact-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:20px 0 12px;padding-left:0!important;list-style:none}
+.contact-card{padding:20px;border:1px solid var(--line);background:#f7f7f2}
+.contact-card b{display:block;font:600 14px 'Space Grotesk';margin-bottom:6px}
+.contact-card a{display:block;color:var(--violet);font-size:13px;margin-bottom:6px;text-decoration:none}
+.contact-card small{font-size:11px;color:#7a7c76}
+
+/* Cookie banner */
+.cookie-banner{position:fixed;left:20px;right:20px;bottom:20px;max-width:920px;margin:0 auto;background:var(--ink);color:#f6f7f1;padding:18px 20px;display:flex;align-items:center;gap:20px;box-shadow:0 20px 60px #0006;z-index:40;flex-wrap:wrap}
+.cookie-copy{display:flex;gap:14px;align-items:flex-start;flex:1;min-width:240px}
+.cookie-copy svg{color:var(--lime);flex-shrink:0;margin-top:2px}
+.cookie-copy b{display:block;font:600 14px 'Space Grotesk';margin-bottom:4px}
+.cookie-copy p{margin:0;font-size:12.5px;line-height:1.55;color:#c4c6c0}
+.cookie-copy a{color:var(--lime);text-decoration:underline;text-underline-offset:2px}
+.cookie-actions{display:flex;gap:8px;align-items:center}
+.cookie-reject,.cookie-accept{padding:10px 16px;font-size:11px;font-weight:800;border:1px solid #3a3d43}
+.cookie-reject{background:transparent;color:#f6f7f1}
+.cookie-reject:hover{background:#1a1c22}
+.cookie-accept{background:var(--lime);color:var(--ink);border-color:var(--lime)}
+.cookie-close{background:transparent;color:#8f918d;padding:6px}
+
 .empty-state.large{padding:120px 20px;display:flex;flex-direction:column;gap:16px;align-items:center}
 .empty-state.large .primary-button{margin-top:10px}
 .empty-state p{font-size:13px}
@@ -337,7 +383,7 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 
 /* Footer */
 footer{background:var(--ink);color:#8f918d;padding:60px 5.5% 24px;font-size:12px;display:block}
-.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;padding-bottom:40px;border-bottom:1px solid #2a2c30}
+.footer-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr;gap:36px;padding-bottom:40px;border-bottom:1px solid #2a2c30}
 footer .brand{color:#f6f7f1;margin-bottom:16px}
 .footer-tag{color:#8f918d;font-size:12px;line-height:1.6;max-width:280px}
 .footer-col h5{font:700 11px 'DM Mono';color:#c8f04c;letter-spacing:.15em;margin:0 0 14px}
@@ -357,6 +403,14 @@ footer .brand{color:#f6f7f1;margin-bottom:16px}
 }
 @media(max-width:900px){
   .hero{padding:70px 7% 60px;display:block;min-height:auto}
+  .policy-shell{grid-template-columns:1fr;gap:22px;padding:40px 7% 80px}
+  .policy-nav{position:static;border-right:0;border-bottom:1px solid var(--line);padding:0 0 20px;flex-direction:row;flex-wrap:wrap;gap:8px}
+  .policy-nav-label{width:100%}
+  .policy-nav-link{padding:8px 12px;background:#f2f2ec;font-size:12px}
+  .policy-nav-link.active{background:var(--ink);color:#fff;border-color:transparent}
+  .contact-grid{grid-template-columns:1fr}
+  .cookie-banner{flex-direction:column;align-items:stretch;left:12px;right:12px;bottom:12px;padding:16px}
+  .cookie-actions{justify-content:flex-end}
   .hero-copy,.hero-art{width:100%}
   .hero-art{height:280px;margin-top:36px}
   .content-section,.rental-section{padding:60px 7%}

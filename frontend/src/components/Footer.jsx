@@ -25,9 +25,17 @@ export default function Footer() {
         <div className="footer-col">
           <h5>Company</h5>
           <Link to="/sell">Sell on Productify</Link>
-          <a href="mailto:hello@productifynow.com">Contact</a>
+          <Link to="/legal/contact">Contact</Link>
           <a href="/robots.txt">Robots</a>
           <a href="/sitemap.xml">Sitemap</a>
+        </div>
+        <div className="footer-col">
+          <h5>Legal</h5>
+          <Link to="/legal/privacy" data-testid="footer-privacy-link">Privacy Policy</Link>
+          <Link to="/legal/terms" data-testid="footer-terms-link">Terms of Service</Link>
+          <Link to="/legal/refunds" data-testid="footer-refunds-link">Refund Policy</Link>
+          <Link to="/legal/cookies" data-testid="footer-cookies-link">Cookie Policy</Link>
+          <Link to="/legal/acceptable-use" data-testid="footer-aup-link">Acceptable Use</Link>
         </div>
       </div>
       <div className="footer-bar">

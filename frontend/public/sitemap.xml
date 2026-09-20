@@ -6,4 +6,10 @@
   <url><loc>https://productifynow.com/sell</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://productifynow.com/login</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
   <url><loc>https://productifynow.com/register</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://productifynow.com/legal/privacy</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://productifynow.com/legal/terms</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://productifynow.com/legal/refunds</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://productifynow.com/legal/cookies</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://productifynow.com/legal/acceptable-use</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://productifynow.com/legal/contact</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
