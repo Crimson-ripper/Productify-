@@ -38,7 +38,29 @@ export default function Terms() {
       <p>Productify may charge marketplace fees to sellers, disclosed at the time of listing. Buyers pay the listed price plus applicable taxes. Payment is captured by Stripe, PayPal or Razorpay depending on region. Payouts to sellers are made on a weekly cycle to the payout account they configure. In India, GST invoices are issued where the seller has provided a GSTIN.</p>
 
       <h2>8. Prohibited items</h2>
-      <p>Do not list or purchase malware, pirated software, cracked license keys, illegal content, weapons, drugs, or anything that infringes intellectual property or violates any applicable law.</p>
+      <p>Do not list or purchase malware, pirated software, cracked license keys, illegal content, weapons, drugs, or anything that infringes intellectual property or violates any applicable law. A full list is in our <a href="/legal/acceptable-use">Acceptable Use Policy</a>.</p>
+
+      <h2>8A. Marketplace intermediary status — illegality of listings</h2>
+      <p>Productify operates solely as an <b>online intermediary</b> that lets independent sellers list digital products and GPU/system rentals and lets buyers transact with them. Productify does <b>not</b> author, verify the legality of, license, endorse, or take ownership of any listing, and does <b>not</b> examine every listing before publication (beyond the good-faith verification described in §6).</p>
+      <p>Accordingly, to the fullest extent permitted by applicable law — including the safe-harbour provisions of Section 79 of the Information Technology Act, 2000 (India) read with the Intermediary Guidelines 2021, Section 230 of the U.S. Communications Decency Act, Articles 4–6 of the EU Digital Services Act (Regulation (EU) 2022/2065), and the UK Electronic Commerce (EC Directive) Regulations 2002 — Productify, its parent, subsidiaries, officers, directors, employees, contractors and affiliates (together, the "Productify Parties") <b>shall not be held responsible or liable, civilly or criminally</b>, for:</p>
+      <ul>
+        <li>the legality, safety, quality, accuracy, licensing status or lawful ownership of any product, software, digital good, rental service, uploaded file, or workspace transfer traded on Productify;</li>
+        <li>any loss or damage arising from the sale, purchase, use, distribution or possession of any item that is later found to be illegal in the buyer's or seller's jurisdiction;</li>
+        <li>the acts or omissions of any seller, buyer, renter or third party using the platform.</li>
+      </ul>
+      <p>Each seller and each buyer is <b>solely and personally responsible</b> for ensuring that the item they list, purchase, distribute or use complies with every law that applies to them, including but not limited to intellectual-property, export-control, sanctions, tax, obscenity, gambling, narcotics, weapons, data-protection, and consumer-protection laws. By listing or purchasing on Productify, sellers and buyers represent and warrant that they hold all required rights, licences and authorisations for that transaction.</p>
+      <p>You agree to indemnify, defend and hold harmless the Productify Parties from and against any claim, demand, investigation, proceeding, penalty, fine, cost or expense (including reasonable attorneys' fees) arising out of or connected with (a) your listing, purchase, upload, transfer or use of any item on the platform, or (b) your breach of this section.</p>
+
+      <h2>8B. Reporting illegal trade & enforcement</h2>
+      <p>If you become aware of any listing, transaction, uploaded file, or workspace transfer that you reasonably believe is illegal, report it immediately to <a href="mailto:abuse@productifynow.com">abuse@productifynow.com</a> (or via the Grievance Officer channels in the Privacy Policy). Include the URL, order ID, or file reference and a short description.</p>
+      <p>On receipt of a credible report — or on becoming aware through any other means — Productify reserves the right, at its sole discretion and <b>without prior notice</b>, to:</p>
+      <ul>
+        <li>remove or disable access to the listing, file or transaction;</li>
+        <li>suspend or permanently ban the seller, buyer and any related accounts;</li>
+        <li>freeze pending payouts, reverse settlements, and retain records for evidentiary purposes;</li>
+        <li>cooperate with, and disclose relevant information to, law-enforcement, regulators, courts, IP rights-holders and other affected parties in line with the disclosure timelines mandated by applicable law (e.g., 72 hours under India's Intermediary Guidelines 2021).</li>
+      </ul>
+      <p>Accounts banned under this section are <b>not entitled to any refund, credit, payout, compensation, damages, or restoration</b> of listings, files, workspace data, ratings or reviews, regardless of the balance or reputation held at the time of the ban. This is in addition to any other remedy available to Productify at law or in equity.</p>
 
       <h2>9. Intellectual property</h2>
       <p>The Productify platform, logos and trademarks belong to Productify. Sellers retain ownership of their listings. By posting content, sellers grant Productify a worldwide, royalty-free, non-exclusive licence to host, display, transmit and promote the content on the platform.</p>

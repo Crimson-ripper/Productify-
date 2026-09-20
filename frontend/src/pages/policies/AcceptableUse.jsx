@@ -40,7 +40,7 @@ export default function AcceptableUse() {
       <p>Report violations to <a href="mailto:abuse@productifynow.com">abuse@productifynow.com</a>. For CSAM, we report to NCMEC (US) and equivalent authorities immediately and preserve evidence as required by law.</p>
 
       <h2>5. Enforcement</h2>
-      <p>We may investigate, remove content, suspend or terminate accounts, and cooperate with law-enforcement without prior notice. Refunds are not issued for content or activity terminated under this policy.</p>
+      <p>We may investigate, remove content, suspend or terminate accounts, and cooperate with law-enforcement without prior notice. <b>Accounts terminated under this policy — or under §8A/§8B of the Terms of Service — are not entitled to any refund, credit, payout, compensation or restoration of content, ratings, reviews or workspace files.</b> Each seller and each buyer remains personally and solely responsible for the legality of the items they list, purchase, upload or transfer; Productify acts only as an intermediary and disclaims responsibility to the fullest extent permitted by law.</p>
 
       <h2>6. DMCA & copyright complaints (US) / notice-and-takedown</h2>
       <p>Send DMCA notices to <a href="mailto:dmca@productifynow.com">dmca@productifynow.com</a> including: your electronic signature, identification of the copyrighted work, the URL of the infringing material, your contact information, a good-faith statement, and a statement under penalty of perjury that you are authorized to act.</p>

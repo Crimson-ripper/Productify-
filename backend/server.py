@@ -112,6 +112,14 @@ class ProfileUpdate(BaseModel):
     avatar_url: Optional[str] = None
 
 
+class ConsentInput(BaseModel):
+    consent_type: str  # cookies | terms | privacy | refunds | acceptable_use | marketing
+    choice: str        # accepted | rejected | necessary_only | dismissed | withdrawn
+    version: Optional[str] = "2026-02-20"
+    anon_id: Optional[str] = None
+    metadata: Optional[dict] = {}
+
+
 def public_user(u):
     return {
         "id": u.get("id"),
@@ -185,7 +193,7 @@ async def root():
 
 
 @api.post("/auth/register")
-async def register(data: AuthInput):
+async def register(data: AuthInput, request: Request):
     email = data.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(409, "An account with this email already exists")
@@ -199,6 +207,12 @@ async def register(data: AuthInput):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(u)
+    # Registration implies acceptance of Terms, Privacy Policy and Acceptable Use.
+    for ct in ("terms", "privacy", "acceptable_use"):
+        try:
+            await _log_consent(user=u, data=ConsentInput(consent_type=ct, choice="accepted", metadata={"source": "register"}), request=request)
+        except Exception:
+            pass
     return {"user": public_user(u), "token": jwt_token(u)}
 
 
@@ -211,7 +225,7 @@ async def login(data: AuthInput):
 
 
 @api.post("/auth/session")
-async def create_session(data: SessionInput, response: Response):
+async def create_session(data: SessionInput, response: Response, request: Request):
     """Exchange Emergent session_id for our session token, set httpOnly cookie."""
     async with httpx.AsyncClient(timeout=15.0) as http:
         r = await http.get(EMERGENT_AUTH_URL, headers={"X-Session-ID": data.session_id})
@@ -222,7 +236,9 @@ async def create_session(data: SessionInput, response: Response):
     if not email:
         raise HTTPException(400, "Google account did not return an email")
     u = await db.users.find_one({"email": email})
+    is_new = False
     if not u:
+        is_new = True
         u = {
             "id": str(uuid.uuid4()),
             "email": email,
@@ -248,6 +264,12 @@ async def create_session(data: SessionInput, response: Response):
         "created_at": datetime.now(timezone.utc),
     })
     set_session_cookie(response, session_token)
+    if is_new:
+        for ct in ("terms", "privacy", "acceptable_use"):
+            try:
+                await _log_consent(user=u, data=ConsentInput(consent_type=ct, choice="accepted", metadata={"source": "google_signup"}), request=request)
+            except Exception:
+                pass
     return {"user": public_user(u)}
 
 
@@ -502,6 +524,63 @@ async def order_detail(oid: str, user=Depends(current_user)):
     if not o:
         raise HTTPException(404, "Order not found")
     return o
+
+
+# ============== CONSENT LOGGING ==============
+ALLOWED_CONSENT_TYPES = {"cookies", "terms", "privacy", "refunds", "acceptable_use", "marketing"}
+ALLOWED_CONSENT_CHOICES = {"accepted", "rejected", "necessary_only", "dismissed", "withdrawn"}
+
+
+async def _log_consent(*, user, data: "ConsentInput", request: Request):
+    if data.consent_type not in ALLOWED_CONSENT_TYPES:
+        raise HTTPException(400, "Unknown consent_type")
+    if data.choice not in ALLOWED_CONSENT_CHOICES:
+        raise HTTPException(400, "Unknown choice")
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"] if user else None,
+        "email": user.get("email") if user else None,
+        "anon_id": data.anon_id if not user else None,
+        "consent_type": data.consent_type,
+        "choice": data.choice,
+        "version": data.version,
+        "ip": ip,
+        "user_agent": request.headers.get("user-agent"),
+        "metadata": data.metadata or {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.consents.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.post("/consents")
+async def log_consent(data: ConsentInput, request: Request):
+    """Public endpoint — logs consent for signed-in users OR anonymous visitors (via anon_id)."""
+    user = None
+    try:
+        user = await current_user(request)
+    except HTTPException:
+        pass
+    if not user and not data.anon_id:
+        raise HTTPException(400, "anon_id required when not signed in")
+    return await _log_consent(user=user, data=data, request=request)
+
+
+@api.get("/consents/me")
+async def my_consents(user=Depends(current_user)):
+    return await db.consents.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api.get("/admin/consents")
+async def admin_consents(user=Depends(current_user), q: str = "", limit: int = 200):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    query = {}
+    if q:
+        query = {"$or": [{"email": {"$regex": q, "$options": "i"}}, {"user_id": q}, {"anon_id": q}]}
+    return await db.consents.find(query, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(1000, limit)))
 
 
 # ============== RENTAL WORKSPACE (file transfer for GPU service) ==============
