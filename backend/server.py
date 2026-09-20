@@ -1,31 +1,77 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, APIRouter, HTTPException, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query
+from fastapi.responses import Response as FastAPIResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
-import os, uuid, jwt, bcrypt
+import os, uuid, jwt, bcrypt, httpx, requests, logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("productify")
 
 ROOT_DIR = os.path.dirname(__file__)
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+JWT_SECRET = os.environ["JWT_SECRET"]
+APP_NAME = os.environ.get("APP_NAME", "productify")
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+storage_key = None
+
+EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
 app = FastAPI(title="Productify API")
 api = APIRouter(prefix="/api")
-JWT_SECRET = os.environ["JWT_SECRET"]
 
+
+# ============== STORAGE ==============
+def init_storage():
+    global storage_key
+    if storage_key:
+        return storage_key
+    try:
+        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+        r.raise_for_status()
+        storage_key = r.json()["storage_key"]
+        logger.info("Storage initialized")
+        return storage_key
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
+        raise
+
+
+def put_object(path: str, data: bytes, content_type: str):
+    key = init_storage()
+    r = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    r.raise_for_status()
+    return r.json()
+
+
+def get_object(path: str):
+    key = init_storage()
+    r = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+# ============== MODELS ==============
 class AuthInput(BaseModel):
     email: str
     password: str
     name: Optional[str] = None
     role: str = "buyer"
 
-class GoogleInput(BaseModel):
-    email: str
-    name: Optional[str] = None
+
+class SessionInput(BaseModel):
+    session_id: str
+
 
 class ProductInput(BaseModel):
     title: str
@@ -33,7 +79,8 @@ class ProductInput(BaseModel):
     description: str
     price: float
     image: str
-    seller: str = "You"
+    tags: Optional[List[str]] = []
+
 
 class RentalInput(BaseModel):
     title: str
@@ -42,121 +89,507 @@ class RentalInput(BaseModel):
     price: float
     location: str
     image: str
+    description: Optional[str] = ""
+    specs: Optional[dict] = {}
 
-class OrderInput(BaseModel):
-    items: list
-    total: float
-    kind: str = "product"
 
-def public_user(user):
-    return {"id": user.get("id"), "email": user["email"], "name": user.get("name", "Member"), "role": user.get("role", "buyer")}
+class CartItemInput(BaseModel):
+    id: str
+    kind: str  # product | rental
+    quantity: int = 1
 
-def token_for(user):
-    return jwt.encode({"sub": user["id"], "exp": datetime.now(timezone.utc) + timedelta(days=7)}, JWT_SECRET, algorithm="HS256")
 
-async def current_user(authorization: Optional[str] = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Please sign in to continue")
-    try:
-        payload = jwt.decode(authorization[7:], JWT_SECRET, algorithms=["HS256"])
-        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
-        if not user: raise HTTPException(401, "User not found")
-        return user
-    except jwt.PyJWTError:
-        raise HTTPException(401, "Your session has expired")
+class CheckoutInput(BaseModel):
+    items: List[CartItemInput]
+    provider: str  # stripe | razorpay | paypal
+    origin_url: str
+    region: Optional[str] = "US"
 
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+def public_user(u):
+    return {
+        "id": u.get("id"),
+        "email": u["email"],
+        "name": u.get("name", "Member"),
+        "role": u.get("role", "buyer"),
+        "avatar_url": u.get("avatar_url"),
+        "phone": u.get("phone"),
+        "phone_verified": u.get("phone_verified", False),
+    }
+
+
+def jwt_token(u):
+    return jwt.encode({"sub": u["id"], "exp": datetime.now(timezone.utc) + timedelta(days=7)}, JWT_SECRET, algorithm="HS256")
+
+
+async def current_user(request: Request):
+    # 1) session_token cookie (Emergent Google Auth)
+    session_token = request.cookies.get("session_token")
+    if session_token:
+        sess = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+        if sess:
+            exp = sess.get("expires_at")
+            if isinstance(exp, str):
+                try:
+                    exp = datetime.fromisoformat(exp)
+                except Exception:
+                    exp = None
+            if exp and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp and exp >= datetime.now(timezone.utc):
+                u = await db.users.find_one({"id": sess["user_id"]}, {"_id": 0})
+                if u:
+                    return u
+    # 2) Bearer JWT (email/password path)
+    authz = request.headers.get("authorization")
+    if authz and authz.lower().startswith("bearer "):
+        token = authz[7:]
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            u = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+            if u:
+                return u
+        except jwt.PyJWTError:
+            pass
+        # Fallback: treat as session_token in header (testing agent pattern)
+        sess = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+        if sess:
+            u = await db.users.find_one({"id": sess["user_id"]}, {"_id": 0})
+            if u:
+                return u
+    raise HTTPException(401, "Please sign in to continue")
+
+
+def set_session_cookie(response: Response, token: str):
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        max_age=7 * 24 * 60 * 60,
+        path="/",
+        httponly=True,
+        secure=True,
+        samesite="none",
+    )
+
+
+# ============== AUTH ==============
 @api.get("/")
-async def root(): return {"message": "Productify API ready"}
+async def root():
+    return {"message": "Productify API ready"}
+
 
 @api.post("/auth/register")
 async def register(data: AuthInput):
     email = data.email.lower().strip()
-    if await db.users.find_one({"email": email}): raise HTTPException(409, "An account with this email already exists")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(409, "An account with this email already exists")
     role = data.role if data.role in ["buyer", "seller"] else "buyer"
-    user = {"id": str(uuid.uuid4()), "email": email, "name": data.name or email.split("@")[0].title(), "role": role, "password_hash": bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()}
-    await db.users.insert_one(user)
-    return {"user": public_user(user), "token": token_for(user)}
+    u = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "name": data.name or email.split("@")[0].title(),
+        "role": role,
+        "password_hash": bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(u)
+    return {"user": public_user(u), "token": jwt_token(u)}
+
 
 @api.post("/auth/login")
 async def login(data: AuthInput):
-    user = await db.users.find_one({"email": data.email.lower().strip()})
-    if not user or not bcrypt.checkpw(data.password.encode(), user["password_hash"].encode()): raise HTTPException(401, "Email or password is incorrect")
-    return {"user": public_user(user), "token": token_for(user)}
+    u = await db.users.find_one({"email": data.email.lower().strip()})
+    if not u or "password_hash" not in u or not bcrypt.checkpw(data.password.encode(), u["password_hash"].encode()):
+        raise HTTPException(401, "Email or password is incorrect")
+    return {"user": public_user(u), "token": jwt_token(u)}
 
-@api.post("/auth/google")
-async def google_demo(data: GoogleInput):
-    email = data.email.lower().strip()
-    user = await db.users.find_one({"email": email})
-    if not user:
-        user = {"id": str(uuid.uuid4()), "email": email, "name": data.name or "Google Member", "role": "buyer", "password_hash": bcrypt.hashpw(uuid.uuid4().hex.encode(), bcrypt.gensalt()).decode()}
-        await db.users.insert_one(user)
-    return {"user": public_user(user), "token": token_for(user), "demo": True}
+
+@api.post("/auth/session")
+async def create_session(data: SessionInput, response: Response):
+    """Exchange Emergent session_id for our session token, set httpOnly cookie."""
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        r = await http.get(EMERGENT_AUTH_URL, headers={"X-Session-ID": data.session_id})
+        if r.status_code != 200:
+            raise HTTPException(401, "Google sign-in failed")
+        info = r.json()
+    email = (info.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(400, "Google account did not return an email")
+    u = await db.users.find_one({"email": email})
+    if not u:
+        u = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "name": info.get("name") or email.split("@")[0].title(),
+            "avatar_url": info.get("picture"),
+            "role": "buyer",
+            "auth_provider": "google",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(u)
+    else:
+        updates = {}
+        if info.get("picture") and not u.get("avatar_url"):
+            updates["avatar_url"] = info["picture"]
+        if updates:
+            await db.users.update_one({"id": u["id"]}, {"$set": updates})
+            u.update(updates)
+    session_token = info.get("session_token") or uuid.uuid4().hex
+    await db.user_sessions.insert_one({
+        "user_id": u["id"],
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc),
+    })
+    set_session_cookie(response, session_token)
+    return {"user": public_user(u)}
+
+
+@api.post("/auth/logout")
+async def logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie("session_token", path="/")
+    return {"ok": True}
+
 
 @api.get("/auth/me")
-async def me(user=__import__("fastapi").Depends(current_user)): return public_user(user)
+async def me(user=Depends(current_user)):
+    return public_user(user)
 
+
+@api.patch("/auth/me")
+async def update_me(data: ProfileUpdate, user=Depends(current_user)):
+    updates = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    if updates:
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        user.update(updates)
+    return public_user(user)
+
+
+# ============== PRODUCTS & RENTALS ==============
 @api.get("/products")
-async def products(q: str = "", category: str = "all"):
-    query = {"approved": True}
-    if category != "all": query["category"] = category
-    rows = await db.products.find(query, {"_id": 0}).to_list(100)
-    if q: rows = [r for r in rows if q.lower() in (r["title"] + r["description"]).lower()]
+async def products(q: str = "", category: str = "all", sort: str = "recent", min_price: float = 0, max_price: float = 100000):
+    query = {"approved": True, "price": {"$gte": min_price, "$lte": max_price}}
+    if category != "all":
+        query["category"] = category
+    rows = await db.products.find(query, {"_id": 0}).to_list(200)
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (r.get("title", "") + " " + r.get("description", "") + " " + " ".join(r.get("tags", []))).lower()]
+    if sort == "price_asc":
+        rows.sort(key=lambda x: x["price"])
+    elif sort == "price_desc":
+        rows.sort(key=lambda x: -x["price"])
     return rows
 
-@api.get("/rentals")
-async def rentals(): return await db.rentals.find({"status": "approved"}, {"_id": 0}).to_list(100)
+
+@api.get("/products/{pid}")
+async def product_detail(pid: str):
+    r = await db.products.find_one({"id": pid}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Product not found")
+    return r
+
 
 @api.post("/products")
-async def create_product(data: ProductInput, user=__import__("fastapi").Depends(current_user)):
-    if user.get("role") not in ["seller", "admin"]: raise HTTPException(403, "Seller access required")
-    item = data.model_dump() | {"id": str(uuid.uuid4()), "approved": user.get("role") == "admin", "seller": user["name"]}
-    await db.products.insert_one(item); return {k: v for k, v in item.items() if k != "_id"}
+async def create_product(data: ProductInput, user=Depends(current_user)):
+    if user.get("role") not in ["seller", "admin"]:
+        raise HTTPException(403, "Seller access required")
+    item = data.model_dump() | {
+        "id": str(uuid.uuid4()),
+        "approved": user.get("role") == "admin",
+        "seller": user["name"],
+        "seller_id": user["id"],
+        "type": "digital",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.products.insert_one(item)
+    return {k: v for k, v in item.items() if k != "_id"}
+
+
+@api.get("/rentals")
+async def rentals(q: str = "", sort: str = "recent"):
+    rows = await db.rentals.find({"status": "approved"}, {"_id": 0}).to_list(200)
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (r.get("title", "") + " " + r.get("gpu", "") + " " + r.get("description", "")).lower()]
+    if sort == "price_asc":
+        rows.sort(key=lambda x: x["price"])
+    elif sort == "price_desc":
+        rows.sort(key=lambda x: -x["price"])
+    return rows
+
+
+@api.get("/rentals/{rid}")
+async def rental_detail(rid: str):
+    r = await db.rentals.find_one({"id": rid}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Rental not found")
+    return r
+
 
 @api.post("/rentals")
-async def create_rental(data: RentalInput, user=__import__("fastapi").Depends(current_user)):
-    if user.get("role") not in ["seller", "admin"]: raise HTTPException(403, "Seller access required")
-    item = data.model_dump() | {"id": str(uuid.uuid4()), "status": "approved" if user.get("role") == "admin" else "pending", "owner": user["name"]}
-    await db.rentals.insert_one(item); return {k: v for k, v in item.items() if k != "_id"}
+async def create_rental(data: RentalInput, user=Depends(current_user)):
+    if user.get("role") not in ["seller", "admin"]:
+        raise HTTPException(403, "Seller access required")
+    item = data.model_dump() | {
+        "id": str(uuid.uuid4()),
+        "status": "approved" if user.get("role") == "admin" else "pending",
+        "owner": user["name"],
+        "owner_id": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.rentals.insert_one(item)
+    return {k: v for k, v in item.items() if k != "_id"}
 
-@api.post("/orders")
-async def create_order(data: OrderInput, user=__import__("fastapi").Depends(current_user)):
-    order = data.model_dump() | {"id": "PX-" + uuid.uuid4().hex[:8].upper(), "user_id": user["id"], "created_at": datetime.now(timezone.utc).isoformat(), "status": "completed"}
-    await db.orders.insert_one(order); return {k: v for k, v in order.items() if k != "_id"}
 
-@api.get("/orders")
-async def orders(user=__import__("fastapi").Depends(current_user)):
-    return await db.orders.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
-
+# ============== ADMIN ==============
 @api.get("/admin/pending")
-async def pending(user=__import__("fastapi").Depends(current_user)):
-    if user.get("role") != "admin": raise HTTPException(403, "Admin access required")
+async def pending(user=Depends(current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
     return await db.rentals.find({"status": "pending"}, {"_id": 0}).to_list(100)
 
-@api.post("/admin/rentals/{rental_id}/{decision}")
-async def decide(rental_id: str, decision: str, user=__import__("fastapi").Depends(current_user)):
-    if user.get("role") != "admin" or decision not in ["approved", "rejected"]: raise HTTPException(403, "Admin access required")
-    await db.rentals.update_one({"id": rental_id}, {"$set": {"status": decision}}); return {"ok": True}
 
+@api.post("/admin/rentals/{rid}/{decision}")
+async def decide(rid: str, decision: str, user=Depends(current_user)):
+    if user.get("role") != "admin" or decision not in ["approved", "rejected"]:
+        raise HTTPException(403, "Admin access required")
+    await db.rentals.update_one({"id": rid}, {"$set": {"status": decision}})
+    return {"ok": True}
+
+
+# ============== UPLOADS ==============
+ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_UPLOAD = 10 * 1024 * 1024  # 10 MB
+
+
+@api.post("/uploads")
+async def upload(file: UploadFile = File(...), user=Depends(current_user)):
+    ct = file.content_type or "application/octet-stream"
+    if ct not in ALLOWED_MIME:
+        raise HTTPException(400, "Only JPG, PNG, WEBP, GIF images are supported")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "File exceeds 10 MB limit")
+    ext = (file.filename or "img").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
+    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
+    result = put_object(path, data, ct)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename,
+        "content_type": ct,
+        "size": result.get("size", len(data)),
+        "user_id": user["id"],
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.files.insert_one(doc)
+    frontend = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    return {"path": result["path"], "url": f"/api/files/{result['path']}", "id": doc["id"]}
+
+
+@api.get("/files/{path:path}")
+async def download_file(path: str, auth: Optional[str] = Query(None)):
+    # Public read for listing/avatar display; DB is source of truth
+    record = await db.files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(404, "File not found")
+    data, ct = get_object(path)
+    return FastAPIResponse(content=data, media_type=record.get("content_type", ct))
+
+
+# ============== ORDERS & PAYMENTS ==============
+@api.post("/payments/checkout")
+async def create_checkout(data: CheckoutInput, user=Depends(current_user)):
+    # Server-computed totals
+    subtotal = 0.0
+    resolved_items = []
+    for it in data.items:
+        if it.kind == "product":
+            src = await db.products.find_one({"id": it.id, "approved": True}, {"_id": 0})
+        else:
+            src = await db.rentals.find_one({"id": it.id, "status": "approved"}, {"_id": 0})
+        if not src:
+            raise HTTPException(400, f"Item not available: {it.id}")
+        qty = max(1, min(50, int(it.quantity or 1)))
+        line_total = float(src["price"]) * qty
+        subtotal += line_total
+        resolved_items.append({
+            "id": src["id"], "kind": it.kind, "title": src["title"],
+            "price": src["price"], "quantity": qty, "image": src.get("image"),
+        })
+    if subtotal <= 0:
+        raise HTTPException(400, "Cart is empty")
+    tax = round(subtotal * 0.05, 2)
+    total = round(subtotal + tax, 2)
+
+    provider = data.provider if data.provider in ["stripe", "razorpay", "paypal"] else "stripe"
+    session_id = f"px_{uuid.uuid4().hex}"
+    tx = {
+        "session_id": session_id,
+        "user_id": user["id"],
+        "items": resolved_items,
+        "subtotal": subtotal,
+        "tax": tax,
+        "amount": total,
+        "currency": "USD" if provider != "razorpay" else "INR",
+        "provider": provider,
+        "region": data.region,
+        "status": "initiated",
+        "payment_status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "mocked": True,
+    }
+    await db.payment_transactions.insert_one(tx)
+    # Mocked provider — return an internal URL to our own success handler
+    checkout_url = f"{data.origin_url}/payment/processing?session_id={session_id}&provider={provider}"
+    return {"checkout_url": checkout_url, "session_id": session_id, "provider": provider, "amount": total, "currency": tx["currency"], "mocked": True}
+
+
+@api.post("/payments/confirm/{session_id}")
+async def confirm_payment(session_id: str, user=Depends(current_user)):
+    """Mock confirmation — flips a pending tx to paid and creates an order."""
+    tx = await db.payment_transactions.find_one({"session_id": session_id, "user_id": user["id"]}, {"_id": 0})
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    if tx.get("payment_status") != "paid":
+        await db.payment_transactions.update_one(
+            {"session_id": session_id, "payment_status": {"$ne": "paid"}},
+            {"$set": {"status": "completed", "payment_status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        order = {
+            "id": "PX-" + uuid.uuid4().hex[:8].upper(),
+            "user_id": user["id"],
+            "items": tx["items"],
+            "total": tx["amount"],
+            "currency": tx["currency"],
+            "provider": tx["provider"],
+            "session_id": session_id,
+            "status": "completed",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.orders.insert_one(order)
+    return {"ok": True}
+
+
+@api.get("/payments/status/{session_id}")
+async def payment_status(session_id: str):
+    tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    return {"session_id": session_id, "status": tx.get("status"), "payment_status": tx.get("payment_status"), "amount": tx.get("amount"), "currency": tx.get("currency"), "provider": tx.get("provider")}
+
+
+@api.get("/orders")
+async def orders(user=Depends(current_user)):
+    return await db.orders.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+@api.get("/orders/{oid}")
+async def order_detail(oid: str, user=Depends(current_user)):
+    o = await db.orders.find_one({"id": oid, "user_id": user["id"]}, {"_id": 0})
+    if not o:
+        raise HTTPException(404, "Order not found")
+    return o
+
+
+# ============== RENTAL WORKSPACE (file transfer for GPU service) ==============
+class WorkspaceFileInput(BaseModel):
+    rental_id: str
+    file_id: str
+    note: Optional[str] = ""
+
+
+@api.post("/rentals/{rid}/workspace/files")
+async def add_workspace_file(rid: str, data: WorkspaceFileInput, user=Depends(current_user)):
+    rental = await db.rentals.find_one({"id": rid}, {"_id": 0})
+    if not rental:
+        raise HTTPException(404, "Rental not found")
+    file_ref = await db.files.find_one({"id": data.file_id, "user_id": user["id"]}, {"_id": 0})
+    if not file_ref:
+        raise HTTPException(400, "File not found")
+    entry = {
+        "id": str(uuid.uuid4()),
+        "rental_id": rid,
+        "user_id": user["id"],
+        "storage_path": file_ref["storage_path"],
+        "url": f"/api/files/{file_ref['storage_path']}",
+        "filename": file_ref.get("original_filename"),
+        "size": file_ref.get("size"),
+        "note": data.note,
+        "direction": "upload",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.workspace_files.insert_one(entry)
+    return {k: v for k, v in entry.items() if k != "_id"}
+
+
+@api.get("/rentals/{rid}/workspace/files")
+async def list_workspace_files(rid: str, user=Depends(current_user)):
+    return await db.workspace_files.find({"rental_id": rid, "user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+# ============== SEED ==============
 async def seed():
     admin_email, admin_password = os.environ["ADMIN_EMAIL"], os.environ["ADMIN_PASSWORD"]
-    if not await db.users.find_one({"email": admin_email}):
-        await db.users.insert_one({"id": "admin-productify", "email": admin_email, "name": "Productify Admin", "role": "admin", "password_hash": bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode()})
+    existing_admin = await db.users.find_one({"email": admin_email})
+    if not existing_admin:
+        await db.users.insert_one({
+            "id": "admin-productify",
+            "email": admin_email,
+            "name": "Productify Admin",
+            "role": "admin",
+            "password_hash": bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
     if await db.products.count_documents({}) == 0:
         await db.products.insert_many([
-            {"id":"p1","title":"Figma Pro UI Kit","category":"Design","description":"A polished component library for product teams.","price":29,"image":"https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=900&auto=format&fit=crop","seller":"Northstar Studio","approved":True},
-            {"id":"p2","title":"LaunchPad Analytics","category":"Software","description":"Understand your product metrics in one clear workspace.","price":49,"image":"https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=900&auto=format&fit=crop","seller":"Metric Labs","approved":True},
-            {"id":"p3","title":"Creator Video Presets","category":"Creative","description":"Cinematic color presets for your next story.","price":18,"image":"https://images.unsplash.com/photo-1492724441997-5dc865305da7?q=80&w=900&auto=format&fit=crop","seller":"Framehouse","approved":True},
-            {"id":"p4","title":"DevOps Command Center","category":"Development","description":"Ship with confidence using battle-tested dashboards.","price":79,"image":"https://images.unsplash.com/photo-1461749280684-dccba630e2f6?q=80&w=900&auto=format&fit=crop","seller":"Stacksmith","approved":True}
+            {"id":"p1","title":"Figma Pro UI Kit","category":"Design","description":"A polished component library for product teams with 500+ components, dark and light themes, auto-layout tokens.","price":29,"tags":["figma","ui-kit","design-system"],"image":"https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=900&auto=format&fit=crop","seller":"Northstar Studio","seller_id":"seed-northstar","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"p2","title":"LaunchPad Analytics","category":"Software","description":"Understand your product metrics in one clear workspace. Real-time dashboards, cohort analysis, funnel visualization.","price":49,"tags":["analytics","dashboards","saas"],"image":"https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=900&auto=format&fit=crop","seller":"Metric Labs","seller_id":"seed-metric","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"p3","title":"Creator Video Presets","category":"Creative","description":"Cinematic color presets for your next story. 40 LUTs for DaVinci, Premiere and Final Cut.","price":18,"tags":["video","luts","presets"],"image":"https://images.unsplash.com/photo-1492724441997-5dc865305da7?q=80&w=900&auto=format&fit=crop","seller":"Framehouse","seller_id":"seed-frame","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"p4","title":"DevOps Command Center","category":"Development","description":"Ship with confidence using battle-tested dashboards. Prometheus, Grafana, Loki templates.","price":79,"tags":["devops","monitoring","grafana"],"image":"https://images.unsplash.com/photo-1461749280684-dccba630e2f6?q=80&w=900&auto=format&fit=crop","seller":"Stacksmith","seller_id":"seed-stack","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"p5","title":"Notion Startup OS","category":"Software","description":"A complete Notion workspace for early-stage teams — OKRs, hiring, roadmap, sprint boards.","price":39,"tags":["notion","templates","startup"],"image":"https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=900&auto=format&fit=crop","seller":"Northstar Studio","seller_id":"seed-northstar","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"p6","title":"3D Icon Library","category":"Design","description":"180 hand-crafted 3D icons in Blender + PNG + SVG. Perfect for landing pages and pitches.","price":24,"tags":["3d","icons","blender"],"image":"https://images.unsplash.com/photo-1618788372246-79faff0c3742?q=80&w=900&auto=format&fit=crop","seller":"Framehouse","seller_id":"seed-frame","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
         ])
     if await db.rentals.count_documents({}) == 0:
         await db.rentals.insert_many([
-            {"id":"r1","title":"RTX 4090 Creator Node","gpu":"RTX 4090","vram":"24 GB","price":0.62,"location":"Frankfurt, DE","image":"https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Cloudline"},
-            {"id":"r2","title":"A100 Training Rig","gpu":"NVIDIA A100","vram":"80 GB","price":2.40,"location":"Ashburn, US","image":"https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Tensor Yard"}
+            {"id":"r1","title":"RTX 4090 Creator Node","gpu":"RTX 4090","vram":"24 GB","price":0.62,"location":"Frankfurt, DE","description":"High-throughput node for Stable Diffusion, ComfyUI, Blender Cycles rendering. NVMe scratch drive + 128 GB RAM.","specs":{"cpu":"AMD 7950X","ram":"128 GB","storage":"2 TB NVMe","bandwidth":"1 Gbps"},"image":"https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Cloudline","owner_id":"seed-cloudline","created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"r2","title":"A100 Training Rig","gpu":"NVIDIA A100","vram":"80 GB","price":2.40,"location":"Ashburn, US","description":"Enterprise-grade LLM fine-tuning and diffusion training. Reserved slots available for multi-hour workloads.","specs":{"cpu":"AMD EPYC 7513","ram":"512 GB","storage":"4 TB NVMe RAID","bandwidth":"10 Gbps"},"image":"https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Tensor Yard","owner_id":"seed-tensor","created_at":datetime.now(timezone.utc).isoformat()},
+            {"id":"r3","title":"RTX 3090 Studio","gpu":"RTX 3090","vram":"24 GB","price":0.38,"location":"Bengaluru, IN","description":"Great for solo creators — Unreal Engine, DaVinci Resolve, Substance renders at a friendly price.","specs":{"cpu":"Intel 13700K","ram":"64 GB","storage":"1 TB NVMe","bandwidth":"500 Mbps"},"image":"https://images.unsplash.com/photo-1587202372775-e229f172b9d7?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Silicon Loft","owner_id":"seed-silicon","created_at":datetime.now(timezone.utc).isoformat()},
         ])
 
 app.include_router(api)
-app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","), allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+cors_origins = os.environ.get("CORS_ORIGINS", "").split(",")
+cors_origins = [o.strip() for o in cors_origins if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins or ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.on_event("startup")
-async def startup(): await seed()
+async def startup():
+    try:
+        init_storage()
+    except Exception as e:
+        logger.warning(f"Storage will retry on first upload: {e}")
+    await seed()
+
+
 @app.on_event("shutdown")
-async def shutdown(): client.close()
+async def shutdown():
+    client.close()

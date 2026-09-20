@@ -1,42 +1,72 @@
-import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Link, useNavigate } from "react-router-dom";
-import axios from "axios";
-import { Search, ShoppingBag, UserRound, Menu, ArrowRight, ShieldCheck, Zap, Cpu, Layers3, Download, ChevronDown, X, LogOut, LayoutDashboard } from "lucide-react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
 import "@/App.css";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CartProvider } from "@/contexts/CartContext";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import AuthCallback from "@/components/AuthCallback";
+import Home from "@/pages/Home";
+import Shop from "@/pages/Shop";
+import Rentals from "@/pages/Rentals";
+import ProductDetail from "@/pages/ProductDetail";
+import RentalDetail from "@/pages/RentalDetail";
+import Sell from "@/pages/Sell";
+import Cart from "@/pages/Cart";
+import Checkout from "@/pages/Checkout";
+import PaymentProcessing from "@/pages/PaymentProcessing";
+import PaymentSuccess from "@/pages/PaymentSuccess";
+import PaymentCancel from "@/pages/PaymentCancel";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Profile from "@/pages/Profile";
+import Orders from "@/pages/Orders";
+import DashboardHome from "@/pages/DashboardHome";
+import NotFound from "@/pages/NotFound";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const api = axios.create({ baseURL: API });
-const categories = [{ name:"Software", icon:Layers3 }, { name:"Design", icon:LayoutDashboard }, { name:"Development", icon:Zap }, { name:"GPU Rental", icon:Cpu }, { name:"Creative", icon:Download }];
-const money = (n) => `$${Number(n).toFixed(2)}`;
-
-function App(){
-  const [products,setProducts]=useState([]), [rentals,setRentals]=useState([]), [query,setQuery]=useState(""), [category,setCategory]=useState("all");
-  const [cart,setCart]=useState([]), [user,setUser]=useState(()=>JSON.parse(localStorage.getItem("productify-user")||"null")), [auth,setAuth]=useState(false), [dashboard,setDashboard]=useState(false), [cartOpen,setCartOpen]=useState(false), [toast,setToast]=useState("");
-  const load=async()=>{const [p,r]=await Promise.all([api.get(`/products?q=${encodeURIComponent(query)}&category=${category}`),api.get("/rentals")]);setProducts(p.data);setRentals(r.data)};
-  useEffect(()=>{load()},[query,category]);
-  const add=(item,kind="product")=>{setCart([...cart,{...item,kind}]);setToast("Added to your bag");setTimeout(()=>setToast(""),2200)};
-  const signout=()=>{localStorage.clear();setUser(null);setToast("Signed out")};
-  return <div className="app-shell">
-    <div className="announcement" data-testid="announcement-bar"><span><Zap size={14}/> Build faster. Buy smarter. Rent compute.</span><span className="announcement-link">Verified sellers · Protected checkout</span></div>
-    <header className="topbar"><Link to="/" className="brand" data-testid="brand-link"><span className="brand-mark">P</span><span>productify<span className="brand-dot">.</span></span></Link><nav className="main-nav" data-testid="main-navigation"><a href="#shop" data-testid="nav-shop-link">Shop</a><a href="#rentals" data-testid="nav-rentals-link">GPU rentals</a><a href="#sell" data-testid="nav-sell-link">Sell on Productify</a></nav><div className="header-actions"><button className="icon-text" onClick={()=>user?setDashboard(true):setAuth(true)} data-testid="account-button"><UserRound size={18}/><span>{user?user.name.split(" ")[0]:"Account"}</span></button><button className="bag-button" onClick={()=>setCartOpen(true)} data-testid="cart-button"><ShoppingBag size={18}/><span>Bag</span><b>{cart.length}</b></button><button className="mobile-menu" data-testid="mobile-menu-button"><Menu size={20}/></button></div></header>
-    <main>
-      <section className="hero" data-testid="marketplace-hero"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line"/> THE DIGITAL GOODS MARKETPLACE</div><h1>Good tools make<br/><em>great work.</em></h1><p>Discover software, creative assets, and compute power from people building the future.</p><div className="hero-actions"><a href="#shop" className="primary-button" data-testid="hero-shop-button">Explore the marketplace <ArrowRight size={17}/></a><a href="#rentals" className="text-button" data-testid="hero-rentals-button">Find compute <ArrowRight size={15}/></a></div></div><div className="hero-art"><div className="hero-grid"/><div className="hero-card hero-card-main"><div className="hero-card-top"><span className="live-dot"/> LIVE NODE</div><div className="hero-gpu">RTX <strong>4090</strong></div><div className="hero-spec"><span>24 GB VRAM</span><span>98% uptime</span></div><div className="hero-price">$0.62 <small>/ hr</small></div></div><div className="floating-chip chip-one"><ShieldCheck size={16}/><span><b>Verified</b><small>every seller</small></span></div><div className="floating-chip chip-two"><span className="mini-avatar">NS</span><span><b>Northstar Studio</b><small>just launched</small></span></div></div></section>
-      <section className="category-strip" data-testid="category-strip"><div className="section-label">Browse by need</div><div className="category-list"><button className={category==="all"?"category active":"category"} onClick={()=>setCategory("all")} data-testid="category-all-button"><span className="category-icon">✦</span> All products</button>{categories.map(({name,icon:Icon})=><button key={name} className={category===name?"category active":"category"} onClick={()=>setCategory(name)} data-testid={`category-${name.toLowerCase().replace(" ","-")}-button`}><Icon size={18}/>{name}</button>)}</div></section>
-      <section className="content-section" id="shop"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line"/> CURATED FOR YOU</div><h2>Tools worth<br/><em>keeping.</em></h2></div><div className="search-wrap"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search products, tools, assets..." data-testid="marketplace-search-input"/><kbd>⌘ K</kbd></div></div><div className="product-grid" data-testid="product-grid">{products.map((p,i)=><article className="product-card" key={p.id} data-testid={`product-card-${p.id}`}><div className="product-image"><img src={p.image} alt={p.title}/><span className="product-badge">{i===0?"Bestseller":"Digital download"}</span><button className="quick-add" onClick={()=>add(p)} data-testid={`add-product-${p.id}-button`}>+ Add to bag</button></div><div className="product-meta"><div><h3>{p.title}</h3><p>{p.seller} <span>·</span> {p.category}</p></div><strong>{money(p.price)}</strong></div></article>)}</div></section>
-      <section className="rental-section" id="rentals"><div className="section-heading rental-heading"><div><div className="eyebrow green"><span className="eyebrow-line"/> RENT COMPUTE</div><h2>Power when<br/><em>you need it.</em></h2></div><p>Skip the wait. Rent verified GPU nodes by the hour and ship your next experiment today.</p><a className="text-button green-text" href="#sell" data-testid="list-node-link">List your node <ArrowRight size={15}/></a></div><div className="rental-grid">{rentals.map(r=><article className="rental-card" key={r.id} data-testid={`rental-card-${r.id}`}><img src={r.image} alt={r.title}/><div className="rental-info"><div className="verified"><ShieldCheck size={15}/> Verified node</div><h3>{r.title}</h3><div className="spec-row"><span><Cpu size={15}/>{r.gpu}</span><span>{r.vram}</span><span>{r.location}</span></div><div className="rental-bottom"><strong>{money(r.price)} <small>/ hour</small></strong><button onClick={()=>add(r,"rental")} className="dark-button" data-testid={`rent-node-${r.id}-button`}>Rent node <ArrowRight size={15}/></button></div></div></article>)}</div></section>
-      <section className="trust-band"><div><ShieldCheck size={23}/><span><b>Every seller is verified</b><small>Shop with confidence, always.</small></span></div><div><Zap size={23}/><span><b>Instant digital delivery</b><small>Get to work in seconds.</small></span></div><div><ShoppingBag size={23}/><span><b>Simple, safe checkout</b><small>Protected from start to finish.</small></span></div></section>
-      <section className="sell-section" id="sell"><div className="sell-copy"><div className="eyebrow"><span className="eyebrow-line"/> FOR BUILDERS</div><h2>Your work<br/><em>belongs here.</em></h2><p>Turn your best tools, templates, and spare compute into income. Join a marketplace made for people who make things.</p><button className="primary-button" onClick={()=>user?setToast("Seller dashboard is ready in your account"):setAuth(true)} data-testid="start-selling-button">Start selling <ArrowRight size={17}/></button></div><div className="sell-stat"><span>02</span><div><b>ways to earn</b><small>Digital goods + compute</small></div></div></section>
-    </main>
-    <footer><Link to="/" className="brand" data-testid="footer-brand-link"><span className="brand-mark">P</span><span>productify<span className="brand-dot">.</span></span></Link><span>© 2025 Productify. Tools for the people building tomorrow.</span><div><a href="#shop" data-testid="footer-shop-link">Marketplace</a><a href="#rentals" data-testid="footer-rentals-link">Compute</a></div></footer>
-    {toast&&<div className="toast" data-testid="toast-message">{toast}</div>}
-    {cartOpen&&<Cart cart={cart} setCart={setCart} close={()=>setCartOpen(false)} user={user} setAuth={setAuth} setToast={setToast}/>} {auth&&<Auth close={()=>setAuth(false)} setUser={setUser} setToast={setToast}/>} {dashboard&&<Dashboard user={user} close={()=>setDashboard(false)} setToast={setToast}/>} 
-  </div>
+function AppRouter() {
+  const location = useLocation();
+  // Detect Emergent OAuth callback via URL fragment — must happen before other route logic
+  if (location.hash?.includes("session_id=")) return <AuthCallback />;
+  return (
+    <div className="app-shell">
+      <Navbar />
+      <main className="app-main">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/rentals" element={<Rentals />} />
+          <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/rental/:id" element={<RentalDetail />} />
+          <Route path="/sell" element={<Sell />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+          <Route path="/payment/processing" element={<ProtectedRoute><PaymentProcessing /></ProtectedRoute>} />
+          <Route path="/payment/success" element={<PaymentSuccess />} />
+          <Route path="/payment/cancel" element={<PaymentCancel />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </main>
+      <Footer />
+      <Toaster position="bottom-center" richColors closeButton />
+    </div>
+  );
 }
 
-function Cart({cart,setCart,close,user,setAuth,setToast}){const total=useMemo(()=>cart.reduce((a,x)=>a+Number(x.price),0),[cart]); const checkout=async()=>{if(!user){close();setAuth(true);return}try{await api.post("/orders",{items:cart,total,kind:cart.some(x=>x.kind==="rental")?"mixed":"product"},{headers:{Authorization:`Bearer ${localStorage.getItem("productify-token")}`}});setCart([]);close();setToast("Order confirmed — your digital goods are ready") }catch(e){setToast("Please sign in before checkout")}};return <div className="overlay"><aside className="side-panel" data-testid="cart-panel"><div className="panel-head"><div><div className="eyebrow">YOUR BAG</div><h2>{cart.length} item{cart.length===1?"":"s"}</h2></div><button onClick={close} className="close-button" data-testid="cart-close-button"><X size={20}/></button></div>{cart.length===0?<div className="empty-state"><ShoppingBag size={32}/><p>Your bag is waiting for something good.</p></div>:<>{cart.map((x,i)=><div className="cart-line" key={`${x.id}-${i}`}><img src={x.image} alt=""/><div><b>{x.title}</b><small>{x.kind==="rental"?"GPU rental":"Digital product"}</small></div><strong>{money(x.price)}</strong><button onClick={()=>setCart(cart.filter((_,j)=>j!==i))} data-testid={`remove-cart-item-${i}-button`}><X size={14}/></button></div>)}<div className="cart-total"><span>Estimated total</span><strong>{money(total)}</strong></div><button className="primary-button full" onClick={checkout} data-testid="mock-checkout-button">{user?"Complete mock checkout":"Sign in to checkout"} <ArrowRight size={17}/></button><small className="mock-note">Secure demo checkout · no payment is charged</small></>}</aside></div>}
-
-function Dashboard({user,close,setToast}){const [tab,setTab]=useState(user.role==="admin"?"reviews":"publish");const [title,setTitle]=useState(""),[price,setPrice]=useState(""),[pending,setPending]=useState([]);const headers={Authorization:`Bearer ${localStorage.getItem("productify-token")}`};useEffect(()=>{if(user.role==="admin")api.get("/admin/pending",{headers}).then(r=>setPending(r.data)).catch(()=>{})},[user.role]);const publish=async(e)=>{e.preventDefault();try{if(tab==="publish")await api.post("/products",{title,category:"Software",description:"A new Productify listing.",price:Number(price),image:"https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=900&auto=format&fit=crop"},{headers});else await api.post("/rentals",{title,gpu:"RTX 4090",vram:"24 GB",price:Number(price),location:"Your region",image:"https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=900&auto=format&fit=crop"},{headers});setTitle("");setPrice("");setToast(tab==="publish"?"Product submitted for review":"Node submitted for verification")}catch(e){setToast(e.response?.data?.detail||"Please check your seller access")}};const decide=async(id,decision)=>{await api.post(`/admin/rentals/${id}/${decision}`,{}, {headers});setPending(pending.filter(x=>x.id!==id));setToast(`Listing ${decision}`)};return <div className="overlay"><aside className="dashboard-panel" data-testid="dashboard-panel"><div className="panel-head"><div><div className="eyebrow">{user.role==="admin"?"OPERATIONS CONSOLE":"SELLER STUDIO"}</div><h2>{user.role==="admin"?"Review queue":"Build your shelf"}</h2><p className="dashboard-sub">Signed in as {user.email}</p></div><button onClick={close} className="close-button" data-testid="dashboard-close-button"><X size={20}/></button></div>{user.role==="admin"?<div className="review-list" data-testid="admin-review-list">{pending.length===0?<div className="empty-state"><ShieldCheck size={30}/><p>All clear. No listings need review.</p></div>:pending.map(x=><div className="review-item" key={x.id}><div><b>{x.title}</b><small>{x.gpu} · {x.vram} · {x.owner}</small></div><div><button className="approve-button" onClick={()=>decide(x.id,"approved")} data-testid={`approve-rental-${x.id}-button`}>Approve</button><button className="reject-button" onClick={()=>decide(x.id,"rejected")} data-testid={`reject-rental-${x.id}-button`}>Reject</button></div></div>)}</div>:<><div className="dashboard-tabs"><button className={tab==="publish"?"selected":""} onClick={()=>setTab("publish")} data-testid="dashboard-product-tab">Digital product</button><button className={tab==="rental"?"selected":""} onClick={()=>setTab("rental")} data-testid="dashboard-rental-tab">GPU / system</button></div><form className="dashboard-form" onSubmit={publish}><label>Listing title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder={tab==="publish"?"e.g. Notion workspace kit":"e.g. RTX 4090 Creator Node"} required data-testid="dashboard-title-input"/></label><label>{tab==="publish"?"Price":"Hourly rate"}<input type="number" min="1" step=".01" value={price} onChange={e=>setPrice(e.target.value)} placeholder="29.00" required data-testid="dashboard-price-input"/></label><div className="verification-note"><ShieldCheck size={17}/><span><b>{tab==="publish"?"Listings are reviewed":"Verification required"}</b><small>{tab==="publish"?"Our team checks every product before it goes live.":"Submit your specs and we’ll review your node before publishing."}</small></span></div><button className="primary-button full" data-testid="dashboard-submit-button">Submit for review <ArrowRight size={17}/></button></form></>}</aside></div>}
-
-function Auth({close,setUser,setToast}){const [mode,setMode]=useState("login"),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[name,setName]=useState(""),[role,setRole]=useState("buyer"),[error,setError]=useState("");const submit=async(e)=>{e.preventDefault();try{const endpoint=mode==="login"?"/auth/login":"/auth/register";const {data}=await api.post(endpoint,{email,password,name,role});localStorage.setItem("productify-token",data.token);localStorage.setItem("productify-user",JSON.stringify(data.user));setUser(data.user);close();setToast(`Welcome to Productify, ${data.user.name.split(" ")[0]}`)}catch(err){setError(err.response?.data?.detail||"Something went wrong")}};const google=async()=>{try{const {data}=await api.post("/auth/google",{email:email||"demo@productify.now",name:"Google Member"});localStorage.setItem("productify-token",data.token);localStorage.setItem("productify-user",JSON.stringify(data.user));setUser(data.user);close();setToast("Signed in with Google demo")}catch(err){setError(err.response?.data?.detail||"Google sign-in is unavailable right now")}};return <div className="overlay"><div className="auth-modal" data-testid="auth-modal"><button onClick={close} className="close-button auth-close" data-testid="auth-close-button"><X size={20}/></button><div className="auth-mark">P</div><div className="eyebrow">WELCOME TO PRODUCTIFY</div><h2>{mode==="login"?"Welcome back.":"Create your account."}</h2><p>Buy better tools, or build a business around yours.</p><button className="google-button" onClick={google} data-testid="google-login-button"><span>G</span> Continue with Google <small>demo</small></button><div className="or"><span/> or continue with email <span/></div><form onSubmit={submit}>{mode==="register"&&<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" required data-testid="auth-name-input"/>}<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" required data-testid="auth-email-input"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" required data-testid="auth-password-input"/>{mode==="register"&&<div className="role-toggle"><button type="button" className={role==="buyer"?"selected":""} onClick={()=>setRole("buyer")} data-testid="role-buyer-button">I’m buying</button><button type="button" className={role==="seller"?"selected":""} onClick={()=>setRole("seller")} data-testid="role-seller-button">I’m selling</button></div>}{error&&<div className="form-error" data-testid="auth-error-message">{error}</div>}<button className="primary-button full" data-testid="auth-submit-button">{mode==="login"?"Sign in":"Create account"} <ArrowRight size={17}/></button></form><button className="switch-auth" onClick={()=>setMode(mode==="login"?"register":"login")} data-testid="auth-mode-switch-button">{mode==="login"?"New here? Create an account":"Already have an account? Sign in"}</button></div></div>}
-
-export default function Root(){return <BrowserRouter><App/></BrowserRouter>}
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <CartProvider>
+          <AppRouter />
+        </CartProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}

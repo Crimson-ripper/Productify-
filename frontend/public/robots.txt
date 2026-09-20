@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /checkout
+Disallow: /payment/
+Disallow: /profile
+Disallow: /orders
+Sitemap: https://productifynow.com/sitemap.xml
