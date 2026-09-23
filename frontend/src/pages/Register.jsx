@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +9,7 @@ import GoogleLoginButton from "@/components/GoogleLoginButton";
 
 export default function Register() {
   const [sp] = useSearchParams();
-  const { registerEmail } = useAuth();
+  const { registerEmail, user, becomeSeller } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -17,6 +17,25 @@ export default function Register() {
   const [role, setRole] = useState(sp.get("role") === "seller" ? "seller" : "buyer");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (user && (user.role !== "buyer" || sp.get("role") !== "seller")) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, sp, navigate]);
+
+  const handleUpgrade = async () => {
+    setBusy(true); setErr("");
+    try {
+      await becomeSeller();
+      toast.success("Welcome to Seller Studio! You can now publish digital products & GPU nodes.");
+      navigate("/dashboard", { replace: true });
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Upgrade failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -29,6 +48,27 @@ export default function Register() {
       setErr(e.response?.data?.detail || "Sign-up failed");
     } finally { setBusy(false); }
   };
+
+  if (user && user.role === "buyer" && sp.get("role") === "seller") {
+    return (
+      <>
+        <SEO title="Activate Seller Studio — Productify" description="Upgrade your Productify account to start selling." path="/register" />
+        <section className="auth-page">
+          <div className="auth-card" data-testid="register-upgrade-card">
+            <div className="auth-mark">P</div>
+            <div className="eyebrow">SELLER STUDIO</div>
+            <h2>Activate your seller account.</h2>
+            <p>You are signed in as <b>{user.name}</b> ({user.email}). Click below to unlock listing digital products and renting GPU capacity.</p>
+            {err && <div className="form-error" data-testid="register-error">{err}</div>}
+            <button className="primary-button full" disabled={busy} onClick={handleUpgrade} data-testid="register-upgrade-button">
+              {busy ? "Activating…" : "Activate Seller Studio"} <ArrowRight size={17} />
+            </button>
+            <Link to="/dashboard" className="switch-auth" data-testid="register-switch-dashboard">Back to dashboard</Link>
+          </div>
+        </section>
+      </>
+    );
+  }
 
   return (
     <>
