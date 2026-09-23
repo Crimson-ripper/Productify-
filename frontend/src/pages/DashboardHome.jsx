@@ -37,17 +37,7 @@ export default function DashboardHome() {
         <div className="buyer-tiles">
           <Link to="/orders" className="tile"><b>Orders</b><small>View your recent purchases</small></Link>
           <Link to="/profile" className="tile"><b>Profile</b><small>Update your name & avatar</small></Link>
-          <button
-            type="button"
-            onClick={handleBecomeSeller}
-            disabled={upgrading}
-            className="tile"
-            style={{ textAlign: "left", cursor: "pointer", background: "inherit", border: "1px solid var(--border, #272A38)" }}
-            data-testid="tile-become-seller"
-          >
-            <b>{upgrading ? "Activating…" : "Become a seller"}</b>
-            <small>Start selling on Productify</small>
-          </button>
+          <Link to="/seller-studio" className="tile" data-testid="tile-seller-studio"><b>Seller Studio</b><small>Open seller dashboard & listings</small></Link>
           <Link to="/rentals" className="tile"><b>Browse GPUs</b><small>Rent compute by the hour</small></Link>
         </div>
       </section>
