@@ -116,6 +116,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    role: Optional[str] = None
 
 
 class ConsentInput(BaseModel):
@@ -363,9 +364,29 @@ async def me(user=Depends(current_user)):
 @api.patch("/auth/me")
 async def update_me(data: ProfileUpdate, user=Depends(current_user)):
     updates = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    if "role" in updates:
+        requested_role = updates["role"]
+        # Super-admin can assign any role
+        if user.get("role") == "admin":
+            if requested_role not in ["buyer", "seller", "sub-admin", "admin"]:
+                raise HTTPException(400, "Invalid role specified")
+        else:
+            # Non-admins can only toggle between buyer and seller
+            if requested_role not in ["buyer", "seller"]:
+                raise HTTPException(403, "Cannot self-assign administrative roles")
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
         user.update(updates)
+    return public_user(user)
+
+
+@api.post("/auth/become-seller")
+async def become_seller(user=Depends(current_user)):
+    """Upgrades a buyer account to seller immediately."""
+    if user.get("role") in ["admin", "sub-admin"]:
+        return public_user(user)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"role": "seller"}})
+    user["role"] = "seller"
     return public_user(user)
 
 
@@ -396,11 +417,11 @@ async def product_detail(pid: str):
 
 @api.post("/products")
 async def create_product(data: ProductInput, user=Depends(current_user)):
-    if user.get("role") not in ["seller", "admin"]:
+    if user.get("role") not in ["seller", "admin", "sub-admin"]:
         raise HTTPException(403, "Seller access required")
     item = data.model_dump() | {
         "id": str(uuid.uuid4()),
-        "approved": user.get("role") == "admin",
+        "approved": user.get("role") in ["admin", "sub-admin"],
         "seller": user["name"],
         "seller_id": user["id"],
         "type": "digital",
@@ -433,11 +454,11 @@ async def rental_detail(rid: str):
 
 @api.post("/rentals")
 async def create_rental(data: RentalInput, user=Depends(current_user)):
-    if user.get("role") not in ["seller", "admin"]:
+    if user.get("role") not in ["seller", "admin", "sub-admin"]:
         raise HTTPException(403, "Seller access required")
     item = data.model_dump() | {
         "id": str(uuid.uuid4()),
-        "status": "approved" if user.get("role") == "admin" else "pending",
+        "status": "approved" if user.get("role") in ["admin", "sub-admin"] else "pending",
         "owner": user["name"],
         "owner_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -449,14 +470,14 @@ async def create_rental(data: RentalInput, user=Depends(current_user)):
 # ============== ADMIN ==============
 @api.get("/admin/pending")
 async def pending(user=Depends(current_user)):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     return await db.rentals.find({"status": "pending"}, {"_id": 0}).to_list(100)
 
 
 @api.post("/admin/rentals/{rid}/{decision}")
 async def decide(rid: str, decision: str, user=Depends(current_user)):
-    if user.get("role") != "admin" or decision not in ["approved", "rejected"]:
+    if user.get("role") not in ["admin", "sub-admin"] or decision not in ["approved", "rejected"]:
         raise HTTPException(403, "Admin access required")
     await db.rentals.update_one({"id": rid}, {"$set": {"status": decision}})
     return {"ok": True}
@@ -648,7 +669,7 @@ async def my_consents(user=Depends(current_user)):
 
 @api.get("/admin/consents")
 async def admin_consents(user=Depends(current_user), q: str = "", limit: int = 200):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     query = {}
     if q:
@@ -752,7 +773,7 @@ async def file_report(data: ReportInput, request: Request):
 
 @api.get("/admin/reports")
 async def admin_reports(user=Depends(current_user), status: str = "open", limit: int = 200):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     if status not in ALLOWED_REPORT_STATUS and status != "all":
         raise HTTPException(400, "Invalid status")
@@ -762,7 +783,7 @@ async def admin_reports(user=Depends(current_user), status: str = "open", limit:
 
 @api.post("/admin/reports/{report_id}/resolve")
 async def resolve_report(report_id: str, data: ReportResolveInput, user=Depends(current_user)):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     if data.decision not in ("dismiss", "remove_listing"):
         raise HTTPException(400, "Invalid decision")
@@ -794,7 +815,7 @@ async def resolve_report(report_id: str, data: ReportResolveInput, user=Depends(
 @api.get("/seller/reports")
 async def seller_report_history(user=Depends(current_user)):
     """Report history + counts on the current seller's listings, so they can self-correct."""
-    if user.get("role") not in ("seller", "admin"):
+    if user.get("role") not in ("seller", "admin", "sub-admin"):
         raise HTTPException(403, "Seller access required")
     uid = user["id"]
     # Fetch this seller's listings (products via seller_id, rentals via owner_id)
