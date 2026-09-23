@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, ShoppingBag, UserRound, Menu, LogOut, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Search, ShoppingBag, UserRound, Menu, LogOut, LayoutDashboard, ShieldCheck, Package } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
@@ -55,6 +55,7 @@ export default function Navbar() {
                 <Link to="/profile" data-testid="menu-profile-link"><UserRound size={14} /> Profile</Link>
                 <Link to="/orders" data-testid="menu-orders-link"><ShoppingBag size={14} /> Orders</Link>
                 <Link to="/dashboard" data-testid="menu-dashboard-link"><LayoutDashboard size={14} /> Dashboard</Link>
+                <Link to="/seller-studio" data-testid="menu-seller-link"><Package size={14} /> Seller Studio</Link>
                 <button onClick={() => { logout(); navigate("/"); }} data-testid="menu-signout-button"><LogOut size={14} /> Sign out</button>
               </div>
             )}
@@ -77,6 +78,7 @@ export default function Navbar() {
               <Link to="/profile" onClick={() => setMenuOpen(false)}>Profile</Link>
               <Link to="/orders" onClick={() => setMenuOpen(false)}>Orders</Link>
               <Link to="/dashboard" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+              <Link to="/seller-studio" onClick={() => setMenuOpen(false)}>Seller Studio</Link>
             </>
           ) : (
             <Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
