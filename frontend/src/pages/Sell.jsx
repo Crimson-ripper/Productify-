@@ -1,8 +1,28 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, ShieldCheck, Zap, Cpu } from "lucide-react";
 import SEO from "@/components/SEO";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export default function Sell() {
+  const { user, becomeSeller } = useAuth();
+  const navigate = useNavigate();
+  const [upgrading, setUpgrading] = useState(false);
+
+  const handleBecomeSeller = async () => {
+    setUpgrading(true);
+    try {
+      await becomeSeller();
+      toast.success("Welcome to Seller Studio! You can now publish digital products & GPU nodes.");
+      navigate("/dashboard");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Could not activate seller account");
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   return (
     <>
       <SEO
@@ -16,8 +36,27 @@ export default function Sell() {
           <h1>Turn your work<br /><em>into income.</em></h1>
           <p>Two ways to earn on Productify: sell digital products, or rent your spare GPU capacity to a global network of creators and engineers.</p>
           <div className="hero-actions">
-            <Link to="/register?role=seller" className="primary-button" data-testid="sell-signup-button">Become a seller <ArrowRight size={17} /></Link>
-            <Link to="/dashboard" className="text-button text-button-dark">Go to seller studio <ArrowRight size={14} /></Link>
+            {!user ? (
+              <>
+                <Link to="/register?role=seller" className="primary-button" data-testid="sell-signup-button">Become a seller <ArrowRight size={17} /></Link>
+                <Link to="/login" className="text-button text-button-dark">Sign in <ArrowRight size={14} /></Link>
+              </>
+            ) : user.role === "buyer" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleBecomeSeller}
+                  disabled={upgrading}
+                  className="primary-button"
+                  data-testid="sell-activate-button"
+                >
+                  {upgrading ? "Activating Seller Studio…" : "Activate Seller Studio"} <ArrowRight size={17} />
+                </button>
+                <Link to="/dashboard" className="text-button text-button-dark">Go to Dashboard <ArrowRight size={14} /></Link>
+              </>
+            ) : (
+              <Link to="/dashboard" className="primary-button" data-testid="sell-dashboard-button">Open Seller Studio <ArrowRight size={17} /></Link>
+            )}
           </div>
         </div>
       </section>
