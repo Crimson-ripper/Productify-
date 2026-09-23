@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
 
-// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+import GoogleLoginButton from "@/components/GoogleLoginButton";
+
 export default function Login() {
   const { loginEmail } = useAuth();
   const navigate = useNavigate();
@@ -27,11 +28,6 @@ export default function Login() {
     } finally { setBusy(false); }
   };
 
-  const google = () => {
-    const redirectUrl = window.location.origin + "/dashboard";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-  };
-
   return (
     <>
       <SEO title="Sign in — Productify" description="Sign in to Productify to shop, sell and manage rentals." path="/login" />
@@ -42,9 +38,7 @@ export default function Login() {
           <h2>Sign in.</h2>
           <p>Buy better tools, or build a business around yours.</p>
 
-          <button className="google-button" onClick={google} data-testid="google-login-button">
-            <span>G</span> Continue with Google
-          </button>
+          <GoogleLoginButton text="signin_with" />
           <div className="or"><span /> or continue with email <span /></div>
 
           <form onSubmit={submit}>
