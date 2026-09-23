@@ -29,7 +29,7 @@ export default function Register() {
     try {
       await becomeSeller();
       toast.success("Welcome to Seller Studio! You can now publish digital products & GPU nodes.");
-      navigate("/dashboard", { replace: true });
+      navigate("/seller-studio", { replace: true });
     } catch (e) {
       setErr(e.response?.data?.detail || "Upgrade failed");
     } finally {
