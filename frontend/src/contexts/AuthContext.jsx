@@ -51,10 +51,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const becomeSeller = async () => {
+    const { data } = await api.post("/auth/become-seller");
+    localStorage.setItem("productify-user", JSON.stringify(data));
+    setUser(data);
+    return data;
+  };
+
   const refresh = checkAuth;
 
   return (
-    <AuthCtx.Provider value={{ user, loading, loginEmail, registerEmail, logout, refresh, setUser }}>
+    <AuthCtx.Provider value={{ user, loading, loginEmail, registerEmail, logout, becomeSeller, refresh, setUser }}>
       {children}
     </AuthCtx.Provider>
   );
