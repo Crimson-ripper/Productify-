@@ -15,7 +15,7 @@ export default function Sell() {
     try {
       await becomeSeller();
       toast.success("Welcome to Seller Studio! You can now publish digital products & GPU nodes.");
-      navigate("/dashboard");
+      navigate("/seller-studio");
     } catch (e) {
       toast.error(e.response?.data?.detail || "Could not activate seller account");
     } finally {
@@ -52,10 +52,10 @@ export default function Sell() {
                 >
                   {upgrading ? "Activating Seller Studio…" : "Activate Seller Studio"} <ArrowRight size={17} />
                 </button>
-                <Link to="/dashboard" className="text-button text-button-dark">Go to Dashboard <ArrowRight size={14} /></Link>
+                <Link to="/seller-studio" className="text-button text-button-dark">Go to Seller Studio <ArrowRight size={14} /></Link>
               </>
             ) : (
-              <Link to="/dashboard" className="primary-button" data-testid="sell-dashboard-button">Open Seller Studio <ArrowRight size={17} /></Link>
+              <Link to="/seller-studio" className="primary-button" data-testid="sell-dashboard-button">Open Seller Studio <ArrowRight size={17} /></Link>
             )}
           </div>
         </div>
