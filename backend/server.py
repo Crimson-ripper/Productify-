@@ -916,11 +916,20 @@ async def seed():
         ])
 
 app.include_router(api)
-cors_origins = os.environ.get("CORS_ORIGINS", "").split(",")
-cors_origins = [o.strip() for o in cors_origins if o.strip()]
+DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://productify-two.vercel.app",
+    "https://productifynow.com",
+    "https://www.productifynow.com",
+]
+env_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+all_origins = list(dict.fromkeys(DEFAULT_ORIGINS + env_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins or ["*"],
+    allow_origins=all_origins,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
