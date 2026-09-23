@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,13 +8,19 @@ import { toast } from "sonner";
 import GoogleLoginButton from "@/components/GoogleLoginButton";
 
 export default function Login() {
-  const { loginEmail } = useAuth();
+  const { loginEmail, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      navigate(location.state?.from?.pathname || "/dashboard", { replace: true });
+    }
+  }, [user, navigate, location]);
 
   const submit = async (e) => {
     e.preventDefault();
