@@ -26,6 +26,8 @@ STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 storage_key = None
 
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "4814802603-c0vb27vmn19l3j3057v0qqf45mkll6rc.apps.googleusercontent.com")
 
 app = FastAPI(title="Productify API")
 api = APIRouter(prefix="/api")
@@ -71,6 +73,10 @@ class AuthInput(BaseModel):
 
 class SessionInput(BaseModel):
     session_id: str
+
+
+class GoogleAuthInput(BaseModel):
+    credential: str
 
 
 class ProductInput(BaseModel):
@@ -288,6 +294,56 @@ async def create_session(data: SessionInput, response: Response, request: Reques
             except Exception:
                 pass
     return {"user": public_user(u)}
+
+
+@api.post("/auth/google")
+async def google_auth(data: GoogleAuthInput, response: Response, request: Request):
+    """Direct Google Sign-In verification via Google's tokeninfo API."""
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        r = await http.get(f"{GOOGLE_TOKENINFO_URL}?id_token={data.credential}")
+        if r.status_code != 200:
+            raise HTTPException(401, "Google verification failed")
+        info = r.json()
+    email = (info.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(400, "Google account did not return an email")
+    u = await db.users.find_one({"email": email})
+    is_new = False
+    if not u:
+        is_new = True
+        u = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "name": info.get("name") or email.split("@")[0].title(),
+            "avatar_url": info.get("picture"),
+            "role": "buyer",
+            "auth_provider": "google",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(u)
+    else:
+        updates = {}
+        if info.get("picture") and not u.get("avatar_url"):
+            updates["avatar_url"] = info["picture"]
+        if updates:
+            await db.users.update_one({"id": u["id"]}, {"$set": updates})
+            u.update(updates)
+    session_token = uuid.uuid4().hex
+    await db.user_sessions.insert_one({
+        "user_id": u["id"],
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc),
+    })
+    set_session_cookie(response, session_token)
+    if is_new:
+        for ct in POLICY_TYPES:
+            try:
+                await _log_consent(user=u, data=ConsentInput(consent_type=ct, choice="accepted", metadata={"source": "google_signup"}), request=request)
+            except Exception:
+                pass
+    token = jwt_token(u)
+    return {"user": public_user(u), "token": token}
 
 
 @api.post("/auth/logout")
