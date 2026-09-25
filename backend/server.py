@@ -191,6 +191,20 @@ class SubscriptionInput(BaseModel):
     tier: str = "pro"
 
 
+class AdminRoleUpdateInput(BaseModel):
+    role: str
+
+
+class AdminStatusUpdateInput(BaseModel):
+    banned: bool
+    reason: Optional[str] = None
+
+
+class AdminPayoutDecisionInput(BaseModel):
+    decision: str  # completed | rejected
+    notes: Optional[str] = None
+
+
 def public_user(u):
     return {
         "id": u.get("id"),
@@ -208,6 +222,8 @@ def public_user(u):
         "seller_verified": u.get("seller_verified", False),
         "seller_tier": u.get("seller_tier", "free"),
         "payout_lock_until": u.get("payout_lock_until"),
+        "banned": u.get("banned", False),
+        "created_at": u.get("created_at"),
     }
 
 
@@ -232,6 +248,8 @@ async def current_user(request: Request):
             if exp and exp >= datetime.now(timezone.utc):
                 u = await db.users.find_one({"id": sess["user_id"]}, {"_id": 0})
                 if u:
+                    if u.get("banned"):
+                        raise HTTPException(403, "This account has been suspended by an administrator.")
                     return u
     # 2) Bearer JWT (email/password path)
     authz = request.headers.get("authorization")
@@ -241,6 +259,8 @@ async def current_user(request: Request):
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             u = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
             if u:
+                if u.get("banned"):
+                    raise HTTPException(403, "This account has been suspended by an administrator.")
                 return u
         except jwt.PyJWTError:
             pass
@@ -249,6 +269,8 @@ async def current_user(request: Request):
         if sess:
             u = await db.users.find_one({"id": sess["user_id"]}, {"_id": 0})
             if u:
+                if u.get("banned"):
+                    raise HTTPException(403, "This account has been suspended by an administrator.")
                 return u
     raise HTTPException(401, "Please sign in to continue")
 
@@ -925,6 +947,315 @@ async def decide(rid: str, decision: str, user=Depends(current_user)):
         raise HTTPException(403, "Admin access required")
     await db.rentals.update_one({"id": rid}, {"$set": {"status": decision}})
     return {"ok": True}
+
+
+# ============== ADMIN OPERATIONS SUITE ==============
+@api.get("/admin/stats")
+async def admin_stats(user=Depends(current_user)):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    
+    total_users = await db.users.count_documents({})
+    sellers_count = await db.users.count_documents({"role": "seller"})
+    buyers_count = await db.users.count_documents({"role": "buyer"})
+    staff_count = await db.users.count_documents({"role": {"$in": ["admin", "sub-admin"]}})
+    
+    pending_rentals = await db.rentals.count_documents({"status": "pending"})
+    pending_products = await db.products.count_documents({"approved": {"$ne": True}})
+    
+    payout_requests = await db.payout_requests.find({"status": "processing"}, {"_id": 0, "amount": 1}).to_list(500)
+    pending_payouts_count = len(payout_requests)
+    pending_payouts_amount = round(sum(p.get("amount", 0.0) for p in payout_requests), 2)
+    
+    completed_orders = await db.orders.find({"status": "completed"}, {"_id": 0, "total": 1}).to_list(1000)
+    total_gmv = round(sum(o.get("total", 0.0) for o in completed_orders), 2)
+    
+    open_reports = await db.reports.count_documents({"status": "open"})
+    active_products = await db.products.count_documents({"approved": True})
+    active_rentals = await db.rentals.count_documents({"status": "approved"})
+
+    return {
+        "total_users": total_users,
+        "sellers_count": sellers_count,
+        "buyers_count": buyers_count,
+        "staff_count": staff_count,
+        "pending_reviews_count": pending_rentals + pending_products,
+        "pending_rentals_count": pending_rentals,
+        "pending_products_count": pending_products,
+        "pending_payouts_count": pending_payouts_count,
+        "pending_payouts_amount": pending_payouts_amount,
+        "total_orders_count": len(completed_orders),
+        "total_gmv": total_gmv,
+        "open_reports_count": open_reports,
+        "active_products": active_products,
+        "active_rentals": active_rentals,
+    }
+
+
+@api.get("/admin/users")
+async def admin_list_users(
+    q: str = "",
+    role: str = "all",
+    limit: int = 50,
+    skip: int = 0,
+    user=Depends(current_user)
+):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    
+    query = {}
+    if role != "all":
+        if role == "staff":
+            query["role"] = {"$in": ["admin", "sub-admin"]}
+        else:
+            query["role"] = role
+            
+    if q.strip():
+        rgx = {"$regex": q.strip(), "$options": "i"}
+        query["$or"] = [
+            {"email": rgx},
+            {"name": rgx},
+            {"username": rgx},
+            {"phone": rgx},
+            {"storename": rgx}
+        ]
+        
+    total = await db.users.count_documents(query)
+    docs = await db.users.find(query, {"_id": 0, "password_hash": 0, "recovery_key_hash": 0})\
+        .sort("created_at", -1)\
+        .skip(skip)\
+        .limit(max(1, min(100, limit)))\
+        .to_list(100)
+        
+    return {
+        "users": [public_user(u) for u in docs],
+        "total": total,
+        "limit": limit,
+        "skip": skip
+    }
+
+
+@api.patch("/admin/users/{uid}/role")
+async def admin_update_user_role(
+    uid: str,
+    data: AdminRoleUpdateInput,
+    user=Depends(current_user)
+):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+        
+    new_role = data.role.strip().lower()
+    if new_role not in ["buyer", "seller", "sub-admin", "admin"]:
+        raise HTTPException(400, "Invalid role. Allowed: buyer, seller, sub-admin, admin")
+        
+    # Only super-admin can assign admin or sub-admin roles
+    if new_role in ["admin", "sub-admin"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only super-admins can assign administrative roles")
+        
+    target = await db.users.find_one({"id": uid})
+    if not target:
+        raise HTTPException(404, "User not found")
+        
+    # Safety check: Protect the last admin
+    if target.get("role") == "admin" and new_role != "admin":
+        admin_count = await db.users.count_documents({"role": "admin"})
+        if admin_count <= 1:
+            raise HTTPException(400, "Cannot demote the only remaining administrator.")
+            
+    updates = {"role": new_role}
+    if new_role == "seller":
+        updates["seller_verified"] = True
+        
+    await db.users.update_one({"id": uid}, {"$set": updates})
+    target.update(updates)
+    return {"ok": True, "user": public_user(target)}
+
+
+@api.patch("/admin/users/{uid}/status")
+async def admin_update_user_status(
+    uid: str,
+    data: AdminStatusUpdateInput,
+    user=Depends(current_user)
+):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Super-admin access required to change user status")
+        
+    target = await db.users.find_one({"id": uid})
+    if not target:
+        raise HTTPException(404, "User not found")
+        
+    if target["id"] == user["id"]:
+        raise HTTPException(400, "You cannot suspend your own account.")
+        
+    if target.get("role") == "admin":
+        raise HTTPException(400, "Cannot suspend an administrator account. Demote first.")
+        
+    updates = {
+        "banned": data.banned,
+        "ban_reason": data.reason or ("Suspended by administrator" if data.banned else None),
+        "status_updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.update_one({"id": uid}, {"$set": updates})
+    if data.banned:
+        # Invalidate active sessions
+        await db.user_sessions.delete_many({"user_id": uid})
+        
+    target.update(updates)
+    return {"ok": True, "banned": data.banned, "user": public_user(target)}
+
+
+@api.get("/admin/reviews/pending")
+async def admin_pending_reviews(user=Depends(current_user)):
+    """Unified queue of both digital products and GPU rentals awaiting approval."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+        
+    pending_prods = await db.products.find({"approved": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for p in pending_prods:
+        p["kind"] = "product"
+        
+    pending_rents = await db.rentals.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for r in pending_rents:
+        r["kind"] = "rental"
+        
+    all_reviews = pending_prods + pending_rents
+    all_reviews.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return all_reviews
+
+
+@api.post("/admin/products/{pid}/{decision}")
+async def admin_decide_product(
+    pid: str,
+    decision: str,
+    user=Depends(current_user)
+):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    if decision not in ["approved", "rejected"]:
+        raise HTTPException(400, "Decision must be 'approved' or 'rejected'")
+        
+    target = await db.products.find_one({"id": pid})
+    if not target:
+        raise HTTPException(404, "Product not found")
+        
+    updates = {
+        "approved": decision == "approved",
+        "status": decision,
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "reviewed_by": user["name"]
+    }
+    await db.products.update_one({"id": pid}, {"$set": updates})
+    return {"ok": True, "decision": decision}
+
+
+@api.get("/admin/payouts")
+async def admin_list_payouts(status: str = "all", user=Depends(current_user)):
+    """Fetches all seller balance withdrawal requests."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+        
+    query = {}
+    if status != "all":
+        query["status"] = status
+        
+    payouts = await db.payout_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with user contact details
+    user_ids = list({p["user_id"] for p in payouts if "user_id" in p})
+    users_cursor = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1, "username": 1}).to_list(len(user_ids) or 1)
+    user_map = {u["id"]: u for u in users_cursor}
+    
+    enriched = []
+    for p in payouts:
+        u_info = user_map.get(p.get("user_id"), {})
+        enriched.append({
+            **p,
+            "seller_email": u_info.get("email", "Unknown"),
+            "seller_name": u_info.get("name", "Unknown"),
+            "seller_username": u_info.get("username", "")
+        })
+        
+    return enriched
+
+
+@api.post("/admin/payouts/{wid}/decision")
+async def admin_decide_payout(
+    wid: str,
+    data: AdminPayoutDecisionInput,
+    user=Depends(current_user)
+):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    if data.decision not in ["completed", "rejected"]:
+        raise HTTPException(400, "Decision must be 'completed' or 'rejected'")
+        
+    target = await db.payout_requests.find_one({"id": wid})
+    if not target:
+        raise HTTPException(404, "Payout request not found")
+        
+    updates = {
+        "status": data.decision,
+        "processed_at": datetime.now(timezone.utc).isoformat(),
+        "processed_by": user["name"],
+        "notes": data.notes or ""
+    }
+    await db.payout_requests.update_one({"id": wid}, {"$set": updates})
+    return {"ok": True, "decision": data.decision}
+
+
+@api.get("/admin/listings/all")
+async def admin_all_listings(
+    q: str = "",
+    kind: str = "all",
+    user=Depends(current_user)
+):
+    """Catalog manager allowing admins to search and inspect all items."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+        
+    prods = []
+    rents = []
+    
+    if kind in ["all", "product"]:
+        prods = await db.products.find({}, {"_id": 0}).sort("created_at", -1).to_list(300)
+        for p in prods:
+            p["kind"] = "product"
+            
+    if kind in ["all", "rental"]:
+        rents = await db.rentals.find({}, {"_id": 0}).sort("created_at", -1).to_list(300)
+        for r in rents:
+            r["kind"] = "rental"
+            
+    items = prods + rents
+    if q.strip():
+        ql = q.strip().lower()
+        items = [i for i in items if ql in (i.get("title", "") + " " + i.get("description", "") + " " + i.get("seller", "") + " " + i.get("owner", "")).lower()]
+        
+    items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return items
+
+
+@api.delete("/admin/listings/{kind}/{id}")
+async def admin_delete_listing(
+    kind: str,
+    id: str,
+    user=Depends(current_user)
+):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+        
+    if kind == "product":
+        res = await db.products.delete_one({"id": id})
+    elif kind == "rental":
+        res = await db.rentals.delete_one({"id": id})
+    else:
+        raise HTTPException(400, "Invalid kind. Must be 'product' or 'rental'")
+        
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Listing not found")
+        
+    return {"ok": True, "deleted_id": id, "kind": kind}
 
 
 # ============== UPLOADS ==============

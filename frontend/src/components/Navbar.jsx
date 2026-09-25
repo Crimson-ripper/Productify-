@@ -54,7 +54,11 @@ export default function Navbar() {
               <div className="account-menu" data-testid="account-menu">
                 <Link to="/profile" data-testid="menu-profile-link"><UserRound size={14} /> Profile</Link>
                 <Link to="/orders" data-testid="menu-orders-link"><ShoppingBag size={14} /> Orders</Link>
-                <Link to="/dashboard" data-testid="menu-dashboard-link"><LayoutDashboard size={14} /> Dashboard</Link>
+                {(user.role === "admin" || user.role === "sub-admin") ? (
+                  <Link to="/dashboard" data-testid="menu-admin-link" style={{ color: "var(--violet, #6556e8)", fontWeight: 700 }}><ShieldCheck size={14} /> Admin Console</Link>
+                ) : (
+                  <Link to="/dashboard" data-testid="menu-dashboard-link"><LayoutDashboard size={14} /> Dashboard</Link>
+                )}
                 <Link to="/seller-studio" data-testid="menu-seller-link"><Package size={14} /> Seller Studio</Link>
                 <button onClick={() => { logout(); navigate("/"); }} data-testid="menu-signout-button"><LogOut size={14} /> Sign out</button>
               </div>
@@ -77,7 +81,11 @@ export default function Navbar() {
             <>
               <Link to="/profile" onClick={() => setMenuOpen(false)}>Profile</Link>
               <Link to="/orders" onClick={() => setMenuOpen(false)}>Orders</Link>
-              <Link to="/dashboard" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+              {(user.role === "admin" || user.role === "sub-admin") ? (
+                <Link to="/dashboard" onClick={() => setMenuOpen(false)} style={{ color: "var(--violet, #6556e8)", fontWeight: 700 }}>Admin Console</Link>
+              ) : (
+                <Link to="/dashboard" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+              )}
               <Link to="/seller-studio" onClick={() => setMenuOpen(false)}>Seller Studio</Link>
             </>
           ) : (
