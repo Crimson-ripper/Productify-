@@ -23,6 +23,8 @@ import Register from "@/pages/Register";
 import Profile from "@/pages/Profile";
 import Orders from "@/pages/Orders";
 import DashboardHome from "@/pages/DashboardHome";
+import SellerDashboard from "@/pages/SellerDashboard";
+import SellerOnboarding from "@/pages/SellerOnboarding";
 import NotFound from "@/pages/NotFound";
 import PrivacyPolicy from "@/pages/policies/PrivacyPolicy";
 import Terms from "@/pages/policies/Terms";
@@ -58,6 +60,11 @@ function AppRouter() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+          <Route path="/seller/onboarding" element={<SellerOnboarding />} />
+          <Route path="/become-seller" element={<SellerOnboarding />} />
+          <Route path="/seller-studio" element={<ProtectedRoute><SellerDashboard /></ProtectedRoute>} />
+          <Route path="/seller" element={<ProtectedRoute><SellerDashboard /></ProtectedRoute>} />
+          <Route path="/studio" element={<ProtectedRoute><SellerDashboard /></ProtectedRoute>} />
           <Route path="/legal/privacy" element={<PrivacyPolicy />} />
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/refunds" element={<Refund />} />

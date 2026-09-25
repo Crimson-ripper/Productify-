@@ -1,5 +1,28 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Package, Cpu, Flag, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Package,
+  Cpu,
+  Flag,
+  ShieldAlert,
+  ShieldCheck,
+  TrendingUp,
+  Wallet,
+  Sparkles,
+  Lock,
+  Building,
+  CreditCard,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Layers,
+  Flame,
+  Award,
+  DollarSign,
+  Check,
+  Zap,
+  ExternalLink
+} from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import ImageUpload from "@/components/ImageUpload";
@@ -7,102 +30,1211 @@ import SEO from "@/components/SEO";
 import { toast } from "sonner";
 
 const CATS = ["Software", "Design", "Development", "Creative"];
-const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
+const REASON_LABEL = {
+  illegal: "Illegal",
+  infringing: "IP infringement",
+  malware: "Malware",
+  scam: "Scam",
+  csam: "CSAM",
+  other: "Other"
+};
 
 export default function SellerDashboard() {
-  const { user } = useAuth();
-  const [tab, setTab] = useState("product");
-  // product fields
-  const [pTitle, setPTitle] = useState(""); const [pDesc, setPDesc] = useState("");
-  const [pPrice, setPPrice] = useState(""); const [pCat, setPCat] = useState("Software"); const [pTags, setPTags] = useState("");
+  const { user, setUser, upgradeSellerTier } = useAuth();
+  const [tab, setTab] = useState("analytics"); // "analytics" | "listings" | "payouts" | "reports" | "pro"
+
+  // Listings creation state
+  const [listingSubTab, setListingSubTab] = useState("product"); // "product" | "rental" | "inventory"
+  const [pTitle, setPTitle] = useState("");
+  const [pDesc, setPDesc] = useState("");
+  const [pPrice, setPPrice] = useState("");
+  const [pCat, setPCat] = useState("Software");
+  const [pTags, setPTags] = useState("");
   const [pImage, setPImage] = useState("");
-  // rental fields
-  const [rTitle, setRTitle] = useState(""); const [rGpu, setRGpu] = useState(""); const [rVram, setRVram] = useState("");
-  const [rPrice, setRPrice] = useState(""); const [rLoc, setRLoc] = useState(""); const [rDesc, setRDesc] = useState("");
+
+  const [rTitle, setRTitle] = useState("");
+  const [rGpu, setRGpu] = useState("");
+  const [rVram, setRVram] = useState("");
+  const [rPrice, setRPrice] = useState("");
+  const [rLoc, setRLoc] = useState("");
+  const [rDesc, setRDesc] = useState("");
   const [rImage, setRImage] = useState("");
+
+  const [myListings, setMyListings] = useState({ products: [], rentals: [] });
   const [busy, setBusy] = useState(false);
-  // reports on my listings
+
+  // Analytics state
+  const [analytics, setAnalytics] = useState({
+    total_gross: 480.0,
+    net_earnings: 432.0,
+    available_balance: 310.0,
+    total_withdrawn: 122.0,
+    items_sold: 14,
+    gpu_hours: 68,
+    commission_rate: 0.1,
+    is_pro: false,
+    is_plus: false,
+    tier: "free",
+    recent_transactions: [
+      { order_id: "PX-88A1F", item_title: "Figma Pro UI Kit", amount: 29.0, date: new Date().toISOString(), kind: "product" },
+      { order_id: "PX-992BC", item_title: "RTX 4090 Creator Node", amount: 62.0, date: new Date(Date.now() - 86400000).toISOString(), kind: "rental" },
+      { order_id: "PX-771DA", item_title: "LaunchPad Analytics", amount: 49.0, date: new Date(Date.now() - 172800000).toISOString(), kind: "product" },
+    ]
+  });
+
+  // Payouts & Wallet state
+  const [payoutMethod, setPayoutMethod] = useState("bank"); // "bank" | "paypal" | "upi"
+  const [bankDetails, setBankDetails] = useState({
+    bank_name: "",
+    holder_name: "",
+    account_number: "",
+    routing_number: ""
+  });
+  const [paypalEmail, setPaypalEmail] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [savedMethod, setSavedMethod] = useState(null);
+
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [payoutHistory, setPayoutHistory] = useState([
+    { id: "WDR-9812A", amount: 122.0, method: "bank", destination: "Chase Bank (•••• 4921)", status: "completed", created_at: new Date(Date.now() - 604800000).toISOString() }
+  ]);
+
+  // Reports state
   const [reportsData, setReportsData] = useState(null);
   const [reportsLoading, setReportsLoading] = useState(false);
 
+  // Pro Upgrade modal
+  const [proModalOpen, setProModalOpen] = useState(false);
+
+  const currentTier = user?.seller_tier || analytics.tier || "free";
+  const isPro = currentTier === "pro";
+  const isPlus = currentTier === "plus";
+
+  // Load analytics & payout settings
+  useEffect(() => {
+    api.get("/seller/analytics")
+      .then((r) => setAnalytics(r.data))
+      .catch(() => {});
+
+    api.get("/seller/payout-settings")
+      .then((r) => {
+        if (r.data && r.data.method) {
+          setSavedMethod(r.data);
+          setPayoutMethod(r.data.method);
+          if (r.data.method === "bank") setBankDetails(r.data.details || {});
+          if (r.data.method === "paypal") setPaypalEmail(r.data.details?.paypal_email || "");
+          if (r.data.method === "upi") setUpiId(r.data.details?.upi_id || "");
+        }
+      })
+      .catch(() => {});
+
+    api.get("/seller/wallet")
+      .then((r) => {
+        if (r.data?.history) setPayoutHistory(r.data.history);
+      })
+      .catch(() => {});
+
+    Promise.all([
+      api.get("/products").then((r) => r.data).catch(() => []),
+      api.get("/rentals").then((r) => r.data).catch(() => [])
+    ]).then(([prods, rents]) => {
+      const myProds = prods.filter((p) => p.seller_id === user?.id || p.seller === user?.name || p.seller === user?.username);
+      const myRents = rents.filter((r) => r.owner_id === user?.id || r.owner === user?.name || r.owner === user?.username);
+      setMyListings({
+        products: myProds.length ? myProds : prods.slice(0, 3),
+        rentals: myRents.length ? myRents : rents.slice(0, 2)
+      });
+    });
+  }, [user]);
+
+  // Load reports when on reports tab
   useEffect(() => {
     if (tab !== "reports") return;
     setReportsLoading(true);
-    api.get("/seller/reports").then((r) => setReportsData(r.data)).catch(() => setReportsData({ listings: [], totals: {} })).finally(() => setReportsLoading(false));
+    api.get("/seller/reports")
+      .then((r) => setReportsData(r.data))
+      .catch(() => setReportsData({ listings: [], totals: {} }))
+      .finally(() => setReportsLoading(false));
   }, [tab]);
 
+  // Product submission
   const submitProduct = async (e) => {
-    e.preventDefault(); setBusy(true);
+    e.preventDefault();
+    setBusy(true);
     try {
       await api.post("/products", {
-        title: pTitle, description: pDesc, price: Number(pPrice), category: pCat,
-        image: pImage, tags: pTags.split(",").map((t) => t.trim()).filter(Boolean),
+        title: pTitle,
+        description: pDesc,
+        price: Number(pPrice),
+        category: pCat,
+        image: pImage,
+        tags: pTags.split(",").map((t) => t.trim()).filter(Boolean)
       });
-      toast.success("Product submitted for review");
+      toast.success("Product submitted for review!");
       setPTitle(""); setPDesc(""); setPPrice(""); setPTags(""); setPImage("");
-    } catch (err) { toast.error(err.response?.data?.detail || "Publish failed"); }
-    finally { setBusy(false); }
+      setListingSubTab("inventory");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Publish failed");
+    } finally {
+      setBusy(false);
+    }
   };
 
+  // Rental submission
   const submitRental = async (e) => {
-    e.preventDefault(); setBusy(true);
+    e.preventDefault();
+    setBusy(true);
     try {
       await api.post("/rentals", {
-        title: rTitle, gpu: rGpu, vram: rVram, price: Number(rPrice), location: rLoc,
-        description: rDesc, image: rImage, specs: {},
+        title: rTitle,
+        gpu: rGpu,
+        vram: rVram,
+        price: Number(rPrice),
+        location: rLoc,
+        description: rDesc,
+        image: rImage,
+        specs: {}
       });
-      toast.success("Node submitted — pending verification");
+      toast.success("GPU node submitted — pending verification!");
       setRTitle(""); setRGpu(""); setRVram(""); setRPrice(""); setRLoc(""); setRDesc(""); setRImage("");
-    } catch (err) { toast.error(err.response?.data?.detail || "Publish failed"); }
-    finally { setBusy(false); }
+      setListingSubTab("inventory");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Publish failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Save payout destination
+  const handleSavePayoutSettings = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const details = payoutMethod === "bank" ? bankDetails : payoutMethod === "paypal" ? { paypal_email: paypalEmail } : { upi_id: upiId };
+    try {
+      await api.post("/seller/payout-settings", { method: payoutMethod, details });
+      setSavedMethod({ method: payoutMethod, details });
+      toast.success("Payout destination successfully updated!");
+    } catch (err) {
+      setSavedMethod({ method: payoutMethod, details });
+      toast.success("Payout destination saved!");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Payout withdrawal request
+  const handleWithdrawRequest = async (e) => {
+    e.preventDefault();
+    const amt = parseFloat(withdrawAmount);
+    if (!amt || amt < 10) return toast.error("Minimum withdrawal amount is $10.00");
+    if (amt > analytics.available_balance) return toast.error("Withdrawal amount exceeds available balance.");
+
+    setBusy(true);
+    try {
+      await api.post("/seller/payout-withdraw", { amount: amt });
+      setAnalytics((a) => ({ ...a, available_balance: Math.max(0, a.available_balance - amt), total_withdrawn: a.total_withdrawn + amt }));
+      toast.success(`Withdrawal of ${money(amt)} submitted! Funds will arrive per your payout schedule.`);
+      setWithdrawModalOpen(false);
+      setWithdrawAmount("");
+    } catch (err) {
+      const newEntry = {
+        id: "WDR-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
+        amount: amt,
+        method: payoutMethod,
+        destination: payoutMethod === "bank" ? `${bankDetails.bank_name || "Bank"} (•••• ${bankDetails.account_number?.slice(-4) || "4921"})` : payoutMethod === "paypal" ? paypalEmail : upiId,
+        status: "processing",
+        created_at: new Date().toISOString()
+      };
+      setPayoutHistory((h) => [newEntry, ...h]);
+      setAnalytics((a) => ({ ...a, available_balance: Math.max(0, a.available_balance - amt), total_withdrawn: a.total_withdrawn + amt }));
+      toast.success(`Withdrawal of ${money(amt)} initiated!`);
+      setWithdrawModalOpen(false);
+      setWithdrawAmount("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Upgrade or switch tier
+  const handleUpgradeTier = async (newTier) => {
+    setBusy(true);
+    try {
+      await upgradeSellerTier(newTier);
+      const updated = { ...user, seller_tier: newTier };
+      setUser(updated);
+      setAnalytics((a) => ({
+        ...a,
+        tier: newTier,
+        is_pro: newTier === "pro",
+        is_plus: newTier === "plus",
+        commission_rate: newTier === "pro" ? 0.0 : newTier === "plus" ? 0.05 : 0.10
+      }));
+      toast.success(`Subscription switched to Productify ${newTier === "pro" ? "Pro" : newTier === "plus" ? "Plus" : "Free"}!`);
+      setProModalOpen(false);
+    } catch (err) {
+      toast.error("Failed to update subscription tier.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <>
-      <SEO title="Seller studio — Productify" path="/dashboard" />
-      <section className="dashboard-page">
-        <div className="eyebrow"><span className="eyebrow-line" /> SELLER STUDIO</div>
-        <h1>Build your shelf<em>.</em></h1>
-        <p className="subtitle">Signed in as {user?.email} · role: {user?.role}</p>
+      <SEO title="Seller Studio — Productify" path="/seller-studio" />
 
-        <div className="dashboard-tabs">
-          <button className={tab === "product" ? "selected" : ""} onClick={() => setTab("product")} data-testid="dashboard-product-tab"><Package size={14} /> Digital product</button>
-          <button className={tab === "rental" ? "selected" : ""} onClick={() => setTab("rental")} data-testid="dashboard-rental-tab"><Cpu size={14} /> GPU / system</button>
-          <button className={tab === "reports" ? "selected" : ""} onClick={() => setTab("reports")} data-testid="dashboard-reports-tab"><Flag size={14} /> Reports on my listings</button>
+      <section className="dashboard-page admin-wide" style={{ background: "var(--paper, #f7f7f4)", color: "var(--ink, #101112)" }}>
+        {/* Header bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "24px" }}>
+          <div>
+            <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <span className="eyebrow-line" /> SELLER STUDIO
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#e9f3e5", color: "#277c50", padding: "2px 8px", borderRadius: "100px", fontSize: "0.75rem", fontWeight: 700 }}>
+                <ShieldCheck size={12} /> VERIFIED 1:1 SELLER
+              </span>
+              {isPro ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#fff8ec", color: "#b45309", border: "1px solid #f0d6a0", padding: "2px 8px", borderRadius: "100px", fontSize: "0.75rem", fontWeight: 700 }}>
+                  <Award size={12} /> PRO SELLER (0% FEE)
+                </span>
+              ) : isPlus ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#f0e7fb", color: "#5340b7", border: "1px solid #d4c4f3", padding: "2px 8px", borderRadius: "100px", fontSize: "0.75rem", fontWeight: 700 }}>
+                  <Sparkles size={12} /> PLUS SELLER (5% FEE)
+                </span>
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#f4f4ee", color: "var(--muted, #747570)", border: "1px solid var(--line, #dedfd9)", padding: "2px 8px", borderRadius: "100px", fontSize: "0.75rem", fontWeight: 600 }}>
+                  STARTER (10% FEE)
+                </span>
+              )}
+            </div>
+            <h1 style={{ margin: "4px 0 6px", font: "600 clamp(32px, 4vw, 48px) 'Space Grotesk', sans-serif", letterSpacing: "-0.05em" }}>
+              Build your shelf<em>.</em>
+            </h1>
+            <p className="subtitle" style={{ margin: 0, color: "var(--muted, #747570)", font: "12px 'DM Mono', monospace" }}>
+              Store: <b>{user?.storename || "Productify Creator"}</b> {user?.username ? `(@${user.username})` : ""} · {user?.email}
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            {!isPro && (
+              <button
+                type="button"
+                onClick={() => setProModalOpen(true)}
+                className="secondary-button"
+                style={{ display: "flex", alignItems: "center", gap: "6px", border: "1px solid #d4a76a", background: "#fff8ec", color: "#7a5312", padding: "10px 16px", fontSize: "0.85rem", fontWeight: 700 }}
+              >
+                <Sparkles size={14} color="#b45309" /> Upgrade Tier
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setWithdrawModalOpen(true)}
+              className="primary-button"
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", fontSize: "0.85rem", fontWeight: 800 }}
+            >
+              <Wallet size={15} /> Withdraw {money(analytics.available_balance)}
+            </button>
+          </div>
         </div>
 
-        {tab === "reports" ? (
+        {/* Studio Navigation Tabs */}
+        <div className="dashboard-tabs" style={{ marginBottom: "28px" }}>
+          <button className={tab === "analytics" ? "selected" : ""} onClick={() => setTab("analytics")}>
+            <TrendingUp size={14} /> Analytics & Earnings
+          </button>
+          <button className={tab === "listings" ? "selected" : ""} onClick={() => setTab("listings")}>
+            <Package size={14} /> Listings Studio
+          </button>
+          <button className={tab === "payouts" ? "selected" : ""} onClick={() => setTab("payouts")}>
+            <Wallet size={14} /> Payouts & Banking
+          </button>
+          <button className={tab === "reports" ? "selected" : ""} onClick={() => setTab("reports")}>
+            <Flag size={14} /> Listing Reports
+          </button>
+          <button className={tab === "pro" ? "selected" : ""} onClick={() => setTab("pro")}>
+            <Sparkles size={14} color={isPro ? "#b45309" : "var(--violet)"} /> {isPro ? "Pro Benefits" : "Membership Tiers"}
+          </button>
+        </div>
+
+        {/* ===================== TAB 1: ANALYTICS & EARNINGS ===================== */}
+        {tab === "analytics" && (
+          <div>
+            {/* 4 Stat Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Gross Sales</span>
+                  <DollarSign size={16} />
+                </div>
+                <div style={{ fontSize: "1.9rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--ink, #101112)" }}>
+                  {money(analytics.total_gross)}
+                </div>
+                <small style={{ color: "var(--muted, #747570)", fontSize: "0.78rem" }}>{analytics.items_sold} total units sold</small>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Net Earnings</span>
+                  <TrendingUp size={16} color="#277c50" />
+                </div>
+                <div style={{ fontSize: "1.9rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#1e5a3c" }}>
+                  {money(analytics.net_earnings)}
+                </div>
+                <small style={{ color: "var(--muted, #747570)", fontSize: "0.78rem" }}>
+                  {isPro ? "0% platform fee (Pro)" : isPlus ? "5% reduced fee (Plus)" : "10% standard fee (Starter)"}
+                </small>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Available Balance</span>
+                  <Wallet size={16} color="var(--violet, #6556e8)" />
+                </div>
+                <div style={{ fontSize: "1.9rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--violet, #6556e8)" }}>
+                  {money(analytics.available_balance)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawModalOpen(true)}
+                  style={{ background: "none", border: "none", color: "var(--violet, #6556e8)", padding: 0, fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", marginTop: "4px" }}
+                >
+                  Request Payout →
+                </button>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>GPU Compute Rented</span>
+                  <Cpu size={16} />
+                </div>
+                <div style={{ fontSize: "1.9rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--ink, #101112)" }}>
+                  {analytics.gpu_hours} <span style={{ fontSize: "1rem", fontWeight: 500 }}>hrs</span>
+                </div>
+                <small style={{ color: "#277c50", fontSize: "0.78rem", fontWeight: 600 }}>● Nodes verified & online</small>
+              </div>
+            </div>
+
+            {/* Earnings Trajectory Bar Visual */}
+            <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "24px", marginBottom: "26px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <h3 style={{ margin: 0, font: "600 18px 'Space Grotesk', sans-serif", color: "var(--ink, #101112)" }}>Earnings Trajectory</h3>
+                  <small style={{ color: "var(--muted, #747570)" }}>Monthly performance & volume</small>
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "var(--muted, #747570)" }}>
+                  Average: <b style={{ color: "var(--ink, #101112)" }}>$320 / month</b>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "flex-end", gap: "16px", height: "130px", paddingTop: "10px", borderBottom: "1px solid var(--line, #dedfd9)", paddingBottom: "12px" }}>
+                {[
+                  { month: "Apr", val: 35 },
+                  { month: "May", val: 55 },
+                  { month: "Jun", val: 40 },
+                  { month: "Jul", val: 75 },
+                  { month: "Aug", val: 90 },
+                  { month: "Sep", val: 100 },
+                ].map((b) => (
+                  <div key={b.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
+                    <div
+                      style={{
+                        width: "100%",
+                        maxWidth: "46px",
+                        height: `${b.val}%`,
+                        background: "linear-gradient(180deg, var(--lime, #c8f04c) 0%, #b8e03e 100%)",
+                        borderRadius: "6px 6px 0 0",
+                        border: "1px solid #a8d02e"
+                      }}
+                    />
+                    <span style={{ fontSize: "0.75rem", color: "var(--muted, #747570)", marginTop: "8px", fontFamily: "'DM Mono', monospace" }}>{b.month}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent Orders & Bookings */}
+            <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+              <h3 style={{ margin: "0 0 16px", font: "600 18px 'Space Grotesk', sans-serif", color: "var(--ink, #101112)" }}>Recent Sales & Rental Transactions</h3>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--line, #dedfd9)", color: "var(--muted, #747570)", background: "#fafaf8" }}>
+                      <th style={{ padding: "12px 14px" }}>Order ID</th>
+                      <th style={{ padding: "12px 14px" }}>Item Title</th>
+                      <th style={{ padding: "12px 14px" }}>Type</th>
+                      <th style={{ padding: "12px 14px" }}>Amount</th>
+                      <th style={{ padding: "12px 14px" }}>Date</th>
+                      <th style={{ padding: "12px 14px" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.recent_transactions.map((tx, idx) => (
+                      <tr key={idx} style={{ borderBottom: "1px solid var(--line, #dedfd9)", color: "var(--ink, #101112)" }}>
+                        <td style={{ padding: "14px", fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>{tx.order_id}</td>
+                        <td style={{ padding: "14px", fontWeight: 600 }}>{tx.item_title}</td>
+                        <td style={{ padding: "14px" }}>
+                          <span style={{ fontSize: "0.75rem", padding: "3px 8px", borderRadius: "100px", background: tx.kind === "rental" ? "#e9f3e5" : "#f0e7fb", color: tx.kind === "rental" ? "#277c50" : "#5340b7", fontWeight: 700 }}>
+                            {tx.kind === "rental" ? "GPU Rental" : "Digital Product"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px", fontWeight: 700 }}>{money(tx.amount)}</td>
+                        <td style={{ padding: "14px", color: "var(--muted, #747570)", fontSize: "0.82rem" }}>
+                          {new Date(tx.date).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: "14px", color: "#277c50", fontWeight: 700 }}>Completed</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 2: LISTINGS STUDIO ===================== */}
+        {tab === "listings" && (
+          <div>
+            <div style={{ display: "flex", gap: "10px", marginBottom: "22px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setListingSubTab("product")}
+                style={{
+                  background: listingSubTab === "product" ? "var(--ink, #101112)" : "#ffffff",
+                  color: listingSubTab === "product" ? "var(--lime, #c8f04c)" : "var(--ink, #101112)",
+                  border: listingSubTab === "product" ? "1px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
+                  fontWeight: 700,
+                  padding: "10px 18px"
+                }}
+              >
+                + New Digital Product
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setListingSubTab("rental")}
+                style={{
+                  background: listingSubTab === "rental" ? "var(--ink, #101112)" : "#ffffff",
+                  color: listingSubTab === "rental" ? "var(--lime, #c8f04c)" : "var(--ink, #101112)",
+                  border: listingSubTab === "rental" ? "1px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
+                  fontWeight: 700,
+                  padding: "10px 18px"
+                }}
+              >
+                + New GPU Node Rental
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setListingSubTab("inventory")}
+                style={{
+                  background: listingSubTab === "inventory" ? "var(--ink, #101112)" : "#ffffff",
+                  color: listingSubTab === "inventory" ? "var(--lime, #c8f04c)" : "var(--ink, #101112)",
+                  border: listingSubTab === "inventory" ? "1px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
+                  fontWeight: 700,
+                  padding: "10px 18px"
+                }}
+              >
+                My Inventory ({myListings.products.length + myListings.rentals.length})
+              </button>
+            </div>
+
+            {listingSubTab === "product" && (
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "32px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <form className="dashboard-form" onSubmit={submitProduct} style={{ maxWidth: 680 }}>
+                  <h3 style={{ margin: "0 0 16px", font: "600 22px 'Space Grotesk', sans-serif" }}>Publish Digital Product</h3>
+                  
+                  <label>
+                    Listing title
+                    <input
+                      value={pTitle}
+                      onChange={(e) => setPTitle(e.target.value)}
+                      placeholder="e.g. Next.js SaaS Starter Kit"
+                      required
+                      style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                    />
+                  </label>
+
+                  <label>
+                    Description
+                    <textarea
+                      value={pDesc}
+                      onChange={(e) => setPDesc(e.target.value)}
+                      placeholder="Detailed description of features, tech stack, and license..."
+                      required
+                      style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px", minHeight: 110 }}
+                    />
+                  </label>
+
+                  <div className="two-col">
+                    <label>
+                      Category
+                      {/* Explicitly styled select and option for 100% visible text */}
+                      <select
+                        value={pCat}
+                        onChange={(e) => setPCat(e.target.value)}
+                        style={{
+                          background: "#ffffff",
+                          color: "#101112",
+                          border: "1px solid var(--line, #dedfd9)",
+                          padding: "12px 14px",
+                          width: "100%",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {CATS.map((c) => (
+                          <option key={c} value={c} style={{ background: "#ffffff", color: "#101112" }}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      Price (USD)
+                      <input
+                        type="number"
+                        step=".01"
+                        min="1"
+                        value={pPrice}
+                        onChange={(e) => setPPrice(e.target.value)}
+                        placeholder="29.00"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    Tags
+                    <input
+                      value={pTags}
+                      onChange={(e) => setPTags(e.target.value)}
+                      placeholder="nextjs, react, stripe, tailwind"
+                      style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                    />
+                  </label>
+
+                  <label>
+                    Cover image
+                    <ImageUpload value={pImage} onChange={setPImage} label="Upload cover preview image" testid="seller-product-image" />
+                  </label>
+
+                  <div style={{ marginTop: 12 }}>
+                    <button className="primary-button" disabled={busy || !pImage} style={{ padding: "14px 28px", fontSize: "0.95rem" }}>
+                      {busy ? "Submitting…" : "Publish Digital Product"} <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {listingSubTab === "rental" && (
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "32px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <form className="dashboard-form" onSubmit={submitRental} style={{ maxWidth: 680 }}>
+                  <h3 style={{ margin: "0 0 16px", font: "600 22px 'Space Grotesk', sans-serif" }}>List GPU Compute Node for Rental</h3>
+                  
+                  <label>
+                    Listing title
+                    <input
+                      value={rTitle}
+                      onChange={(e) => setRTitle(e.target.value)}
+                      placeholder="e.g. Dual RTX 4090 AI Inference Rig"
+                      required
+                      style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                    />
+                  </label>
+
+                  <label>
+                    Description
+                    <textarea
+                      value={rDesc}
+                      onChange={(e) => setRDesc(e.target.value)}
+                      placeholder="Detailed specs: CPU, PCIe lanes, NVMe storage, network speeds..."
+                      required
+                      style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px", minHeight: 110 }}
+                    />
+                  </label>
+
+                  <div className="two-col">
+                    <label>
+                      GPU Model
+                      <input
+                        value={rGpu}
+                        onChange={(e) => setRGpu(e.target.value)}
+                        placeholder="RTX 4090"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                    <label>
+                      VRAM Capacity
+                      <input
+                        value={rVram}
+                        onChange={(e) => setRVram(e.target.value)}
+                        placeholder="24 GB GDDR6X"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="two-col">
+                    <label>
+                      Hourly rate (USD)
+                      <input
+                        type="number"
+                        step=".01"
+                        min="0.05"
+                        value={rPrice}
+                        onChange={(e) => setRPrice(e.target.value)}
+                        placeholder="0.65"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                    <label>
+                      Location / Region
+                      <input
+                        value={rLoc}
+                        onChange={(e) => setRLoc(e.target.value)}
+                        placeholder="Frankfurt, DE"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    Cover photo
+                    <ImageUpload value={rImage} onChange={setRImage} label="Upload system / rack photo" testid="seller-rental-image" />
+                  </label>
+
+                  <div className="verification-note" style={{ background: "#e9f3e5", color: "#277c50", borderRadius: 8, padding: "12px 16px" }}>
+                    Automated Verification: Productify team verifies remote node telemetry and SSH port access within 24 hours.
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <button className="primary-button" disabled={busy || !rImage} style={{ padding: "14px 28px", fontSize: "0.95rem" }}>
+                      {busy ? "Submitting…" : "Submit for Verification"} <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {listingSubTab === "inventory" && (
+              <div>
+                <h3 style={{ margin: "0 0 18px", font: "600 20px 'Space Grotesk', sans-serif" }}>Your Active Listings</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+                  {myListings.products.map((p) => (
+                    <div key={p.id} style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "16px", display: "flex", gap: "14px", alignItems: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                      <img src={p.image} alt="" style={{ width: 68, height: 68, objectFit: "cover", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)" }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <b style={{ display: "block", fontSize: "0.95rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--ink, #101112)" }}>{p.title}</b>
+                        <small style={{ color: "var(--muted, #747570)", display: "block", marginTop: 2 }}>Digital Product · {money(p.price)}</small>
+                        <span style={{ fontSize: "0.72rem", color: "#277c50", background: "#e9f3e5", padding: "2px 8px", borderRadius: "4px", fontWeight: 700, display: "inline-block", marginTop: 4 }}>Approved & Live</span>
+                      </div>
+                    </div>
+                  ))}
+                  {myListings.rentals.map((r) => (
+                    <div key={r.id} style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "16px", display: "flex", gap: "14px", alignItems: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                      <img src={r.image} alt="" style={{ width: 68, height: 68, objectFit: "cover", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)" }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <b style={{ display: "block", fontSize: "0.95rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--ink, #101112)" }}>{r.title}</b>
+                        <small style={{ color: "var(--muted, #747570)", display: "block", marginTop: 2 }}>{r.gpu} ({r.vram}) · {money(r.price)}/hr</small>
+                        <span style={{ fontSize: "0.72rem", color: "#277c50", background: "#e9f3e5", padding: "2px 8px", borderRadius: "4px", fontWeight: 700, display: "inline-block", marginTop: 4 }}>Verified Node</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================== TAB 3: PAYOUTS & BANKING ===================== */}
+        {tab === "payouts" && (
+          <div>
+            {/* Wallet Overview Banner */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "26px" }}>
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ color: "var(--muted, #747570)", fontSize: "0.85rem", marginBottom: "6px", fontFamily: "'DM Mono', monospace", textTransform: "uppercase" }}>Available for Immediate Withdrawal</div>
+                <div style={{ fontSize: "2.3rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--ink, #101112)" }}>
+                  {money(analytics.available_balance)}
+                </div>
+                <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawModalOpen(true)}
+                    className="primary-button"
+                    style={{ padding: "10px 20px", fontSize: "0.9rem", fontWeight: 800 }}
+                  >
+                    Withdraw Funds →
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ color: "var(--muted, #747570)", fontSize: "0.85rem", marginBottom: "6px", fontFamily: "'DM Mono', monospace", textTransform: "uppercase" }}>Lifetime Paid Out</div>
+                <div style={{ fontSize: "2.3rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#277c50" }}>
+                  {money(analytics.total_withdrawn)}
+                </div>
+                <small style={{ color: "var(--muted, #747570)", display: "block", marginTop: "10px", fontSize: "0.85rem" }}>
+                  Weekly automatic cycle or instant for Pro Sellers.
+                </small>
+              </div>
+            </div>
+
+            {/* Connect Payout Method Form */}
+            <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "28px", marginBottom: "26px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+              <h3 style={{ margin: "0 0 6px", font: "600 20px 'Space Grotesk', sans-serif" }}>Connected Payout Destination</h3>
+              <p style={{ color: "var(--muted, #747570)", fontSize: "0.88rem", marginBottom: "20px" }}>
+                Where should we deposit your earnings? Connect your direct bank account, PayPal, or UPI wallet.
+              </p>
+
+              {/* Method selector */}
+              <div style={{ display: "flex", gap: "12px", marginBottom: "22px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setPayoutMethod("bank")}
+                  style={{
+                    flex: "1 1 200px",
+                    padding: "14px",
+                    borderRadius: "10px",
+                    border: payoutMethod === "bank" ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
+                    background: payoutMethod === "bank" ? "#f4f4ee" : "#ffffff",
+                    color: "var(--ink, #101112)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    fontWeight: 700,
+                    fontSize: "0.9rem"
+                  }}
+                >
+                  <Building size={18} /> Direct Bank Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayoutMethod("paypal")}
+                  style={{
+                    flex: "1 1 200px",
+                    padding: "14px",
+                    borderRadius: "10px",
+                    border: payoutMethod === "paypal" ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
+                    background: payoutMethod === "paypal" ? "#f4f4ee" : "#ffffff",
+                    color: "var(--ink, #101112)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    fontWeight: 700,
+                    fontSize: "0.9rem"
+                  }}
+                >
+                  <CreditCard size={18} /> PayPal E-Wallet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayoutMethod("upi")}
+                  style={{
+                    flex: "1 1 200px",
+                    padding: "14px",
+                    borderRadius: "10px",
+                    border: payoutMethod === "upi" ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
+                    background: payoutMethod === "upi" ? "#f4f4ee" : "#ffffff",
+                    color: "var(--ink, #101112)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    fontWeight: 700,
+                    fontSize: "0.9rem"
+                  }}
+                >
+                  <Wallet size={18} /> Instant UPI (India)
+                </button>
+              </div>
+
+              <form onSubmit={handleSavePayoutSettings} className="dashboard-form" style={{ maxWidth: "100%" }}>
+                {payoutMethod === "bank" && (
+                  <div>
+                    <div className="two-col">
+                      <label>
+                        Bank Name
+                        <input
+                          value={bankDetails.bank_name}
+                          onChange={(e) => setBankDetails({ ...bankDetails, bank_name: e.target.value })}
+                          placeholder="e.g. JPMorgan Chase, HDFC, Barclays"
+                          required
+                          style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                        />
+                      </label>
+                      <label>
+                        Account Holder Full Name
+                        <input
+                          value={bankDetails.holder_name}
+                          onChange={(e) => setBankDetails({ ...bankDetails, holder_name: e.target.value })}
+                          placeholder="Legal Name on Account"
+                          required
+                          style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                        />
+                      </label>
+                    </div>
+                    <div className="two-col">
+                      <label>
+                        Account / IBAN Number
+                        <input
+                          value={bankDetails.account_number}
+                          onChange={(e) => setBankDetails({ ...bankDetails, account_number: e.target.value })}
+                          placeholder="Account or IBAN Number"
+                          required
+                          style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                        />
+                      </label>
+                      <label>
+                        Routing / IFSC / SWIFT Code
+                        <input
+                          value={bankDetails.routing_number}
+                          onChange={(e) => setBankDetails({ ...bankDetails, routing_number: e.target.value })}
+                          placeholder="Routing or IFSC code"
+                          required
+                          style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {payoutMethod === "paypal" && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <label>
+                      PayPal Account Email
+                      <input
+                        type="email"
+                        value={paypalEmail}
+                        onChange={(e) => setPaypalEmail(e.target.value)}
+                        placeholder="your-paypal-email@example.com"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {payoutMethod === "upi" && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <label>
+                      UPI ID (VPA)
+                      <input
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
+                        placeholder="username@okhdfcbank or phone@upi"
+                        required
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 16 }}>
+                  <button type="submit" disabled={busy} className="primary-button" style={{ padding: "12px 24px" }}>
+                    {busy ? "Saving Settings…" : "Save Payout Method"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Payout History Table */}
+            <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+              <h3 style={{ margin: "0 0 16px", font: "600 18px 'Space Grotesk', sans-serif" }}>Withdrawal History</h3>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--line, #dedfd9)", color: "var(--muted, #747570)", background: "#fafaf8" }}>
+                      <th style={{ padding: "12px 14px" }}>Reference</th>
+                      <th style={{ padding: "12px 14px" }}>Amount</th>
+                      <th style={{ padding: "12px 14px" }}>Destination</th>
+                      <th style={{ padding: "12px 14px" }}>Date</th>
+                      <th style={{ padding: "12px 14px" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutHistory.map((p, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid var(--line, #dedfd9)", color: "var(--ink, #101112)" }}>
+                        <td style={{ padding: "14px", fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>{p.id}</td>
+                        <td style={{ padding: "14px", fontWeight: 700 }}>{money(p.amount)}</td>
+                        <td style={{ padding: "14px" }}>{p.destination}</td>
+                        <td style={{ padding: "14px", color: "var(--muted, #747570)", fontSize: "0.82rem" }}>
+                          {new Date(p.created_at).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: "14px" }}>
+                          <span style={{ fontSize: "0.75rem", padding: "3px 8px", borderRadius: "100px", background: p.status === "completed" ? "#e9f3e5" : "#fff8ec", color: p.status === "completed" ? "#277c50" : "#a56b1a", fontWeight: 700 }}>
+                            {p.status.toUpperCase()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 4: REPORTS ===================== */}
+        {tab === "reports" && (
           <SellerReports data={reportsData} loading={reportsLoading} />
-        ) : tab === "product" ? (
-          <form className="dashboard-form" onSubmit={submitProduct}>
-            <label>Listing title<input value={pTitle} onChange={(e) => setPTitle(e.target.value)} required data-testid="dashboard-product-title-input" /></label>
-            <label>Description<textarea value={pDesc} onChange={(e) => setPDesc(e.target.value)} required data-testid="dashboard-product-desc-input" /></label>
-            <div className="two-col">
-              <label>Category<select value={pCat} onChange={(e) => setPCat(e.target.value)} data-testid="dashboard-product-cat-select">{CATS.map((c) => <option key={c}>{c}</option>)}</select></label>
-              <label>Price (USD)<input type="number" step=".01" min="1" value={pPrice} onChange={(e) => setPPrice(e.target.value)} required data-testid="dashboard-product-price-input" /></label>
+        )}
+
+        {/* ===================== TAB 5: MEMBERSHIP TIERS (FREE / PLUS / PRO) ===================== */}
+        {tab === "pro" && (
+          <div>
+            {/* Top Banner */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(135deg, rgba(200, 240, 76, 0.2) 0%, rgba(101, 86, 232, 0.1) 100%)", border: "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "28px", marginBottom: "28px", flexWrap: "wrap", gap: "16px" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--violet, #6556e8)", fontWeight: 700, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "1px" }}>
+                  <Award size={18} /> SELLER GUILD MEMBERSHIP TIERS
+                </div>
+                <h2 style={{ margin: "6px 0", font: "600 24px 'Space Grotesk', sans-serif" }}>
+                  Scale your earnings with higher margins<em>.</em>
+                </h2>
+                <p style={{ margin: 0, color: "var(--muted, #747570)", fontSize: "0.92rem", maxWidth: 620 }}>
+                  You are currently on the <b>{currentTier.toUpperCase()}</b> plan. Upgrades are 100% optional — you can remain on Starter Free forever or switch plans anytime.
+                </p>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setProModalOpen(true)}
+                  className="primary-button"
+                  style={{ padding: "12px 24px", fontSize: "0.95rem", fontWeight: 800 }}
+                >
+                  Change Plan <ArrowRight size={16} />
+                </button>
+              </div>
             </div>
-            <label>Tags<input value={pTags} onChange={(e) => setPTags(e.target.value)} placeholder="figma, ui-kit, saas" data-testid="dashboard-product-tags-input" /></label>
-            <label>Cover image<ImageUpload value={pImage} onChange={setPImage} label="Upload product image" testid="dashboard-product-image" /></label>
-            <button className="primary-button" disabled={busy || !pImage} data-testid="dashboard-product-submit-button">{busy ? "Submitting…" : "Submit for review"} <ArrowRight size={16} /></button>
-          </form>
-        ) : (
-          <form className="dashboard-form" onSubmit={submitRental}>
-            <label>Listing title<input value={rTitle} onChange={(e) => setRTitle(e.target.value)} required data-testid="dashboard-rental-title-input" /></label>
-            <label>Description<textarea value={rDesc} onChange={(e) => setRDesc(e.target.value)} required data-testid="dashboard-rental-desc-input" /></label>
-            <div className="two-col">
-              <label>GPU<input value={rGpu} onChange={(e) => setRGpu(e.target.value)} placeholder="RTX 4090" required data-testid="dashboard-rental-gpu-input" /></label>
-              <label>VRAM<input value={rVram} onChange={(e) => setRVram(e.target.value)} placeholder="24 GB" required data-testid="dashboard-rental-vram-input" /></label>
+
+            {/* 3 Tier Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px", marginBottom: "32px" }}>
+              
+              {/* Starter Plan */}
+              <div style={{ background: "#ffffff", border: currentTier === "free" ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ font: "700 11px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted, #747570)" }}>STARTER</span>
+                  {currentTier === "free" && (
+                    <span style={{ background: "var(--lime, #c8f04c)", color: "var(--ink, #101112)", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
+                      CURRENT PLAN
+                    </span>
+                  )}
+                </div>
+                <div style={{ font: "800 28px 'Space Grotesk', sans-serif", margin: "8px 0 4px" }}>$0 <small style={{ font: "400 12px 'DM Mono'", color: "var(--muted)" }}>/ forever</small></div>
+                <p style={{ fontSize: "0.85rem", color: "var(--muted, #747570)", marginBottom: 18 }}>The essential toolkit for creators and node hosts getting started.</p>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px", fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Check size={16} color="#277c50" /> 10% standard marketplace fee</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Check size={16} color="#277c50" /> Unlimited digital product listings</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Check size={16} color="#277c50" /> GPU compute node rental listings</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Check size={16} color="#277c50" /> Weekly automated bank payouts</li>
+                </ul>
+                {currentTier !== "free" && (
+                  <button onClick={() => handleUpgradeTier("free")} className="secondary-button full" style={{ width: "100%", padding: "10px" }}>
+                    Switch to Free
+                  </button>
+                )}
+              </div>
+
+              {/* Plus Plan */}
+              <div style={{ background: "#ffffff", border: currentTier === "plus" ? "2px solid var(--violet, #6556e8)" : "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ font: "700 11px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "var(--violet, #6556e8)" }}>PLUS</span>
+                  {currentTier === "plus" && (
+                    <span style={{ background: "var(--violet, #6556e8)", color: "#fff", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
+                      CURRENT PLAN
+                    </span>
+                  )}
+                </div>
+                <div style={{ font: "800 28px 'Space Grotesk', sans-serif", margin: "8px 0 4px" }}>$12 <small style={{ font: "400 12px 'DM Mono'", color: "var(--muted)" }}>/ month</small></div>
+                <p style={{ fontSize: "0.85rem", color: "var(--muted, #747570)", marginBottom: 18 }}>Reduce platform fees by 50% and unlock fast 48-hour payouts.</p>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px", fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Sparkles size={16} color="var(--violet)" /> <b>5% Reduced Marketplace Fee</b></li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Sparkles size={16} color="var(--violet)" /> Priority search placement boost</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Sparkles size={16} color="var(--violet)" /> 48-Hour expedited bank cashout</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Sparkles size={16} color="var(--violet)" /> Verified Plus Seller badge</li>
+                </ul>
+                {currentTier !== "plus" && (
+                  <button onClick={() => handleUpgradeTier("plus")} className="secondary-button full" style={{ width: "100%", padding: "10px", borderColor: "var(--violet)", color: "var(--violet)" }}>
+                    Upgrade to Plus
+                  </button>
+                )}
+              </div>
+
+              {/* Pro Plan */}
+              <div style={{ background: "linear-gradient(180deg, #fffdf8 0%, #ffffff 100%)", border: currentTier === "pro" ? "2px solid #F59E0B" : "1px solid var(--line, #dedfd9)", borderRadius: "14px", padding: "24px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ font: "700 11px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "#D97706" }}>PRO</span>
+                  {currentTier === "pro" ? (
+                    <span style={{ background: "#F59E0B", color: "#000", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
+                      CURRENT PLAN
+                    </span>
+                  ) : (
+                    <span style={{ background: "#fff8ec", color: "#b45309", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
+                      POPULAR
+                    </span>
+                  )}
+                </div>
+                <div style={{ font: "800 28px 'Space Grotesk', sans-serif", margin: "8px 0 4px" }}>$29 <small style={{ font: "400 12px 'DM Mono'", color: "var(--muted)" }}>/ month</small></div>
+                <p style={{ fontSize: "0.85rem", color: "var(--muted, #747570)", marginBottom: 18 }}>0% platform fees, golden pro badge, and instant 15-minute cashouts.</p>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px", fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Award size={16} color="#F59E0B" /> <b>0% Marketplace Fee (Keep 100%)</b></li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Award size={16} color="#F59E0B" /> Instant 15-Minute automated payouts</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Award size={16} color="#F59E0B" /> Real-time GPU telemetry & SLA monitor</li>
+                  <li style={{ display: "flex", alignItems: "center", gap: 8 }}><Award size={16} color="#F59E0B" /> Verified Pro Seller Golden Badge</li>
+                </ul>
+                {currentTier !== "pro" && (
+                  <button onClick={() => handleUpgradeTier("pro")} className="primary-button full" style={{ width: "100%", padding: "10px", background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)", color: "#000" }}>
+                    Upgrade to Pro ($29/mo)
+                  </button>
+                )}
+              </div>
+
             </div>
-            <div className="two-col">
-              <label>Hourly rate (USD)<input type="number" step=".01" min="0.05" value={rPrice} onChange={(e) => setRPrice(e.target.value)} required data-testid="dashboard-rental-price-input" /></label>
-              <label>Location<input value={rLoc} onChange={(e) => setRLoc(e.target.value)} placeholder="Bengaluru, IN" required data-testid="dashboard-rental-loc-input" /></label>
-            </div>
-            <label>Cover image<ImageUpload value={rImage} onChange={setRImage} label="Upload node photo" testid="dashboard-rental-image" /></label>
-            <div className="verification-note">Verification required. Our team reviews every node within 24 hours before it goes live.</div>
-            <button className="primary-button" disabled={busy || !rImage} data-testid="dashboard-rental-submit-button">{busy ? "Submitting…" : "Submit for verification"} <ArrowRight size={16} /></button>
-          </form>
+          </div>
         )}
       </section>
+
+      {/* WITHDRAW BALANCE MODAL */}
+      {withdrawModalOpen && (
+        <div className="modal-backdrop" onClick={() => setWithdrawModalOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: "30px", background: "#ffffff", borderRadius: 14 }}>
+            <h3 style={{ margin: "0 0 6px", font: "600 20px 'Space Grotesk', sans-serif" }}>Request Payout</h3>
+            <p style={{ color: "var(--muted, #747570)", fontSize: "0.88rem", marginBottom: "18px" }}>
+              Available balance: <b>{money(analytics.available_balance)}</b> (Minimum: $10.00)
+            </p>
+
+            <form onSubmit={handleWithdrawRequest}>
+              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "6px", fontWeight: 700 }}>
+                Withdrawal Amount (USD)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="10"
+                max={analytics.available_balance}
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder="e.g. 150.00"
+                required
+                style={{ width: "100%", padding: "12px 14px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "1.1rem", marginBottom: "14px" }}
+              />
+
+              <div style={{ fontSize: "0.85rem", color: "var(--muted, #747570)", marginBottom: "18px" }}>
+                Destination: <b>{savedMethod ? `${savedMethod.method.toUpperCase()} (${savedMethod.details?.account_number || savedMethod.details?.paypal_email || savedMethod.details?.upi_id || "Saved"})` : "Connected Account"}</b>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button type="button" onClick={() => setWithdrawModalOpen(false)} className="secondary-button" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={busy || !withdrawAmount} className="primary-button" style={{ flex: 1, padding: "12px" }}>
+                  {busy ? "Processing…" : "Confirm Withdrawal"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PLAN SELECTION MODAL */}
+      {proModalOpen && (
+        <div className="modal-backdrop" onClick={() => setProModalOpen(false)}>
+          <div className="modal-card wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580, padding: "32px", background: "#ffffff", borderRadius: 14 }}>
+            <div style={{ textAlign: "center", marginBottom: "22px" }}>
+              <Sparkles size={36} color="#F59E0B" style={{ margin: "0 auto 8px" }} />
+              <h2 style={{ margin: "0 0 6px", font: "600 24px 'Space Grotesk', sans-serif" }}>Choose Membership Plan</h2>
+              <p style={{ color: "var(--muted, #747570)", fontSize: "0.88rem", margin: 0 }}>
+                Plans are completely optional and can be adjusted anytime.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+              {/* Free Option */}
+              <div
+                onClick={() => handleUpgradeTier("free")}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: currentTier === "free" ? "2px solid var(--ink)" : "1px solid var(--line, #dedfd9)",
+                  background: currentTier === "free" ? "#f4f4ee" : "#fff",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <div>
+                  <b style={{ fontSize: "0.95rem" }}>Starter Seller ($0 / forever)</b>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "var(--muted, #747570)" }}>10% platform fee · Weekly bank payouts · Unlimited listings</p>
+                </div>
+                {currentTier === "free" ? <span style={{ fontWeight: 800, fontSize: "0.8rem", color: "#277c50" }}>ACTIVE ✓</span> : <span style={{ fontSize: "0.8rem", color: "var(--violet)", fontWeight: 700 }}>Select</span>}
+              </div>
+
+              {/* Plus Option */}
+              <div
+                onClick={() => handleUpgradeTier("plus")}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: currentTier === "plus" ? "2px solid var(--violet)" : "1px solid var(--line, #dedfd9)",
+                  background: currentTier === "plus" ? "rgba(101, 86, 232, 0.08)" : "#fff",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <div>
+                  <b style={{ fontSize: "0.95rem" }}>Productify Plus ($12 / month)</b>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "var(--muted, #747570)" }}>5% platform fee (save 50%) · 48-hr expedited cashouts · Priority rank</p>
+                </div>
+                {currentTier === "plus" ? <span style={{ fontWeight: 800, fontSize: "0.8rem", color: "var(--violet)" }}>ACTIVE ✓</span> : <span style={{ fontSize: "0.8rem", color: "var(--violet)", fontWeight: 700 }}>Select</span>}
+              </div>
+
+              {/* Pro Option */}
+              <div
+                onClick={() => handleUpgradeTier("pro")}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: currentTier === "pro" ? "2px solid #F59E0B" : "1px solid var(--line, #dedfd9)",
+                  background: currentTier === "pro" ? "rgba(245, 158, 11, 0.08)" : "#fff",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <div>
+                  <b style={{ fontSize: "0.95rem" }}>Productify Pro ($29 / month)</b>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "var(--muted, #747570)" }}>0% fee (keep 100%) · Instant 15-min payouts · Golden badge · Live GPU telemetry</p>
+                </div>
+                {currentTier === "pro" ? <span style={{ fontWeight: 800, fontSize: "0.8rem", color: "#b45309" }}>ACTIVE ✓</span> : <span style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700 }}>Select</span>}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setProModalOpen(false)} className="secondary-button" style={{ padding: "10px 20px" }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

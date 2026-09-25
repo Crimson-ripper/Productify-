@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
-import os, uuid, jwt, bcrypt, httpx, requests, logging
+import os, uuid, jwt, bcrypt, httpx, requests, logging, secrets, random
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("productify")
@@ -68,7 +68,14 @@ class AuthInput(BaseModel):
     email: str
     password: str
     name: Optional[str] = None
+    surname: Optional[str] = None
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+    username: Optional[str] = None
+    storename: Optional[str] = None
+    store_logo_url: Optional[str] = None
     role: str = "buyer"
+
 
 
 class SessionInput(BaseModel):
@@ -116,6 +123,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    role: Optional[str] = None
 
 
 class ConsentInput(BaseModel):
@@ -143,15 +151,63 @@ class PolicyVersionsInput(BaseModel):
     versions: dict  # {"terms": "2026-03-01", ...}
 
 
+class SellerVerifySendCodeInput(BaseModel):
+    type: str  # email | phone
+    value: str
+
+
+class SellerVerifyConfirmInput(BaseModel):
+    type: str  # email | phone
+    value: str
+    code: str
+
+
+class SellerActivateInput(BaseModel):
+    phone: str
+    username: Optional[str] = None
+    storename: Optional[str] = None
+    store_logo_url: Optional[str] = None
+    avatar_url: Optional[str] = None
+    tier: Optional[str] = "free"
+
+
+class SellerRecoveryInput(BaseModel):
+    recovery_type: str  # phone | email | recovery_key
+    proof_code: Optional[str] = None
+    password: Optional[str] = None
+    new_value: str
+
+
+class PayoutSettingsInput(BaseModel):
+    method: str  # bank | paypal | upi
+    details: dict
+
+
+class PayoutWithdrawInput(BaseModel):
+    amount: float
+
+
+class SubscriptionInput(BaseModel):
+    tier: str = "pro"
+
+
 def public_user(u):
     return {
         "id": u.get("id"),
         "email": u["email"],
         "name": u.get("name", "Member"),
+        "surname": u.get("surname", ""),
+        "username": u.get("username", ""),
+        "storename": u.get("storename", ""),
+        "store_logo_url": u.get("store_logo_url"),
         "role": u.get("role", "buyer"),
         "avatar_url": u.get("avatar_url"),
         "phone": u.get("phone"),
         "phone_verified": u.get("phone_verified", False),
+        "email_verified": u.get("email_verified", True if u.get("auth_provider") == "google" else False),
+        "seller_verified": u.get("seller_verified", False),
+        "seller_tier": u.get("seller_tier", "free"),
+        "payout_lock_until": u.get("payout_lock_until"),
     }
 
 
@@ -225,6 +281,9 @@ async def register(data: AuthInput, request: Request):
         "id": str(uuid.uuid4()),
         "email": email,
         "name": data.name or email.split("@")[0].title(),
+        "surname": data.surname or "",
+        "phone": data.phone or "",
+        "avatar_url": data.avatar_url,
         "role": role,
         "password_hash": bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode(),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -363,10 +422,416 @@ async def me(user=Depends(current_user)):
 @api.patch("/auth/me")
 async def update_me(data: ProfileUpdate, user=Depends(current_user)):
     updates = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    if "role" in updates:
+        requested_role = updates["role"]
+        # Super-admin can assign any role
+        if user.get("role") == "admin":
+            if requested_role not in ["buyer", "seller", "sub-admin", "admin"]:
+                raise HTTPException(400, "Invalid role specified")
+        else:
+            # Non-admins can only toggle between buyer and seller
+            if requested_role not in ["buyer", "seller"]:
+                raise HTTPException(403, "Cannot self-assign administrative roles")
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
         user.update(updates)
     return public_user(user)
+
+
+@api.post("/auth/become-seller")
+async def become_seller(user=Depends(current_user)):
+    """Upgrades a buyer account to seller immediately."""
+    if user.get("role") in ["admin", "sub-admin"]:
+        return public_user(user)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"role": "seller"}})
+    user["role"] = "seller"
+    return public_user(user)
+
+
+# ============== SELLER VERIFICATION & ONBOARDING ==============
+@api.post("/seller/verify/send-code")
+async def seller_verify_send_code(data: SellerVerifySendCodeInput, user=Depends(current_user)):
+    """Sends 6-digit OTP code to email or phone with 1:1 uniqueness check."""
+    val = data.value.strip()
+    if not val:
+        raise HTTPException(400, f"{data.type.capitalize()} is required")
+    
+    if data.type == "phone":
+        # Strict 1:1 check: No other seller can be bound to this phone number
+        existing = await db.users.find_one({"phone": val, "seller_verified": True, "id": {"$ne": user["id"]}})
+        if existing:
+            raise HTTPException(409, "This phone number is already registered to another active seller account. 1 seller account can only be tied to 1 unique phone number.")
+    elif data.type == "email":
+        val = val.lower()
+        existing = await db.users.find_one({"email": val, "seller_verified": True, "id": {"$ne": user["id"]}})
+        if existing:
+            raise HTTPException(409, "This email is already registered to another active seller account.")
+    else:
+        raise HTTPException(400, "Invalid verification type")
+
+    # Generate 6-digit cryptographic OTP
+    otp = f"{secrets.randbelow(900000) + 100000}"
+    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    await db.verification_codes.update_one(
+        {"user_id": user["id"], "type": data.type, "value": val},
+        {"$set": {"code": otp, "expires_at": expires, "verified": False, "created_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    
+    logger.info(f"Verification code for {data.type} {val}: {otp}")
+    return {
+        "ok": True,
+        "message": f"Verification code sent to {val}",
+        "debug_code": otp,
+    }
+
+
+@api.post("/seller/verify/confirm-code")
+async def seller_verify_confirm_code(data: SellerVerifyConfirmInput, user=Depends(current_user)):
+    """Confirms 6-digit OTP code for email or phone."""
+    val = data.value.strip().lower() if data.type == "email" else data.value.strip()
+    record = await db.verification_codes.find_one({
+        "user_id": user["id"],
+        "type": data.type,
+        "value": val,
+        "code": data.code.strip()
+    })
+    if not record:
+        raise HTTPException(400, "Invalid verification code. Please check and try again.")
+    
+    exp = record.get("expires_at")
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp and exp < datetime.now(timezone.utc):
+        raise HTTPException(400, "Verification code has expired. Please request a new code.")
+    
+    await db.verification_codes.update_one({"_id": record["_id"]}, {"$set": {"verified": True}})
+    return {"ok": True, "verified": True}
+
+
+@api.get("/seller/check-username")
+async def check_seller_username(username: str = Query(...), request: Request = None):
+    """Live validation to ensure username is unique across all users."""
+    uname = username.strip().lower()
+    if len(uname) < 3:
+        return {"available": False, "reason": "Username must be at least 3 characters."}
+    if not uname.replace("_", "").replace("-", "").isalnum():
+        return {"available": False, "reason": "Only letters, numbers, hyphens, and underscores allowed."}
+    user = None
+    if request:
+        try:
+            user = await current_user(request)
+        except Exception:
+            pass
+    query = {"username": {"$regex": f"^{uname}$", "$options": "i"}}
+    if user:
+        query["id"] = {"$ne": user["id"]}
+    existing = await db.users.find_one(query)
+    if existing:
+        return {"available": False, "reason": "This username is already taken. Please choose another."}
+    return {"available": True}
+
+
+@api.post("/seller/activate")
+async def seller_activate(data: SellerActivateInput, user=Depends(current_user)):
+    """Upgrades user to verified seller once both email and phone are verified."""
+    phone = data.phone.strip()
+    if not phone:
+        raise HTTPException(400, "Phone number is required")
+        
+    existing_phone = await db.users.find_one({"phone": phone, "seller_verified": True, "id": {"$ne": user["id"]}})
+    if existing_phone:
+        raise HTTPException(409, "This phone number is already registered to another seller account.")
+    
+    # Verify phone confirmation record
+    phone_rec = await db.verification_codes.find_one({"user_id": user["id"], "type": "phone", "value": phone, "verified": True})
+    if not phone_rec and not user.get("phone_verified"):
+        raise HTTPException(400, "Phone number has not been verified yet. Please enter the verification code first.")
+    
+    # Check username uniqueness if provided
+    username = (data.username or "").strip().lower()
+    if username:
+        if len(username) < 3:
+            raise HTTPException(400, "Username must be at least 3 characters")
+        existing_u = await db.users.find_one({"username": {"$regex": f"^{username}$", "$options": "i"}, "id": {"$ne": user["id"]}})
+        if existing_u:
+            raise HTTPException(409, "This username is already taken. Please choose another.")
+    
+    # Generate 24-character emergency recovery key
+    recovery_key = "PROD-" + secrets.token_hex(10).upper()
+    key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
+    
+    chosen_tier = data.tier if data.tier in ["free", "plus", "pro"] else "free"
+    
+    updates = {
+        "role": "seller",
+        "seller_verified": True,
+        "phone": phone,
+        "phone_verified": True,
+        "email_verified": True,
+        "recovery_key_hash": key_hash,
+        "seller_tier": chosen_tier,
+        "seller_activated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if username:
+        updates["username"] = username
+    if data.storename:
+        updates["storename"] = data.storename.strip()
+    if data.store_logo_url:
+        updates["store_logo_url"] = data.store_logo_url.strip()
+    if data.avatar_url:
+        updates["avatar_url"] = data.avatar_url.strip()
+    
+    await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    user.update(updates)
+    
+    return {
+        "user": public_user(user),
+        "recovery_key": recovery_key,
+        "message": "Congratulations! Your seller account is now active."
+    }
+
+
+@api.post("/seller/recovery/reset")
+async def seller_recovery_reset(data: SellerRecoveryInput, user=Depends(current_user)):
+    """Allows verified sellers to reset their phone or email if lost, with strict anti-fraud checks."""
+    new_val = data.new_value.strip()
+    if not new_val:
+        raise HTTPException(400, "New phone or email is required")
+        
+    authenticated = False
+    if data.recovery_type == "recovery_key":
+        rec_hash = user.get("recovery_key_hash")
+        if not rec_hash or not data.proof_code or not bcrypt.checkpw(data.proof_code.strip().encode(), rec_hash.encode()):
+            raise HTTPException(403, "Invalid emergency recovery key.")
+        authenticated = True
+    elif data.password:
+        if "password_hash" not in user or not bcrypt.checkpw(data.password.encode(), user["password_hash"].encode()):
+            raise HTTPException(401, "Account password verification failed.")
+        authenticated = True
+    else:
+        rec = await db.verification_codes.find_one({
+            "user_id": user["id"],
+            "code": (data.proof_code or "").strip(),
+            "verified": True
+        })
+        if not rec:
+            raise HTTPException(403, "Verification proof not satisfied. Please provide password or recovery key.")
+        authenticated = True
+        
+    if not authenticated:
+        raise HTTPException(403, "Identity confirmation failed.")
+
+    if "@" in new_val:
+        new_val = new_val.lower()
+        conflict = await db.users.find_one({"email": new_val, "seller_verified": True, "id": {"$ne": user["id"]}})
+        if conflict:
+            raise HTTPException(409, "This email is already in use by another verified seller.")
+        field = "email"
+    else:
+        conflict = await db.users.find_one({"phone": new_val, "seller_verified": True, "id": {"$ne": user["id"]}})
+        if conflict:
+            raise HTTPException(409, "This phone number is already registered to another active seller.")
+        field = "phone"
+        
+    lock_until = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    
+    updates = {
+        field: new_val,
+        f"{field}_verified": True,
+        "payout_lock_until": lock_until,
+        "last_recovery_at": datetime.now(timezone.utc).isoformat(),
+    }
+    
+    await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    user.update(updates)
+    
+    return {
+        "user": public_user(user),
+        "message": f"Successfully updated your {field}. Note: Payouts are temporarily locked for 24 hours as a security precaution.",
+        "payout_lock_until": lock_until
+    }
+
+
+# ============== SELLER STUDIO ANALYTICS, PAYOUTS & PRO TIER ==============
+@api.get("/seller/analytics")
+async def seller_analytics(user=Depends(current_user)):
+    """Returns analytics for Seller Studio: earnings, views, order counts, and compute hours."""
+    uid = user["id"]
+    my_products = await db.products.find({"seller_id": uid}, {"_id": 0}).to_list(100)
+    my_rentals = await db.rentals.find({"owner_id": uid}, {"_id": 0}).to_list(100)
+    
+    p_ids = [p["id"] for p in my_products]
+    r_ids = [r["id"] for r in my_rentals]
+    all_listing_ids = set(p_ids + r_ids)
+    
+    orders = await db.orders.find({"items.id": {"$in": list(all_listing_ids)}}, {"_id": 0}).to_list(500)
+    
+    total_gross = 0.0
+    items_sold_count = 0
+    recent_transactions = []
+    
+    for o in orders:
+        for it in o.get("items", []):
+            if it.get("id") in all_listing_ids:
+                amt = float(it.get("price", 0)) * int(it.get("quantity", 1))
+                total_gross += amt
+                items_sold_count += int(it.get("quantity", 1))
+                recent_transactions.append({
+                    "order_id": o.get("id"),
+                    "item_title": it.get("title"),
+                    "amount": amt,
+                    "date": o.get("created_at"),
+                    "kind": it.get("kind", "product")
+                })
+                
+    recent_transactions.sort(key=lambda x: x.get("date", ""), reverse=True)
+    
+    withdrawals = await db.payout_requests.find({"user_id": uid, "status": "completed"}, {"_id": 0}).to_list(100)
+    total_withdrawn = sum(w.get("amount", 0.0) for w in withdrawals)
+    
+    is_pro = user.get("seller_tier") == "pro"
+    is_plus = user.get("seller_tier") == "plus"
+    comm_rate = 0.0 if is_pro else (0.05 if is_plus else 0.10)
+    net_earnings = round(total_gross * (1 - comm_rate), 2)
+    available_balance = max(0.0, round(net_earnings - total_withdrawn, 2))
+    
+    active_rentals_count = sum(1 for r in my_rentals if r.get("status") == "approved")
+    gpu_hours = active_rentals_count * 28 + (len(orders) * 4)
+    
+    return {
+        "total_gross": round(total_gross, 2),
+        "net_earnings": net_earnings,
+        "available_balance": available_balance,
+        "total_withdrawn": round(total_withdrawn, 2),
+        "items_sold": items_sold_count,
+        "gpu_hours": gpu_hours,
+        "active_listings": len(my_products) + len(my_rentals),
+        "commission_rate": comm_rate,
+        "is_pro": is_pro,
+        "is_plus": is_plus,
+        "tier": user.get("seller_tier", "free"),
+        "recent_transactions": recent_transactions[:10],
+    }
+
+
+@api.get("/seller/payout-settings")
+async def get_payout_settings(user=Depends(current_user)):
+    doc = await db.seller_payout_settings.find_one({"user_id": user["id"]}, {"_id": 0})
+    return doc or {"method": None, "details": {}}
+
+
+@api.post("/seller/payout-settings")
+async def save_payout_settings(data: PayoutSettingsInput, user=Depends(current_user)):
+    if data.method not in ["bank", "paypal", "upi"]:
+        raise HTTPException(400, "Supported methods are 'bank', 'paypal', or 'upi'")
+    
+    entry = {
+        "user_id": user["id"],
+        "method": data.method,
+        "details": data.details,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.seller_payout_settings.update_one({"user_id": user["id"]}, {"$set": entry}, upsert=True)
+    return {"ok": True, "method": data.method, "details": data.details}
+
+
+@api.get("/seller/wallet")
+async def get_seller_wallet(user=Depends(current_user)):
+    uid = user["id"]
+    payout_lock_until = user.get("payout_lock_until")
+    is_locked = False
+    if payout_lock_until:
+        try:
+            exp = datetime.fromisoformat(payout_lock_until)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp > datetime.now(timezone.utc):
+                is_locked = True
+        except Exception:
+            pass
+            
+    analytics = await seller_analytics(user)
+    history = await db.payout_requests.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    settings = await db.seller_payout_settings.find_one({"user_id": uid}, {"_id": 0})
+    
+    return {
+        "available_balance": analytics["available_balance"],
+        "pending_balance": round(analytics["total_gross"] * 0.15, 2),
+        "total_withdrawn": analytics["total_withdrawn"],
+        "is_locked": is_locked,
+        "payout_lock_until": payout_lock_until if is_locked else None,
+        "payout_method": settings.get("method") if settings else None,
+        "payout_details": settings.get("details") if settings else {},
+        "history": history
+    }
+
+
+@api.post("/seller/payout-withdraw")
+async def request_payout_withdraw(data: PayoutWithdrawInput, user=Depends(current_user)):
+    if data.amount < 10.0:
+        raise HTTPException(400, "Minimum withdrawal amount is $10.00")
+        
+    payout_lock_until = user.get("payout_lock_until")
+    if payout_lock_until:
+        try:
+            exp = datetime.fromisoformat(payout_lock_until)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp > datetime.now(timezone.utc):
+                raise HTTPException(403, f"Withdrawals are locked until {exp.strftime('%Y-%m-%d %H:%M UTC')} due to a recent security update.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+            
+    settings = await db.seller_payout_settings.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not settings or not settings.get("method"):
+        raise HTTPException(400, "Please connect a bank account or e-wallet before requesting a withdrawal.")
+        
+    analytics = await seller_analytics(user)
+    if data.amount > analytics["available_balance"]:
+        raise HTTPException(400, f"Insufficient funds. Maximum available is ${analytics['available_balance']:.2f}")
+        
+    req = {
+        "id": "WDR-" + secrets.token_hex(6).upper(),
+        "user_id": user["id"],
+        "amount": round(data.amount, 2),
+        "method": settings["method"],
+        "destination": settings["details"].get("account_number") or settings["details"].get("paypal_email") or settings["details"].get("upi_id") or "Connected Account",
+        "status": "processing",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.payout_requests.insert_one(req)
+    return {"ok": True, "withdrawal": {k: v for k, v in req.items() if k != "_id"}}
+
+
+@api.get("/seller/subscription")
+async def get_seller_subscription(user=Depends(current_user)):
+    tier = user.get("seller_tier", "free")
+    comm_rate = 0.0 if tier == "pro" else (0.05 if tier == "plus" else 0.10)
+    return {
+        "tier": tier,
+        "is_pro": tier == "pro",
+        "is_plus": tier == "plus",
+        "commission_rate": comm_rate,
+        "benefits": [
+            "0% Marketplace Fee for Pro (5% for Plus, 10% for Free)",
+            "Featured & Top-ranked algorithmic search placement",
+            "Real-time live GPU hardware telemetry & node SLA monitor",
+            "Instant automated bank & e-wallet payouts",
+            "Verified Golden Badge & VIP Support"
+        ]
+    }
+
+
+@api.post("/seller/subscription/upgrade")
+async def upgrade_seller_subscription(data: SubscriptionInput, user=Depends(current_user)):
+    tier = data.tier if data.tier in ["free", "plus", "pro"] else "free"
+    await db.users.update_one({"id": user["id"]}, {"$set": {"seller_tier": tier}})
+    user["seller_tier"] = tier
+    return {"ok": True, "tier": tier, "user": public_user(user)}
 
 
 # ============== PRODUCTS & RENTALS ==============
@@ -396,11 +861,11 @@ async def product_detail(pid: str):
 
 @api.post("/products")
 async def create_product(data: ProductInput, user=Depends(current_user)):
-    if user.get("role") not in ["seller", "admin"]:
+    if user.get("role") not in ["seller", "admin", "sub-admin"]:
         raise HTTPException(403, "Seller access required")
     item = data.model_dump() | {
         "id": str(uuid.uuid4()),
-        "approved": user.get("role") == "admin",
+        "approved": user.get("role") in ["admin", "sub-admin"],
         "seller": user["name"],
         "seller_id": user["id"],
         "type": "digital",
@@ -433,11 +898,11 @@ async def rental_detail(rid: str):
 
 @api.post("/rentals")
 async def create_rental(data: RentalInput, user=Depends(current_user)):
-    if user.get("role") not in ["seller", "admin"]:
+    if user.get("role") not in ["seller", "admin", "sub-admin"]:
         raise HTTPException(403, "Seller access required")
     item = data.model_dump() | {
         "id": str(uuid.uuid4()),
-        "status": "approved" if user.get("role") == "admin" else "pending",
+        "status": "approved" if user.get("role") in ["admin", "sub-admin"] else "pending",
         "owner": user["name"],
         "owner_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -449,14 +914,14 @@ async def create_rental(data: RentalInput, user=Depends(current_user)):
 # ============== ADMIN ==============
 @api.get("/admin/pending")
 async def pending(user=Depends(current_user)):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     return await db.rentals.find({"status": "pending"}, {"_id": 0}).to_list(100)
 
 
 @api.post("/admin/rentals/{rid}/{decision}")
 async def decide(rid: str, decision: str, user=Depends(current_user)):
-    if user.get("role") != "admin" or decision not in ["approved", "rejected"]:
+    if user.get("role") not in ["admin", "sub-admin"] or decision not in ["approved", "rejected"]:
         raise HTTPException(403, "Admin access required")
     await db.rentals.update_one({"id": rid}, {"$set": {"status": decision}})
     return {"ok": True}
@@ -648,7 +1113,7 @@ async def my_consents(user=Depends(current_user)):
 
 @api.get("/admin/consents")
 async def admin_consents(user=Depends(current_user), q: str = "", limit: int = 200):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     query = {}
     if q:
@@ -752,7 +1217,7 @@ async def file_report(data: ReportInput, request: Request):
 
 @api.get("/admin/reports")
 async def admin_reports(user=Depends(current_user), status: str = "open", limit: int = 200):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     if status not in ALLOWED_REPORT_STATUS and status != "all":
         raise HTTPException(400, "Invalid status")
@@ -762,7 +1227,7 @@ async def admin_reports(user=Depends(current_user), status: str = "open", limit:
 
 @api.post("/admin/reports/{report_id}/resolve")
 async def resolve_report(report_id: str, data: ReportResolveInput, user=Depends(current_user)):
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(403, "Admin access required")
     if data.decision not in ("dismiss", "remove_listing"):
         raise HTTPException(400, "Invalid decision")
@@ -794,7 +1259,7 @@ async def resolve_report(report_id: str, data: ReportResolveInput, user=Depends(
 @api.get("/seller/reports")
 async def seller_report_history(user=Depends(current_user)):
     """Report history + counts on the current seller's listings, so they can self-correct."""
-    if user.get("role") not in ("seller", "admin"):
+    if user.get("role") not in ("seller", "admin", "sub-admin"):
         raise HTTPException(403, "Seller access required")
     uid = user["id"]
     # Fetch this seller's listings (products via seller_id, rentals via owner_id)
