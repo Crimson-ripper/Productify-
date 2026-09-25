@@ -6,6 +6,7 @@ import SEO from "@/components/SEO";
 import { toast } from "sonner";
 
 import GoogleLoginButton from "@/components/GoogleLoginButton";
+import SellerVerificationModal from "@/components/SellerVerificationModal";
 
 export default function Register() {
   const [sp] = useSearchParams();
@@ -49,23 +50,26 @@ export default function Register() {
     } finally { setBusy(false); }
   };
 
+  const [modalOpen, setModalOpen] = useState(false);
+
   if (user && user.role === "buyer" && sp.get("role") === "seller") {
     return (
       <>
-        <SEO title="Activate Seller Studio — Productify" description="Upgrade your Productify account to start selling." path="/register" />
+        <SEO title="Activate Seller Studio — Productify" description="Verify your identity and upgrade your Productify account to start selling." path="/register" />
         <section className="auth-page">
           <div className="auth-card" data-testid="register-upgrade-card">
             <div className="auth-mark">P</div>
-            <div className="eyebrow">SELLER STUDIO</div>
-            <h2>Activate your seller account.</h2>
-            <p>You are signed in as <b>{user.name}</b> ({user.email}). Click below to unlock listing digital products and renting GPU capacity.</p>
+            <div className="eyebrow">SELLER IDENTITY VERIFICATION</div>
+            <h2>Verify & activate seller account.</h2>
+            <p>You are signed in as <b>{user.name}</b> ({user.email}). Complete 1:1 email & phone verification to unlock listing digital products and renting GPU capacity.</p>
             {err && <div className="form-error" data-testid="register-error">{err}</div>}
-            <button className="primary-button full" disabled={busy} onClick={handleUpgrade} data-testid="register-upgrade-button">
-              {busy ? "Activating…" : "Activate Seller Studio"} <ArrowRight size={17} />
+            <button className="primary-button full" onClick={() => setModalOpen(true)} data-testid="register-upgrade-button">
+              Start Seller Verification <ArrowRight size={17} />
             </button>
             <Link to="/dashboard" className="switch-auth" data-testid="register-switch-dashboard">Back to dashboard</Link>
           </div>
         </section>
+        <SellerVerificationModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
       </>
     );
   }
