@@ -68,7 +68,14 @@ class AuthInput(BaseModel):
     email: str
     password: str
     name: Optional[str] = None
+    surname: Optional[str] = None
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+    username: Optional[str] = None
+    storename: Optional[str] = None
+    store_logo_url: Optional[str] = None
     role: str = "buyer"
+
 
 
 class SessionInput(BaseModel):
@@ -157,6 +164,11 @@ class SellerVerifyConfirmInput(BaseModel):
 
 class SellerActivateInput(BaseModel):
     phone: str
+    username: Optional[str] = None
+    storename: Optional[str] = None
+    store_logo_url: Optional[str] = None
+    avatar_url: Optional[str] = None
+    tier: Optional[str] = "free"
 
 
 class SellerRecoveryInput(BaseModel):
@@ -184,6 +196,10 @@ def public_user(u):
         "id": u.get("id"),
         "email": u["email"],
         "name": u.get("name", "Member"),
+        "surname": u.get("surname", ""),
+        "username": u.get("username", ""),
+        "storename": u.get("storename", ""),
+        "store_logo_url": u.get("store_logo_url"),
         "role": u.get("role", "buyer"),
         "avatar_url": u.get("avatar_url"),
         "phone": u.get("phone"),
@@ -265,6 +281,9 @@ async def register(data: AuthInput, request: Request):
         "id": str(uuid.uuid4()),
         "email": email,
         "name": data.name or email.split("@")[0].title(),
+        "surname": data.surname or "",
+        "phone": data.phone or "",
+        "avatar_url": data.avatar_url,
         "role": role,
         "password_hash": bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode(),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -491,6 +510,29 @@ async def seller_verify_confirm_code(data: SellerVerifyConfirmInput, user=Depend
     return {"ok": True, "verified": True}
 
 
+@api.get("/seller/check-username")
+async def check_seller_username(username: str = Query(...), request: Request = None):
+    """Live validation to ensure username is unique across all users."""
+    uname = username.strip().lower()
+    if len(uname) < 3:
+        return {"available": False, "reason": "Username must be at least 3 characters."}
+    if not uname.replace("_", "").replace("-", "").isalnum():
+        return {"available": False, "reason": "Only letters, numbers, hyphens, and underscores allowed."}
+    user = None
+    if request:
+        try:
+            user = await current_user(request)
+        except Exception:
+            pass
+    query = {"username": {"$regex": f"^{uname}$", "$options": "i"}}
+    if user:
+        query["id"] = {"$ne": user["id"]}
+    existing = await db.users.find_one(query)
+    if existing:
+        return {"available": False, "reason": "This username is already taken. Please choose another."}
+    return {"available": True}
+
+
 @api.post("/seller/activate")
 async def seller_activate(data: SellerActivateInput, user=Depends(current_user)):
     """Upgrades user to verified seller once both email and phone are verified."""
@@ -507,9 +549,20 @@ async def seller_activate(data: SellerActivateInput, user=Depends(current_user))
     if not phone_rec and not user.get("phone_verified"):
         raise HTTPException(400, "Phone number has not been verified yet. Please enter the verification code first.")
     
+    # Check username uniqueness if provided
+    username = (data.username or "").strip().lower()
+    if username:
+        if len(username) < 3:
+            raise HTTPException(400, "Username must be at least 3 characters")
+        existing_u = await db.users.find_one({"username": {"$regex": f"^{username}$", "$options": "i"}, "id": {"$ne": user["id"]}})
+        if existing_u:
+            raise HTTPException(409, "This username is already taken. Please choose another.")
+    
     # Generate 24-character emergency recovery key
     recovery_key = "PROD-" + secrets.token_hex(10).upper()
     key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
+    
+    chosen_tier = data.tier if data.tier in ["free", "plus", "pro"] else "free"
     
     updates = {
         "role": "seller",
@@ -518,9 +571,17 @@ async def seller_activate(data: SellerActivateInput, user=Depends(current_user))
         "phone_verified": True,
         "email_verified": True,
         "recovery_key_hash": key_hash,
-        "seller_tier": user.get("seller_tier", "free"),
+        "seller_tier": chosen_tier,
         "seller_activated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if username:
+        updates["username"] = username
+    if data.storename:
+        updates["storename"] = data.storename.strip()
+    if data.store_logo_url:
+        updates["store_logo_url"] = data.store_logo_url.strip()
+    if data.avatar_url:
+        updates["avatar_url"] = data.avatar_url.strip()
     
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     user.update(updates)
@@ -631,7 +692,8 @@ async def seller_analytics(user=Depends(current_user)):
     total_withdrawn = sum(w.get("amount", 0.0) for w in withdrawals)
     
     is_pro = user.get("seller_tier") == "pro"
-    comm_rate = 0.0 if is_pro else 0.10
+    is_plus = user.get("seller_tier") == "plus"
+    comm_rate = 0.0 if is_pro else (0.05 if is_plus else 0.10)
     net_earnings = round(total_gross * (1 - comm_rate), 2)
     available_balance = max(0.0, round(net_earnings - total_withdrawn, 2))
     
@@ -648,6 +710,8 @@ async def seller_analytics(user=Depends(current_user)):
         "active_listings": len(my_products) + len(my_rentals),
         "commission_rate": comm_rate,
         "is_pro": is_pro,
+        "is_plus": is_plus,
+        "tier": user.get("seller_tier", "free"),
         "recent_transactions": recent_transactions[:10],
     }
 
@@ -746,24 +810,25 @@ async def request_payout_withdraw(data: PayoutWithdrawInput, user=Depends(curren
 @api.get("/seller/subscription")
 async def get_seller_subscription(user=Depends(current_user)):
     tier = user.get("seller_tier", "free")
+    comm_rate = 0.0 if tier == "pro" else (0.05 if tier == "plus" else 0.10)
     return {
         "tier": tier,
         "is_pro": tier == "pro",
-        "commission_rate": 0.0 if tier == "pro" else 0.10,
+        "is_plus": tier == "plus",
+        "commission_rate": comm_rate,
         "benefits": [
-            "0% Marketplace Fee (vs 10% on Free tier)",
+            "0% Marketplace Fee for Pro (5% for Plus, 10% for Free)",
             "Featured & Top-ranked algorithmic search placement",
             "Real-time live GPU hardware telemetry & node SLA monitor",
-            "Instant automated 15-minute bank payouts",
-            "Verified Pro Seller Golden Badge",
-            "Custom Storefront URL & Domain Linkage"
+            "Instant automated bank & e-wallet payouts",
+            "Verified Golden Badge & VIP Support"
         ]
     }
 
 
 @api.post("/seller/subscription/upgrade")
 async def upgrade_seller_subscription(data: SubscriptionInput, user=Depends(current_user)):
-    tier = data.tier if data.tier in ["free", "pro"] else "pro"
+    tier = data.tier if data.tier in ["free", "plus", "pro"] else "free"
     await db.users.update_one({"id": user["id"]}, {"$set": {"seller_tier": tier}})
     user["seller_tier"] = tier
     return {"ok": True, "tier": tier, "user": public_user(user)}
