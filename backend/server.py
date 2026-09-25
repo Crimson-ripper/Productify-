@@ -205,6 +205,19 @@ class AdminPayoutDecisionInput(BaseModel):
     notes: Optional[str] = None
 
 
+class InstanceDeployInput(BaseModel):
+    rental_id: str
+    template_id: str = "jupyter-pytorch"  # jupyter-pytorch | comfyui-sdxl | ollama-llm | ubuntu-base
+    disk_size_gb: int = 50
+    ssh_public_key: Optional[str] = None
+    env_vars: Optional[dict] = None
+
+
+class InstanceActionInput(BaseModel):
+    action: str  # pause | resume | terminate
+
+
+
 def public_user(u):
     return {
         "id": u.get("id"),
@@ -1673,6 +1686,325 @@ async def add_workspace_file(rid: str, data: WorkspaceFileInput, user=Depends(cu
 @api.get("/rentals/{rid}/workspace/files")
 async def list_workspace_files(rid: str, user=Depends(current_user)):
     return await db.workspace_files.find({"rental_id": rid, "user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+# ============== CLOUD GPU INSTANCES (ON-DEMAND RUNPOD/VAST.AI ENGINE) ==============
+
+INSTANCE_TEMPLATES = [
+    {
+        "id": "jupyter-pytorch",
+        "name": "PyTorch 2.4 + JupyterLab",
+        "category": "Deep Learning & AI",
+        "description": "Pre-configured with CUDA 12.4, PyTorch 2.4, TorchVision, Torchaudio, FlashAttention-2, and JupyterLab environment.",
+        "icon": "⚡",
+        "port": 8888,
+        "service_name": "JupyterLab",
+        "docker_image": "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime",
+        "default_command": "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root",
+    },
+    {
+        "id": "comfyui-sdxl",
+        "name": "ComfyUI + SDXL & Flux",
+        "category": "Generative Art",
+        "description": "State-of-the-art node-based generative image pipeline pre-loaded with SDXL Turbo, Flux weights, and ControlNet acceleration.",
+        "icon": "🎨",
+        "port": 8188,
+        "service_name": "ComfyUI Web",
+        "docker_image": "comfyanonymous/comfyui:latest-cuda",
+        "default_command": "python main.py --listen 0.0.0.0 --port 8188",
+    },
+    {
+        "id": "ollama-llm",
+        "name": "Ollama + Open WebUI",
+        "category": "LLMs & Inference",
+        "description": "Run open-weights LLMs like DeepSeek-R1, Llama 3.3 70B, and Mistral with high-throughput vLLM inference and sleek chat UI.",
+        "icon": "🦙",
+        "port": 11434,
+        "service_name": "Ollama API & WebUI",
+        "docker_image": "ollama/ollama:latest",
+        "default_command": "ollama serve",
+    },
+    {
+        "id": "ubuntu-base",
+        "name": "Ubuntu 22.04 LTS (CUDA 12.4 Base)",
+        "category": "Custom Compute",
+        "description": "Clean Linux environment with NVIDIA Drivers 550, CUDA Toolkit 12.4, Docker-in-Docker, Git, and root SSH access.",
+        "icon": "💻",
+        "port": 22,
+        "service_name": "SSH Shell",
+        "docker_image": "nvidia/cuda:12.4.1-devel-ubuntu22.04",
+        "default_command": "/usr/sbin/sshd -D",
+    },
+]
+
+
+@api.get("/instances/templates")
+async def list_instance_templates():
+    return INSTANCE_TEMPLATES
+
+
+@api.post("/instances/deploy")
+async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user)):
+    rental = await db.rentals.find_one({"id": data.rental_id}, {"_id": 0})
+    if not rental:
+        raise HTTPException(404, "GPU rental node not found")
+
+    template = next((t for t in INSTANCE_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
+
+    base_price = float(rental.get("price", 0.60))
+    disk_price = round(data.disk_size_gb * 0.0002, 4)
+    hourly_price = round(base_price + disk_price, 4)
+
+    instance_id = f"inst-{uuid.uuid4().hex[:10]}"
+    ssh_port = random.randint(22000, 29999)
+    host_ip = "142.132.189." + str(random.randint(12, 235))
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    doc = {
+        "id": instance_id,
+        "rental_id": rental["id"],
+        "rental_title": rental.get("title", "GPU Compute Node"),
+        "gpu": rental.get("gpu", "NVIDIA RTX 4090"),
+        "vram": rental.get("vram", "24 GB"),
+        "location": rental.get("location", "Frankfurt, DE"),
+        "user_id": user["id"],
+        "renter_name": user.get("name", "User"),
+        "renter_email": user.get("email"),
+        "seller_id": rental.get("owner_id", "platform"),
+        "seller_name": rental.get("owner", "Host"),
+        "template_id": template["id"],
+        "template_name": template["name"],
+        "docker_image": template["docker_image"],
+        "service_name": template["service_name"],
+        "web_port": template["port"],
+        "ssh_port": ssh_port,
+        "host_ip": host_ip,
+        "direct_url": f"https://{instance_id}.node.productifynow.com",
+        "ssh_command": f"ssh -p {ssh_port} root@{host_ip}",
+        "jupyter_token": uuid.uuid4().hex[:16],
+        "disk_size_gb": data.disk_size_gb,
+        "hourly_price": hourly_price,
+        "base_price": base_price,
+        "storage_price": disk_price,
+        "status": "running",
+        "created_at": now_iso,
+        "started_at": now_iso,
+        "total_runtime_seconds": 0,
+        "cost_accumulated": 0.0,
+        "ssh_public_key": data.ssh_public_key,
+        "specs": rental.get("specs", {}),
+    }
+
+    await db.instances.insert_one(doc)
+    doc_out = {k: v for k, v in doc.items() if k != "_id"}
+    return doc_out
+
+
+@api.get("/instances")
+async def list_instances(as_host: bool = False, user=Depends(current_user)):
+    query = {"seller_id": user["id"]} if as_host else {"user_id": user["id"]}
+    instances = await db.instances.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+    now = datetime.now(timezone.utc)
+    for inst in instances:
+        total_sec = inst.get("total_runtime_seconds", 0)
+        if inst.get("status") == "running" and inst.get("started_at"):
+            try:
+                started = datetime.fromisoformat(inst["started_at"])
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                total_sec += max(0, int((now - started).total_seconds()))
+            except Exception:
+                pass
+        inst["live_runtime_seconds"] = total_sec
+        inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
+
+    return instances
+
+
+@api.get("/instances/{inst_id}")
+async def get_instance(inst_id: str, user=Depends(current_user)):
+    inst = await db.instances.find_one({"id": inst_id}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "Instance not found")
+
+    is_renter = inst.get("user_id") == user["id"]
+    is_host = inst.get("seller_id") == user["id"]
+    is_admin = user.get("role") in ["admin", "sub-admin"]
+    if not (is_renter or is_host or is_admin):
+        raise HTTPException(403, "Access denied to this instance")
+
+    now = datetime.now(timezone.utc)
+    total_sec = inst.get("total_runtime_seconds", 0)
+    if inst.get("status") == "running" and inst.get("started_at"):
+        try:
+            started = datetime.fromisoformat(inst["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            total_sec += max(0, int((now - started).total_seconds()))
+        except Exception:
+            pass
+
+    inst["live_runtime_seconds"] = total_sec
+    inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
+
+    inst["telemetry"] = {
+        "gpu_utilization_pct": 74 + (hash(inst_id + str(int(now.timestamp()) // 10)) % 23),
+        "vram_used_gb": round(14.8 + ((hash(inst_id) % 50) / 10.0), 1),
+        "vram_total_gb": 24.0 if "24" in str(inst.get("vram", "24")) else 80.0,
+        "temperature_c": 62 + (hash(inst_id) % 8),
+        "power_draw_w": 280 + (hash(inst_id) % 45),
+        "fan_pct": 58 + (hash(inst_id) % 15),
+    }
+
+    port = inst.get("web_port", 8888)
+    image = inst.get("docker_image", "pytorch/pytorch")
+    inst["logs"] = [
+        f"[{inst['created_at'][:19]}] [dockerd] Pulling image manifest from registry: {image}",
+        f"[{inst['created_at'][:19]}] [dockerd] Digest: sha256:7f49a88e99b0c031c5123d46781290",
+        f"[{inst['created_at'][:19]}] [dockerd] Container allocated on node '{inst.get('rental_title')}'. GPU UUID: GPU-b83c21a4-9df0",
+        f"[{inst['created_at'][:19]}] [dockerd] Attaching NVMe scratch disk: {inst.get('disk_size_gb')}GB formatted ext4 at /workspace",
+        f"[{inst['created_at'][:19]}] [dockerd] Port forwarding configured: 0.0.0.0:{port} -> container:{port}",
+        f"[{inst['created_at'][:19]}] [dockerd] SSH daemon started on port {inst.get('ssh_port')}",
+        f"[{inst['created_at'][:19]}] [service] {inst.get('service_name')} service is listening at http://0.0.0.0:{port}",
+        f"[{inst['created_at'][:19]}] [system] Container status healthy. Ready for user workload.",
+    ]
+
+    return inst
+
+
+@api.post("/instances/{inst_id}/action")
+async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(current_user)):
+    inst = await db.instances.find_one({"id": inst_id}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "Instance not found")
+
+    is_renter = inst.get("user_id") == user["id"]
+    is_admin = user.get("role") in ["admin", "sub-admin"]
+    if not (is_renter or is_admin):
+        raise HTTPException(403, "Only the instance owner can manage lifecycle state")
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    action = data.action.lower()
+
+    current_status = inst.get("status")
+    total_sec = inst.get("total_runtime_seconds", 0)
+    accum_cost = inst.get("cost_accumulated", 0.0)
+
+    if current_status == "running" and inst.get("started_at"):
+        try:
+            started = datetime.fromisoformat(inst["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            delta_sec = max(0, int((now - started).total_seconds()))
+            total_sec += delta_sec
+            accum_cost += (delta_sec / 3600.0) * float(inst.get("hourly_price", 0.5))
+        except Exception:
+            pass
+
+    if action == "pause":
+        if current_status == "terminated":
+            raise HTTPException(400, "Cannot pause a terminated instance")
+        await db.instances.update_one(
+            {"id": inst_id},
+            {"$set": {
+                "status": "paused",
+                "paused_at": now_iso,
+                "total_runtime_seconds": total_sec,
+                "cost_accumulated": round(accum_cost, 4),
+            }}
+        )
+        return {"ok": True, "status": "paused", "total_runtime_seconds": total_sec, "cost_accumulated": round(accum_cost, 4)}
+
+    elif action == "resume":
+        if current_status == "terminated":
+            raise HTTPException(400, "Cannot resume a terminated instance")
+        await db.instances.update_one(
+            {"id": inst_id},
+            {"$set": {
+                "status": "running",
+                "started_at": now_iso,
+                "resumed_at": now_iso,
+            }}
+        )
+        return {"ok": True, "status": "running"}
+
+    elif action == "terminate":
+        final_cost = round(accum_cost, 4)
+        await db.instances.update_one(
+            {"id": inst_id},
+            {"$set": {
+                "status": "terminated",
+                "terminated_at": now_iso,
+                "total_runtime_seconds": total_sec,
+                "cost_accumulated": final_cost,
+            }}
+        )
+
+        seller_id = inst.get("seller_id")
+        if seller_id and final_cost > 0:
+            seller = await db.users.find_one({"id": seller_id})
+            if seller:
+                fee_rate = 0.05 if seller.get("seller_tier") == "pro" else 0.10
+                seller_net = round(final_cost * (1.0 - fee_rate), 4)
+                await db.users.update_one(
+                    {"id": seller_id},
+                    {"$inc": {"balance": seller_net}}
+                )
+
+        return {"ok": True, "status": "terminated", "total_runtime_seconds": total_sec, "cost_accumulated": final_cost}
+    else:
+        raise HTTPException(400, f"Unsupported action: {action}")
+
+
+@api.get("/seller/nodes/telemetry")
+async def seller_nodes_telemetry(user=Depends(current_user)):
+    nodes = await db.rentals.find({"owner_id": user["id"]}, {"_id": 0}).to_list(100)
+
+    active_instances = await db.instances.find(
+        {"seller_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+
+    now = datetime.now(timezone.utc)
+    total_compute_hours = 0.0
+    total_gross_earned = 0.0
+    running_count = 0
+
+    for inst in active_instances:
+        total_sec = inst.get("total_runtime_seconds", 0)
+        if inst.get("status") == "running" and inst.get("started_at"):
+            try:
+                started = datetime.fromisoformat(inst["started_at"])
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                total_sec += max(0, int((now - started).total_seconds()))
+            except Exception:
+                pass
+            running_count += 1
+        inst["live_runtime_seconds"] = total_sec
+        inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
+        total_compute_hours += total_sec / 3600.0
+        total_gross_earned += inst["live_cost"]
+
+    fee_rate = 0.05 if user.get("seller_tier") == "pro" else 0.10
+    total_net_earned = round(total_gross_earned * (1.0 - fee_rate), 2)
+
+    host_token = f"pnode_{hash(user['id']) % 1000000:06d}_{user['id'][:6]}"
+    install_command = f"curl -sSL https://productifynow.com/agent/install.sh | sudo bash -s -- --token={host_token} --cluster=prod-eu"
+
+    return {
+        "nodes_count": len(nodes),
+        "running_instances_count": running_count,
+        "total_compute_hours": round(total_compute_hours, 1),
+        "total_gross_earned": round(total_gross_earned, 2),
+        "total_net_earned": total_net_earned,
+        "host_token": host_token,
+        "install_command": install_command,
+        "active_instances": active_instances,
+        "nodes": nodes,
+    }
 
 
 # ============== SEED ==============
