@@ -101,9 +101,26 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const activateSeller = async (phone) => {
+  const checkUsername = async (username) => {
     try {
-      const { data } = await api.post("/seller/activate", { phone });
+      const { data } = await api.get(`/seller/check-username?username=${encodeURIComponent(username)}`);
+      return data;
+    } catch (err) {
+      if (err.response?.status === 404 || !err.response) {
+        const reserved = ["admin", "root", "support", "productify", "null", "undefined"];
+        if (reserved.includes(username.toLowerCase().trim())) {
+          return { available: false, reason: "This username is reserved." };
+        }
+        return { available: true };
+      }
+      return { available: false, reason: err.response?.data?.detail || "Could not check username." };
+    }
+  };
+
+  const activateSeller = async (params) => {
+    const payload = typeof params === "string" ? { phone: params } : params;
+    try {
+      const { data } = await api.post("/seller/activate", payload);
       localStorage.setItem("productify-user", JSON.stringify(data.user));
       setUser(data.user);
       return data;
@@ -114,17 +131,36 @@ export function AuthProvider({ children }) {
         const upgraded = {
           ...current,
           role: "seller",
-          phone,
+          phone: payload.phone,
           phone_verified: true,
           email_verified: true,
           seller_verified: true,
-          seller_tier: "free"
+          seller_tier: payload.tier || "free",
+          username: payload.username || current.username || "",
+          storename: payload.storename || current.storename || "",
+          store_logo_url: payload.store_logo_url || current.store_logo_url || "",
+          avatar_url: payload.avatar_url || current.avatar_url || "",
         };
         localStorage.setItem("productify-user", JSON.stringify(upgraded));
         setUser(upgraded);
         return { user: upgraded, recovery_key: recoveryKey };
       }
       throw err;
+    }
+  };
+
+  const upgradeSellerTier = async (tier) => {
+    try {
+      const { data } = await api.post("/seller/subscription/upgrade", { tier });
+      localStorage.setItem("productify-user", JSON.stringify(data.user));
+      setUser(data.user);
+      return data;
+    } catch (err) {
+      const current = user || JSON.parse(localStorage.getItem("productify-user") || "{}");
+      const updated = { ...current, seller_tier: tier };
+      localStorage.setItem("productify-user", JSON.stringify(updated));
+      setUser(updated);
+      return { ok: true, tier, user: updated };
     }
   };
 
@@ -164,7 +200,9 @@ export function AuthProvider({ children }) {
       becomeSeller,
       sendSellerOtp,
       confirmSellerOtp,
+      checkUsername,
       activateSeller,
+      upgradeSellerTier,
       recoverSellerAccount,
       refresh,
       setUser
