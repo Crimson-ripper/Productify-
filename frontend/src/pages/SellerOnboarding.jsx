@@ -1,22 +1,16 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
   ShieldCheck,
-  Zap,
   Sparkles,
-  Lock,
   Copy,
   Check,
-  Building2,
-  User,
   Mail,
   Phone,
   KeyRound,
-  Store,
-  Camera,
   Award
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,17 +64,18 @@ export default function SellerOnboarding() {
   // Populate from logged-in user if status changes
   useEffect(() => {
     if (user) {
-      if (!firstName && user.name) setFirstName(user.name.split(" ")[0]);
-      if (!surname && user.surname) setSurname(user.surname);
-      if (!email && user.email) setEmail(user.email);
-      if (!phone && user.phone) setPhone(user.phone);
-      if (!avatarUrl && user.avatar_url) setAvatarUrl(user.avatar_url);
-      if (!username && user.username) setUsername(user.username);
-      if (!storename && user.storename) setStorename(user.storename);
+      setFirstName((prev) => prev || (user.name ? user.name.split(" ")[0] : ""));
+      setSurname((prev) => prev || user.surname || (user.name ? user.name.split(" ").slice(1).join(" ") : ""));
+      setEmail((prev) => prev || user.email || "");
+      setPhone((prev) => prev || user.phone || "");
+      setAvatarUrl((prev) => prev || user.avatar_url || "");
+      setUsername((prev) => prev || user.username || "");
+      setStorename((prev) => prev || user.storename || "");
       if (user.email_verified || user.auth_provider === "google") setEmailVerified(true);
       if (user.phone_verified) setPhoneVerified(true);
       if (user.seller_tier) setSelectedTier(user.seller_tier);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Live username debounce check
@@ -99,7 +94,8 @@ export default function SellerOnboarding() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [username, checkUsername]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
 
   // Handle Step 1 -> Step 2
   const handleStep1Submit = async (e) => {
@@ -810,7 +806,7 @@ export default function SellerOnboarding() {
                     </small>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, opacity: tierChanging ? 0.6 : 1, pointerEvents: tierChanging ? "none" : "auto", transition: "opacity 0.2s" }}>
                     
                     {/* Free Starter Tier */}
                     <div
