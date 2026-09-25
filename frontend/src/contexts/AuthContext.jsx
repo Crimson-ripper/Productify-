@@ -101,7 +101,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const checkUsername = async (username) => {
+  const checkUsername = useCallback(async (username) => {
     try {
       const { data } = await api.get(`/seller/check-username?username=${encodeURIComponent(username)}`);
       return data;
@@ -115,7 +115,7 @@ export function AuthProvider({ children }) {
       }
       return { available: false, reason: err.response?.data?.detail || "Could not check username." };
     }
-  };
+  }, []);
 
   const activateSeller = async (params) => {
     const payload = typeof params === "string" ? { phone: params } : params;
