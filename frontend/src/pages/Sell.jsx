@@ -11,10 +11,10 @@ export default function Sell() {
   const [modalOpen, setModalOpen] = useState(false);
 
   const handleActivateClick = () => {
-    if (!user) {
-      navigate("/register?role=seller");
+    if (isSeller) {
+      navigate("/seller-studio");
     } else {
-      setModalOpen(true);
+      navigate("/seller/onboarding");
     }
   };
 
