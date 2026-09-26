@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query
-from fastapi.responses import Response as FastAPIResponse
+from fastapi.responses import Response as FastAPIResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -2183,6 +2183,18 @@ async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None
         "power_limit_w": 450,
         "note": "Run `python scripts/productify_agent.py` on your machine to auto-detect your physical GPU."
     }
+
+
+@api.get("/agent.py")
+async def download_agent_script():
+    agent_path = os.path.join(ROOT_DIR, "scripts", "productify_agent.py")
+    if not os.path.exists(agent_path):
+        agent_path = os.path.join(ROOT_DIR, "..", "scripts", "productify_agent.py")
+    if os.path.exists(agent_path):
+        with open(agent_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return PlainTextResponse(content, media_type="text/x-python")
+    raise HTTPException(404, "Agent script not found")
 
 
 # ============== SEED ==============
