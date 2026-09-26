@@ -62,6 +62,8 @@ export default function SellerDashboard() {
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [detectedSignature, setDetectedSignature] = useState(null);
   const [showHostGuide, setShowHostGuide] = useState(true);
+  const [showAgentModal, setShowAgentModal] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(false);
 
   const [myListings, setMyListings] = useState({ products: [], rentals: [] });
   const [busy, setBusy] = useState(false);
@@ -201,8 +203,29 @@ export default function SellerDashboard() {
 
   const handleAutoDetect = async () => {
     setAutoDetecting(true);
+    let realSpecs = null;
+
+    // 1. Probe local Productify Host Agent bridge (with 2-second timeout)
     try {
-      const res = await api.post("/host/auto-detect");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const probeRes = await fetch("http://127.0.0.1:48123/probe", {
+        signal: controller.signal,
+        headers: { "Accept": "application/json" }
+      });
+      clearTimeout(timeoutId);
+      if (probeRes.ok) {
+        realSpecs = await probeRes.json();
+      }
+    } catch {
+      // Agent not running or unreachable
+      realSpecs = null;
+    }
+
+    // 2. Send detected specs (or request catalog fallback) to backend
+    try {
+      const payload = realSpecs ? { real_specs: realSpecs } : {};
+      const res = await api.post("/host/auto-detect", payload);
       const specs = res.data.specs;
       setRGpu(specs.gpu);
       setRVram(specs.vram);
@@ -214,7 +237,14 @@ export default function SellerDashboard() {
         setRImage("https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=900&auto=format&fit=crop");
       }
       setDetectedSignature(res.data);
-      toast.success("Hardware signature detected and auto-filled!");
+
+      if (res.data.real_hardware) {
+        toast.success(`⚡ Real hardware detected: ${specs.gpu} (${specs.vram})!`);
+        setShowAgentModal(false);
+      } else {
+        toast.info("Host Agent not active. Demo signature applied.");
+        setShowAgentModal(true);
+      }
     } catch (err) {
       toast.error("Auto-detect failed. Please check connection.");
     } finally {
@@ -725,9 +755,9 @@ export default function SellerDashboard() {
                 {/* Hardware Auto-Detection Tool */}
                 <div
                   style={{
-                    background: detectedSignature ? "#f0fdf4" : "#16181a",
-                    color: detectedSignature ? "#166534" : "#e5e7eb",
-                    border: `1px solid ${detectedSignature ? "#86efac" : "#2d3135"}`,
+                    background: detectedSignature ? (detectedSignature.real_hardware ? "#f0fdf4" : "#fefce8") : "#16181a",
+                    color: detectedSignature ? (detectedSignature.real_hardware ? "#166534" : "#854d0e") : "#e5e7eb",
+                    border: `1px solid ${detectedSignature ? (detectedSignature.real_hardware ? "#86efac" : "#fef08a") : "#2d3135"}`,
                     borderRadius: "12px",
                     padding: "20px 24px",
                     marginBottom: "26px",
@@ -735,16 +765,16 @@ export default function SellerDashboard() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px" }}>
                     <div>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.72rem", fontFamily: "var(--font-mono, monospace)", color: detectedSignature ? "#15803d" : "#a3e635", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
-                        <Zap size={13} /> {detectedSignature ? "HARDWARE SIGNATURE VERIFIED" : "HARDWARE AUTO-PROBE"}
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.72rem", fontFamily: "var(--font-mono, monospace)", color: detectedSignature ? (detectedSignature.real_hardware ? "#15803d" : "#a16207") : "#a3e635", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                        <Zap size={13} /> {detectedSignature ? (detectedSignature.real_hardware ? "⚡ REAL PHYSICAL HARDWARE VERIFIED" : "DEMO SIGNATURE APPLIED (AGENT OFFLINE)") : "HARDWARE AUTO-PROBE"}
                       </div>
-                      <h4 style={{ margin: "4px 0 2px", fontSize: "1.05rem", fontWeight: 700, color: detectedSignature ? "#166534" : "#ffffff" }}>
+                      <h4 style={{ margin: "4px 0 2px", fontSize: "1.05rem", fontWeight: 700, color: detectedSignature ? (detectedSignature.real_hardware ? "#166534" : "#854d0e") : "#ffffff" }}>
                         {detectedSignature ? `✓ Detected: ${detectedSignature.specs.gpu}` : "Auto-Detect Your Machine Hardware"}
                       </h4>
-                      <p style={{ margin: 0, fontSize: "0.8rem", color: detectedSignature ? "#15803d" : "#9ca3af", maxWidth: "580px" }}>
+                      <p style={{ margin: 0, fontSize: "0.8rem", color: detectedSignature ? (detectedSignature.real_hardware ? "#15803d" : "#a16207") : "#9ca3af", maxWidth: "580px" }}>
                         {detectedSignature
-                          ? `${detectedSignature.specs.vram} VRAM · ${detectedSignature.specs.cpu} · Verified signature: ${detectedSignature.hardware_signature}`
-                          : "Avoid manual typos. Click below to probe your local GPU, VRAM, and specs via Productify's hypervisor probe."}
+                          ? `${detectedSignature.specs.vram} VRAM · ${detectedSignature.specs.cpu} · Token: ${detectedSignature.hardware_signature}`
+                          : "Auto-probe your physical GPU, VRAM, and specs via the Productify Host Agent bridge on 127.0.0.1:48123."}
                       </p>
                     </div>
 
@@ -757,7 +787,7 @@ export default function SellerDashboard() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "6px",
-                        background: detectedSignature ? "#16a34a" : "var(--lime, #c8f04c)",
+                        background: detectedSignature ? (detectedSignature.real_hardware ? "#16a34a" : "#ca8a04") : "var(--lime, #c8f04c)",
                         color: detectedSignature ? "#ffffff" : "var(--ink, #101112)",
                         border: "none",
                         fontSize: "0.85rem",
@@ -780,6 +810,41 @@ export default function SellerDashboard() {
                       )}
                     </button>
                   </div>
+
+                  {/* Agent Help Banner */}
+                  {showAgentModal && (
+                    <div style={{ marginTop: "16px", padding: "14px 18px", background: "#1f2937", border: "1px solid #374151", borderRadius: "10px", color: "#f3f4f6" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "0.85rem", color: "#60a5fa" }}>
+                          <Terminal size={15} /> To Auto-Detect Your Real Physical GPU & Specs:
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAgentModal(false)}
+                          style={{ background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "0.78rem" }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                      <p style={{ margin: "0 0 10px", fontSize: "0.78rem", color: "#d1d5db", lineHeight: 1.5 }}>
+                        Browsers cannot query physical GPUs directly. Start the lightweight Productify Host Agent on your machine, then click <b>Re-probe Hardware</b>:
+                      </p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#111827", padding: "8px 12px", borderRadius: "6px", border: "1px solid #374151", fontFamily: "var(--font-mono, monospace)", fontSize: "0.8rem" }}>
+                        <span style={{ color: "#34d399", flex: 1, overflowX: "auto" }}>py scripts/productify_agent.py</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText("py scripts/productify_agent.py");
+                            setCopiedCmd(true);
+                            setTimeout(() => setCopiedCmd(false), 2000);
+                          }}
+                          style={{ background: "#374151", border: "none", color: "#ffffff", padding: "4px 8px", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                        >
+                          {copiedCmd ? <Check size={12} color="#34d399" /> : <Copy size={12} />} {copiedCmd ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <form className="dashboard-form" onSubmit={submitRental} style={{ maxWidth: 680 }}>
