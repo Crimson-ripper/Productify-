@@ -63,7 +63,6 @@ export default function SellerDashboard() {
   const [detectedSignature, setDetectedSignature] = useState(null);
   const [showHostGuide, setShowHostGuide] = useState(true);
   const [showAgentModal, setShowAgentModal] = useState(false);
-  const [copiedCmd, setCopiedCmd] = useState(false);
 
   const [myListings, setMyListings] = useState({ products: [], rentals: [] });
   const [busy, setBusy] = useState(false);
