@@ -161,40 +161,70 @@ def probe_real_hardware():
     return hw
 
 
+CACHED_HW = None
+LAST_PROBE_TIME = 0
+
+def get_hardware_cached(force_refresh=False):
+    global CACHED_HW, LAST_PROBE_TIME
+    now = time.time()
+    if force_refresh or CACHED_HW is None or (now - LAST_PROBE_TIME > 60):
+        CACHED_HW = probe_real_hardware()
+        LAST_PROBE_TIME = now
+    return CACHED_HW
+
+
 class ProductifyProbeHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Clean terminal logging
         sys.stdout.write(f"[{time.strftime('%H:%M:%S')}] {args[0]} - {args[1]}\n")
         sys.stdout.flush()
 
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
+
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        self.end_headers()
-
-    def do_GET(self):
-        if self.path == "/probe" or self.path.startswith("/probe?"):
-            data = probe_real_hardware()
-            res_bytes = json.dumps(data, indent=2).encode("utf-8")
-
+        try:
             self.send_response(200)
-            self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header("Connection", "close")
             self.end_headers()
-            self.wfile.write(res_bytes)
-        elif self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(b'{"status":"ok","agent":"productify-host-v1"}')
-        else:
-            self.send_response(404)
-            self.end_headers()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
+
+    def do_GET(self):
+        try:
+            if self.path == "/probe" or self.path.startswith("/probe?"):
+                data = get_hardware_cached()
+                res_bytes = json.dumps(data, indent=2).encode("utf-8")
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(res_bytes)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(res_bytes)
+            elif self.path == "/health":
+                res_bytes = b'{"status":"ok","agent":"productify-host-v1"}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(res_bytes)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(res_bytes)
+            else:
+                self.send_response(404)
+                self.end_headers()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
 
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
@@ -206,7 +236,7 @@ def run_agent():
     print(" ⚡ PRODUCTIFY HOST NODE AGENT")
     print("=" * 65)
     print("Probing local system hardware...")
-    hw = probe_real_hardware()
+    hw = get_hardware_cached(force_refresh=True)
     print(f" ✓ GPU Detected:    {hw['gpu']} ({hw['vram']})")
     print(f" ✓ Driver Version: {hw.get('driver_version') or 'N/A'}")
     print(f" ✓ CPU:            {hw['cpu']} ({hw['cpu_count']} cores)")
