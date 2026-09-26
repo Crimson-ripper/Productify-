@@ -189,10 +189,104 @@ class ProductifyProbeHandler(BaseHTTPRequestHandler):
         try:
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
             self.send_header("Connection", "close")
             self.end_headers()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
+
+    def do_POST(self):
+        try:
+            if self.path == "/exec" or self.path.startswith("/exec?"):
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+                try:
+                    payload = json.loads(body)
+                except Exception:
+                    payload = {}
+
+                command = (payload.get("command") or "").strip()
+                code = (payload.get("python_code") or payload.get("code") or "").strip()
+
+                start_time = time.time()
+                stdout = ""
+                stderr = ""
+                exit_code = 0
+
+                if code or command.startswith("python"):
+                    script_code = code if code else command[6:].strip()
+                    if script_code.startswith("-c"):
+                        script_code = script_code[2:].strip().strip('"').strip("'")
+                    try:
+                        res = subprocess.run(
+                            [sys.executable, "-c", script_code],
+                            capture_output=True,
+                            text=True,
+                            timeout=15,
+                        )
+                        stdout = res.stdout
+                        stderr = res.stderr
+                        exit_code = res.returncode
+                    except subprocess.TimeoutExpired:
+                        stderr = "Execution timed out (15-second safety limit reached)"
+                        exit_code = 124
+                    except Exception as e:
+                        stderr = f"Execution error: {str(e)}"
+                        exit_code = 1
+                elif command.startswith("nvidia-smi"):
+                    try:
+                        res = subprocess.run(
+                            command,
+                            shell=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
+                        stdout = res.stdout
+                        stderr = res.stderr
+                        exit_code = res.returncode
+                    except Exception:
+                        hw = get_hardware_cached()
+                        stdout = f"{hw.get('gpu')}, Driver: {hw.get('driver_version') or 'N/A'}, Temp: {hw.get('temperature_c') or 'N/A'}C\n"
+                        exit_code = 0
+                else:
+                    try:
+                        res = subprocess.run(
+                            command,
+                            shell=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
+                        stdout = res.stdout
+                        stderr = res.stderr
+                        exit_code = res.returncode
+                    except Exception as e:
+                        stderr = str(e)
+                        exit_code = 1
+
+                duration = round(time.time() - start_time, 3)
+                resp_data = {
+                    "ok": True,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exit_code": exit_code,
+                    "duration_sec": duration,
+                }
+                res_bytes = json.dumps(resp_data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(res_bytes)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(res_bytes)
+            else:
+                self.send_response(404)
+                self.end_headers()
         except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
             pass
 
@@ -206,7 +300,7 @@ class ProductifyProbeHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(res_bytes)))
                 self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
                 self.send_header("Connection", "close")
                 self.end_headers()
@@ -217,6 +311,7 @@ class ProductifyProbeHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(res_bytes)))
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(res_bytes)
