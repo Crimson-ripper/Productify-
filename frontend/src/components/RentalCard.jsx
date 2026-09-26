@@ -1,11 +1,8 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Cpu, ShieldCheck } from "lucide-react";
-import { useCart } from "@/contexts/CartContext";
+import { ArrowRight, Cpu, ShieldCheck, Zap } from "lucide-react";
 import { money } from "@/lib/api";
-import { toast } from "sonner";
 
 export default function RentalCard({ r }) {
-  const { add } = useCart();
   return (
     <article className="rental-card" data-testid={`rental-card-${r.id}`}>
       <Link to={`/rental/${r.id}`}><img src={r.image} alt={r.title} loading="lazy" /></Link>
@@ -19,11 +16,14 @@ export default function RentalCard({ r }) {
         </div>
         <div className="rental-bottom">
           <strong>{money(r.price)} <small>/ hour</small></strong>
-          <button
-            onClick={() => { add(r, "rental"); toast.success(`${r.title} added to bag`); }}
+          <Link
+            to={`/rentals/reserve/${r.id}`}
             className="dark-button"
             data-testid={`rent-node-${r.id}-button`}
-          >Rent node <ArrowRight size={15} /></button>
+            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <Zap size={14} /> Reserve & Launch <ArrowRight size={14} />
+          </Link>
         </div>
       </div>
     </article>
