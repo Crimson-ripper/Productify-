@@ -204,10 +204,10 @@ export default function SellerDashboard() {
     setAutoDetecting(true);
     let realSpecs = null;
 
-    // 1. Probe local Productify Host Agent bridge (with 2-second timeout)
+    // 1. Probe local Productify Host Agent bridge (with 4-second timeout)
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const probeRes = await fetch("http://127.0.0.1:48123/probe", {
         signal: controller.signal,
         headers: { "Accept": "application/json" }
