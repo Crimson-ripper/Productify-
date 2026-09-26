@@ -27,6 +27,7 @@ import SellerDashboard from "@/pages/SellerDashboard";
 import SellerOnboarding from "@/pages/SellerOnboarding";
 import MyInstances from "@/pages/MyInstances";
 import InstanceDetail from "@/pages/InstanceDetail";
+import GpuRentalSpace from "@/pages/GpuRentalSpace";
 import NotFound from "@/pages/NotFound";
 import PrivacyPolicy from "@/pages/policies/PrivacyPolicy";
 import Terms from "@/pages/policies/Terms";
@@ -49,6 +50,8 @@ function AppRouter() {
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/rentals" element={<Rentals />} />
+          <Route path="/rentals/reserve/:id" element={<ProtectedRoute><GpuRentalSpace /></ProtectedRoute>} />
+          <Route path="/rental/reserve/:id" element={<ProtectedRoute><GpuRentalSpace /></ProtectedRoute>} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/rental/:id" element={<RentalDetail />} />
           <Route path="/sell" element={<Sell />} />
