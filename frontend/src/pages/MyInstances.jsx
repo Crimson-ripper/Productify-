@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Zap,
@@ -19,7 +19,7 @@ export default function MyInstances() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // "all" | "running" | "paused" | "terminated"
 
-  const fetchInstances = async () => {
+  const fetchInstances = useCallback(async () => {
     try {
       const res = await api.get("/instances");
       setInstances(res.data);
@@ -28,7 +28,7 @@ export default function MyInstances() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchInstances();
@@ -36,7 +36,7 @@ export default function MyInstances() {
       fetchInstances();
     }, 12000);
     return () => clearInterval(timer);
-  }, []);
+  }, [fetchInstances]);
 
   const handleAction = async (e, instId, action) => {
     e.preventDefault();
