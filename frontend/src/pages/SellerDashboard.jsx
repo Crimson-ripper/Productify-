@@ -812,10 +812,10 @@ export default function SellerDashboard() {
 
                   {/* Agent Help Banner */}
                   {showAgentModal && (
-                    <div style={{ marginTop: "16px", padding: "14px 18px", background: "#1f2937", border: "1px solid #374151", borderRadius: "10px", color: "#f3f4f6" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "0.85rem", color: "#60a5fa" }}>
-                          <Terminal size={15} /> To Auto-Detect Your Real Physical GPU & Specs:
+                    <div style={{ marginTop: "16px", padding: "16px 20px", background: "#1f2937", border: "1px solid #374151", borderRadius: "10px", color: "#f3f4f6" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "0.9rem", color: "#60a5fa" }}>
+                          <Terminal size={16} /> How to Detect Your Real Physical GPU & Specs:
                         </div>
                         <button
                           type="button"
@@ -825,21 +825,80 @@ export default function SellerDashboard() {
                           Dismiss
                         </button>
                       </div>
-                      <p style={{ margin: "0 0 10px", fontSize: "0.78rem", color: "#d1d5db", lineHeight: 1.5 }}>
-                        Browsers cannot query physical GPUs directly. Start the lightweight Productify Host Agent on your machine, then click <b>Re-probe Hardware</b>:
+                      <p style={{ margin: "0 0 12px", fontSize: "0.8rem", color: "#d1d5db", lineHeight: 1.5 }}>
+                        Browsers run in a security sandbox and cannot probe physical GPUs directly. Choose your preferred way to start the local hardware bridge on your machine:
                       </p>
+
+                      {/* Options: 1-Click Downloads (Channel B & C) */}
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
+                        <a
+                          href="/productify-agent.bat"
+                          download="productify-agent.bat"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            background: "var(--lime, #c8f04c)",
+                            color: "var(--ink, #101112)",
+                            fontWeight: 700,
+                            fontSize: "0.8rem",
+                            padding: "8px 14px",
+                            borderRadius: "8px",
+                            textDecoration: "none"
+                          }}
+                        >
+                          ⬇ Windows 1-Click App (.bat)
+                        </a>
+
+                        <a
+                          href="/agent.py"
+                          download="productify_agent.py"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            background: "#374151",
+                            color: "#f9fafb",
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            padding: "8px 14px",
+                            borderRadius: "8px",
+                            textDecoration: "none",
+                            border: "1px solid #4b5563"
+                          }}
+                        >
+                          ⬇ Download Python Script (agent.py)
+                        </a>
+                      </div>
+
+                      {/* Option 2: 1-Line Terminal Command (Zero-Install) */}
+                      <div style={{ fontSize: "0.76rem", color: "#9ca3af", marginBottom: "6px" }}>
+                        Or run directly in PowerShell (Windows) or Terminal (Linux/Mac):
+                      </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#111827", padding: "8px 12px", borderRadius: "6px", border: "1px solid #374151", fontFamily: "var(--font-mono, monospace)", fontSize: "0.8rem" }}>
-                        <span style={{ color: "#34d399", flex: 1, overflowX: "auto" }}>py scripts/productify_agent.py</span>
+                        <span style={{ color: "#34d399", flex: 1, overflowX: "auto" }}>irm https://raw.githubusercontent.com/Crimson-ripper/Productify-/main/scripts/productify_agent.py | py -</span>
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText("py scripts/productify_agent.py");
+                            navigator.clipboard.writeText("irm https://raw.githubusercontent.com/Crimson-ripper/Productify-/main/scripts/productify_agent.py | py -");
                             setCopiedCmd(true);
                             setTimeout(() => setCopiedCmd(false), 2000);
                           }}
                           style={{ background: "#374151", border: "none", color: "#ffffff", padding: "4px 8px", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
                         >
                           {copiedCmd ? <Check size={12} color="#34d399" /> : <Copy size={12} />} {copiedCmd ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={handleAutoDetect}
+                          disabled={autoDetecting}
+                          className="primary-button"
+                          style={{ padding: "6px 14px", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <Zap size={13} /> Check Again & Detect Real Hardware
                         </button>
                       </div>
                     </div>
