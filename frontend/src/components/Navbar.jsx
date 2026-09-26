@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, ShoppingBag, UserRound, Menu, LogOut, LayoutDashboard, ShieldCheck, Package } from "lucide-react";
+import { Search, ShoppingBag, UserRound, Menu, LogOut, LayoutDashboard, ShieldCheck, Package, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
@@ -54,6 +54,7 @@ export default function Navbar() {
               <div className="account-menu" data-testid="account-menu">
                 <Link to="/profile" data-testid="menu-profile-link"><UserRound size={14} /> Profile</Link>
                 <Link to="/orders" data-testid="menu-orders-link"><ShoppingBag size={14} /> Orders</Link>
+                <Link to="/instances" data-testid="menu-instances-link"><Zap size={14} /> Cloud Instances</Link>
                 {(user.role === "admin" || user.role === "sub-admin") ? (
                   <Link to="/dashboard" data-testid="menu-admin-link" style={{ color: "var(--violet, #6556e8)", fontWeight: 700 }}><ShieldCheck size={14} /> Admin Console</Link>
                 ) : (
@@ -81,6 +82,7 @@ export default function Navbar() {
             <>
               <Link to="/profile" onClick={() => setMenuOpen(false)}>Profile</Link>
               <Link to="/orders" onClick={() => setMenuOpen(false)}>Orders</Link>
+              <Link to="/instances" onClick={() => setMenuOpen(false)}>Cloud Instances</Link>
               {(user.role === "admin" || user.role === "sub-admin") ? (
                 <Link to="/dashboard" onClick={() => setMenuOpen(false)} style={{ color: "var(--violet, #6556e8)", fontWeight: 700 }}>Admin Console</Link>
               ) : (

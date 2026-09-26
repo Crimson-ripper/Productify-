@@ -21,7 +21,10 @@ import {
   DollarSign,
   Check,
   Zap,
-  ExternalLink
+  ExternalLink,
+  Terminal,
+  Copy,
+  Server
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -104,6 +107,11 @@ export default function SellerDashboard() {
   const [reportsData, setReportsData] = useState(null);
   const [reportsLoading, setReportsLoading] = useState(false);
 
+  // GPU Host Console state
+  const [gpuTelemetry, setGpuTelemetry] = useState(null);
+  const [gpuLoading, setGpuLoading] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+
   // Pro Upgrade modal
   const [proModalOpen, setProModalOpen] = useState(false);
 
@@ -156,6 +164,16 @@ export default function SellerDashboard() {
       .then((r) => setReportsData(r.data))
       .catch(() => setReportsData({ listings: [], totals: {} }))
       .finally(() => setReportsLoading(false));
+  }, [tab]);
+
+  // Load GPU Host telemetry when on gpu_host tab
+  useEffect(() => {
+    if (tab !== "gpu_host") return;
+    setGpuLoading(true);
+    api.get("/seller/nodes/telemetry")
+      .then((r) => setGpuTelemetry(r.data))
+      .catch(() => setGpuTelemetry(null))
+      .finally(() => setGpuLoading(false));
   }, [tab]);
 
   // Product submission
@@ -349,6 +367,9 @@ export default function SellerDashboard() {
           </button>
           <button className={tab === "reports" ? "selected" : ""} onClick={() => setTab("reports")}>
             <Flag size={14} /> Listing Reports
+          </button>
+          <button className={tab === "gpu_host" ? "selected" : ""} onClick={() => setTab("gpu_host")}>
+            <Cpu size={14} /> GPU Host Node Console
           </button>
           <button className={tab === "pro" ? "selected" : ""} onClick={() => setTab("pro")}>
             <Sparkles size={14} color={isPro ? "#b45309" : "var(--violet)"} /> {isPro ? "Pro Benefits" : "Membership Tiers"}
@@ -1103,6 +1124,216 @@ export default function SellerDashboard() {
                 )}
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 6: GPU HOST NODE CONSOLE ===================== */}
+        {tab === "gpu_host" && (
+          <div>
+            {/* Host Overview Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Listed GPU Nodes</span>
+                  <Cpu size={16} />
+                </div>
+                <div style={{ font: "700 28px 'Space Grotesk', sans-serif" }}>
+                  {gpuTelemetry ? gpuTelemetry.nodes_count : myListings.rentals.length}
+                </div>
+                <span style={{ fontSize: "0.78rem", color: "#3c9563" }}>Hardware rigs registered</span>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Active Containers</span>
+                  <Zap size={16} color="#16a34a" />
+                </div>
+                <div style={{ font: "700 28px 'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: "10px" }}>
+                  {gpuTelemetry?.running_instances_count || 0}
+                  {(gpuTelemetry?.running_instances_count || 0) > 0 && (
+                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 8px #16a34a" }} />
+                  )}
+                </div>
+                <span style={{ fontSize: "0.78rem", color: "#666" }}>Running workloads right now</span>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Compute Hours Served</span>
+                  <Clock size={16} />
+                </div>
+                <div style={{ font: "700 28px 'Space Grotesk', sans-serif" }}>
+                  {gpuTelemetry?.total_compute_hours || 0} <small style={{ fontSize: "0.9rem", fontWeight: 400, color: "#888" }}>hrs</small>
+                </div>
+                <span style={{ fontSize: "0.78rem", color: "#666" }}>Accumulated container runtime</span>
+              </div>
+
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted, #747570)", fontSize: "0.82rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'DM Mono', monospace" }}>
+                  <span>Net Compute Earned</span>
+                  <DollarSign size={16} color="#16a34a" />
+                </div>
+                <div style={{ font: "700 28px 'Space Grotesk', sans-serif", color: "#16a34a" }}>
+                  {money(gpuTelemetry?.total_net_earned || 0)}
+                </div>
+                <span style={{ fontSize: "0.78rem", color: "#666" }}>After {isPro ? "0%" : isPlus ? "5%" : "10%"} platform fee</span>
+              </div>
+            </div>
+
+            {/* Host Worker Daemon CLI Box */}
+            <div
+              style={{
+                background: "#16181a",
+                color: "#e5e7eb",
+                borderRadius: "14px",
+                padding: "24px 28px",
+                marginBottom: "28px",
+                border: "1px solid #2d3135",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+                <div>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "#a3e635", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                    <Terminal size={14} /> PRODUCTIFY NODE WORKER AGENT
+                  </div>
+                  <h3 style={{ margin: "4px 0 2px", color: "#ffffff", fontSize: "1.2rem", fontWeight: 700 }}>
+                    Connect Your Physical / Cloud GPU Node
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "#9ca3af", maxWidth: "680px" }}>
+                    Run this command on your Ubuntu server or rig with NVIDIA drivers (535+). The worker daemon runs Docker container isolation, monitors VRAM/thermals, and automatically accepts hourly rental jobs.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cmd = gpuTelemetry?.install_command || "curl -sSL https://productifynow.com/agent/install.sh | sudo bash";
+                    navigator.clipboard.writeText(cmd);
+                    setCopiedCmd(true);
+                    toast.success("Worker install command copied!");
+                    setTimeout(() => setCopiedCmd(false), 2000);
+                  }}
+                  className="primary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--lime, #c8f04c)", color: "var(--ink, #101112)", fontSize: "0.82rem", padding: "8px 16px", border: "none", fontWeight: 700 }}
+                >
+                  {copiedCmd ? <Check size={14} /> : <Copy size={14} />} {copiedCmd ? "Copied" : "Copy Install Script"}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  background: "#0d0e0f",
+                  padding: "14px 18px",
+                  borderRadius: "8px",
+                  border: "1px solid #232629",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: "0.85rem",
+                  color: "#a3e635",
+                  wordBreak: "break-all",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                }}
+              >
+                <span>{gpuTelemetry?.install_command || "curl -sSL https://productifynow.com/agent/install.sh | sudo bash"}</span>
+              </div>
+            </div>
+
+            {/* Active Running Workloads Table */}
+            <div style={{ background: "#ffffff", borderRadius: "14px", border: "1px solid var(--line, #dedfd9)", padding: "24px", marginBottom: "28px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <div>
+                  <h3 style={{ margin: "0 0 4px", fontSize: "1.1rem", fontWeight: 700 }}>
+                    Active Container Workloads
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted, #666)" }}>
+                    Real-time container sessions currently executing on your GPU nodes
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGpuLoading(true);
+                    api.get("/seller/nodes/telemetry").then((r) => setGpuTelemetry(r.data)).finally(() => setGpuLoading(false));
+                  }}
+                  className="secondary-button"
+                  style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                >
+                  {gpuLoading ? "Refreshing..." : "Refresh Status"}
+                </button>
+              </div>
+
+              {!gpuTelemetry?.active_instances || gpuTelemetry.active_instances.length === 0 ? (
+                <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--muted, #888)", fontSize: "0.88rem" }}>
+                  <Server size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
+                  <div>No containers currently running on your nodes.</div>
+                  <div style={{ fontSize: "0.78rem", color: "#aaa", marginTop: "4px" }}>
+                    Your nodes are active in the catalog and will launch containers when rented.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--line, #dedfd9)", textAlign: "left", color: "var(--muted, #747570)", fontFamily: "'DM Mono', monospace", fontSize: "0.75rem", textTransform: "uppercase" }}>
+                        <th style={{ padding: "10px" }}>Instance / Workload</th>
+                        <th style={{ padding: "10px" }}>Renter</th>
+                        <th style={{ padding: "10px" }}>GPU Rig</th>
+                        <th style={{ padding: "10px" }}>Live Runtime</th>
+                        <th style={{ padding: "10px" }}>Accrued Net</th>
+                        <th style={{ padding: "10px" }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gpuTelemetry.active_instances.map((inst) => (
+                        <tr key={inst.id} style={{ borderBottom: "1px solid #f0f0eb" }}>
+                          <td style={{ padding: "12px 10px" }}>
+                            <div style={{ fontWeight: 700 }}>{inst.template_name}</div>
+                            <div style={{ fontSize: "0.75rem", color: "#888", fontFamily: "var(--font-mono, monospace)" }}>
+                              {inst.id} · Port {inst.web_port}
+                            </div>
+                          </td>
+                          <td style={{ padding: "12px 10px" }}>
+                            <div>{inst.renter_name}</div>
+                            <div style={{ fontSize: "0.75rem", color: "#888" }}>{inst.renter_email}</div>
+                          </td>
+                          <td style={{ padding: "12px 10px" }}>
+                            <b>{inst.gpu}</b>
+                            <div style={{ fontSize: "0.75rem", color: "#888" }}>{inst.rental_title}</div>
+                          </td>
+                          <td style={{ padding: "12px 10px", fontFamily: "var(--font-mono, monospace)" }}>
+                            {Math.floor((inst.live_runtime_seconds || 0) / 3600)}h {Math.floor(((inst.live_runtime_seconds || 0) % 3600) / 60)}m
+                          </td>
+                          <td style={{ padding: "12px 10px", fontWeight: 700, color: "#16a34a" }}>
+                            ${((inst.live_cost || 0) * (isPro ? 1.0 : isPlus ? 0.95 : 0.90)).toFixed(4)}
+                          </td>
+                          <td style={{ padding: "12px 10px" }}>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                padding: "2px 8px",
+                                borderRadius: "100px",
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                fontFamily: "var(--font-mono, monospace)",
+                                background: inst.status === "running" ? "#eefbf2" : "#fef8e7",
+                                color: inst.status === "running" ? "#16a34a" : "#d97706",
+                              }}
+                            >
+                              <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: inst.status === "running" ? "#16a34a" : "#d97706" }} />
+                              {inst.status.toUpperCase()}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
