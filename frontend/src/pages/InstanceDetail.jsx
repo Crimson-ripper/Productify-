@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   Cpu,
@@ -31,7 +31,7 @@ export default function InstanceDetail() {
   // Live timer & cost ticker state
   const [runtimeSeconds, setRuntimeSeconds] = useState(0);
 
-  const fetchInstance = async (isPoll = false) => {
+  const fetchInstance = useCallback(async (isPoll = false) => {
     try {
       const res = await api.get(`/instances/${id}`);
       setInstance(res.data);
@@ -43,7 +43,7 @@ export default function InstanceDetail() {
     } finally {
       if (!isPoll) setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchInstance(false);
@@ -51,7 +51,7 @@ export default function InstanceDetail() {
       fetchInstance(true);
     }, 10000);
     return () => clearInterval(interval);
-  }, [id]);
+  }, [fetchInstance]);
 
   // Second-by-second ticker increment
   useEffect(() => {
