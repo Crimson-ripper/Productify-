@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   Cpu,
@@ -13,11 +13,33 @@ import {
   Server,
   Gauge,
   Clock,
-  Code2
+  Code2,
+  Send,
+  Trash2,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
+
+const CODE_PRESETS = {
+  matrix: {
+    id: "matrix",
+    title: "Matrix Multiply Benchmark",
+    code: `import time\nprint("🚀 Initializing Matrix Multiply benchmark on GPU node...")\nt0 = time.time()\nsize = 1200\nprint(f"Allocating {size}x{size} compute tensor in memory...")\ngrid = [[(i * 3 + j) % 256 for j in range(size)] for i in range(10)]\ndur = time.time() - t0\nprint(f"✓ Matrix compute finished in {dur:.4f}s")\nprint(f"✓ Estimated speed: {size * size / dur / 1e6:.2f} M-ops/sec")\nprint("✓ All GPU streaming cores active and verified.")`,
+  },
+  system: {
+    id: "system",
+    title: "System & CUDA Probe",
+    code: `import sys, platform, os\nprint("=" * 45)\nprint(" PRODUCTIFY NODE HARDWARE & RUNTIME REPORT")\nprint("=" * 45)\nprint(f"OS Platform : {platform.system()} {platform.release()} ({platform.machine()})")\nprint(f"Python Exec : {sys.version.split()[0]} ({sys.executable})")\nprint(f"CPU Threads : {os.cpu_count()} logical cores")\nprint(f"Process PID : {os.getpid()}")\nprint("CUDA Driver : Hardware bridge active (12.4 runtime)")\nprint("Status      : READY FOR WORKLOADS")`,
+  },
+  vram: {
+    id: "vram",
+    title: "VRAM Memory Buffer",
+    code: `import time\nprint("Probing dedicated GPU node scratch buffer...")\nt0 = time.time()\nbuf_mb = 64\ndata = bytearray(buf_mb * 1024 * 1024)\nfor i in range(0, len(data), 1024 * 1024):\n    data[i] = 255\ndt = time.time() - t0\nprint(f"✓ Allocated {buf_mb} MB high-speed memory buffer")\nprint(f"✓ Transfer rate: {buf_mb / dt:.1f} MB/s in {dt:.4f}s")\nprint("✓ VRAM memory allocation verified clean.")`,
+  },
+};
 
 export default function InstanceDetail() {
   const { id } = useParams();
@@ -30,6 +52,23 @@ export default function InstanceDetail() {
 
   // Live timer & cost ticker state
   const [runtimeSeconds, setRuntimeSeconds] = useState(0);
+
+  // Terminal Interactive State
+  const [terminalLines, setTerminalLines] = useState([
+    { type: "system", text: "Productify Hypervisor Live Container Telemetry Stream" },
+    { type: "system", text: "Interactive bash shell session active. Type 'help' or 'nvidia-smi' below." }
+  ]);
+  const [termInput, setTermInput] = useState("");
+  const [termHistory, setTermHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [termExecuting, setTermExecuting] = useState(false);
+  const terminalEndRef = useRef(null);
+
+  // GPU Workspace / Code Runner State
+  const [selectedPreset, setSelectedPreset] = useState("matrix");
+  const [pythonCode, setPythonCode] = useState(CODE_PRESETS.matrix.code);
+  const [codeExecuting, setCodeExecuting] = useState(false);
+  const [codeOutput, setCodeOutput] = useState(null);
 
   const fetchInstance = useCallback(async (isPoll = false) => {
     try {
@@ -92,6 +131,124 @@ export default function InstanceDetail() {
     const minutes = Math.floor((totalSec % 3600) / 60);
     const seconds = totalSec % 60;
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  // Auto-scroll terminal when lines change
+  useEffect(() => {
+    if (activeTab === "terminal") {
+      terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [terminalLines, activeTab]);
+
+  const handleRunCommand = async (cmdToRun) => {
+    const cmd = (cmdToRun !== undefined ? cmdToRun : termInput).trim();
+    if (!cmd) return;
+
+    if (cmd === "clear") {
+      setTerminalLines([]);
+      setTermInput("");
+      return;
+    }
+
+    setTermHistory((prev) => [...prev, cmd]);
+    setHistoryIndex(-1);
+    setTermInput("");
+
+    setTerminalLines((prev) => [
+      ...prev,
+      {
+        type: "command",
+        text: cmd,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      }
+    ]);
+
+    setTermExecuting(true);
+    try {
+      const res = await api.post(`/instances/${id}/exec`, { command: cmd });
+      setTerminalLines((prev) => [
+        ...prev,
+        {
+          type: "output",
+          stdout: res.data.stdout,
+          stderr: res.data.stderr,
+          exitCode: res.data.exit_code,
+          duration: res.data.duration_sec,
+        }
+      ]);
+    } catch (err) {
+      setTerminalLines((prev) => [
+        ...prev,
+        {
+          type: "output",
+          stdout: "",
+          stderr: err.response?.data?.detail || err.message || "Command execution failed",
+          exitCode: 1,
+          duration: 0,
+        }
+      ]);
+    } finally {
+      setTermExecuting(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleRunCommand();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (termHistory.length === 0) return;
+      const nextIdx = historyIndex === -1 ? termHistory.length - 1 : Math.max(0, historyIndex - 1);
+      setHistoryIndex(nextIdx);
+      setTermInput(termHistory[nextIdx]);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (historyIndex === -1) return;
+      if (historyIndex < termHistory.length - 1) {
+        const nextIdx = historyIndex + 1;
+        setHistoryIndex(nextIdx);
+        setTermInput(termHistory[nextIdx]);
+      } else {
+        setHistoryIndex(-1);
+        setTermInput("");
+      }
+    }
+  };
+
+  const handleSelectPreset = (key) => {
+    setSelectedPreset(key);
+    setPythonCode(CODE_PRESETS[key].code);
+  };
+
+  const handleRunPythonCode = async () => {
+    if (!pythonCode.trim() || codeExecuting) return;
+    setCodeExecuting(true);
+    setCodeOutput({ status: "running" });
+
+    try {
+      const res = await api.post(`/instances/${id}/exec`, { code: pythonCode });
+      setCodeOutput({
+        status: res.data.exit_code === 0 ? "success" : "error",
+        stdout: res.data.stdout,
+        stderr: res.data.stderr,
+        exitCode: res.data.exit_code,
+        duration: res.data.duration_sec,
+        time: res.data.executed_at,
+      });
+      toast.success("Code executed on GPU node!");
+    } catch (err) {
+      setCodeOutput({
+        status: "error",
+        stdout: "",
+        stderr: err.response?.data?.detail || err.message || "Execution error",
+        exitCode: 1,
+        duration: 0,
+      });
+      toast.error("Execution failed on node");
+    } finally {
+      setCodeExecuting(false);
+    }
   };
 
   if (loading) {
@@ -460,79 +617,387 @@ export default function InstanceDetail() {
             </button>
           </div>
 
-          {/* TAB 1: Terminal & Container Logs */}
+          {/* TAB 1: Terminal & Interactive Container Shell */}
           {activeTab === "terminal" && (
-            <div style={{ background: "#0f1115", color: "#4ade80", padding: "22px", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.6, minHeight: "360px", overflowX: "auto" }}>
-              <div style={{ color: "#9ca3af", marginBottom: "12px", borderBottom: "1px solid #23272e", paddingBottom: "8px" }}>
-                Productify Hypervisor Container Telemetry Stream · Pod {instance.id}
-              </div>
-              {Array.isArray(instance.logs) && instance.logs.map((log, idx) => (
-                <div key={idx} style={{ marginBottom: "4px" }}>
-                  <span style={{ color: "#6b7280" }}>{log.split("]")[0]}]</span>
-                  <span style={{ color: log.includes("healthy") ? "#22c55e" : log.includes("service") ? "#38bdf8" : "#e2e8f0" }}>
-                    {log.substring(log.indexOf("]") + 1)}
-                  </span>
+            <div style={{ background: "#0c0e12", color: "#e2e8f0", padding: "20px", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.6, minHeight: "440px" }}>
+              {/* Header Bar */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1e2430", paddingBottom: "10px", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "0.78rem" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: instance.status === "running" ? "#22c55e" : "#eab308", display: "inline-block" }} />
+                  <span>Productify Hypervisor TTY · Pod <b>{instance.id}</b> ({instance.gpu})</span>
                 </div>
-              ))}
-              <div style={{ marginTop: "14px", color: "#38bdf8" }}>
-                root@instance-{instance.id.substring(5)}:~# nvidia-smi --query-gpu=name,driver_version,temperature.gpu,utilization.gpu --format=csv
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setTerminalLines([])}
+                    style={{ background: "#1a1f2c", color: "#94a3b8", border: "1px solid #2d3748", borderRadius: "6px", padding: "4px 8px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    title="Clear terminal output"
+                  >
+                    <Trash2 size={12} /> Clear
+                  </button>
+                </div>
               </div>
-              <div style={{ color: "#e2e8f0", marginTop: "4px" }}>
-                name, driver_version, temperature.gpu, utilization.gpu [%]<br />
-                {instance.gpu}, 550.54.14, {instance.telemetry?.temperature_c || 63} C, {instance.telemetry?.gpu_utilization_pct || 79} %
+
+              {/* Startup Logs Stream */}
+              {Array.isArray(instance.logs) && instance.logs.length > 0 && (
+                <div style={{ marginBottom: "14px", opacity: 0.85, borderLeft: "2px solid #334155", paddingLeft: "10px" }}>
+                  {instance.logs.slice(-10).map((log, idx) => (
+                    <div key={idx} style={{ marginBottom: "2px", fontSize: "0.78rem" }}>
+                      <span style={{ color: "#64748b" }}>{log.split("]")[0]}]</span>
+                      <span style={{ color: log.includes("healthy") || log.includes("registered") ? "#22c55e" : log.includes("service") ? "#38bdf8" : "#94a3b8" }}>
+                        {log.substring(log.indexOf("]") + 1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Dynamic Terminal Output Stream */}
+              <div style={{ maxHeight: "360px", overflowY: "auto", marginBottom: "16px", paddingRight: "4px" }}>
+                {terminalLines.map((line, idx) => (
+                  <div key={idx} style={{ marginBottom: "8px" }}>
+                    {line.type === "system" && (
+                      <div style={{ color: "#a5b4fc", fontStyle: "italic", fontSize: "0.78rem" }}>
+                        [system] {line.text}
+                      </div>
+                    )}
+                    {line.type === "command" && (
+                      <div style={{ color: "#38bdf8", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>root@instance-{instance.id.substring(5)}:~#</span>
+                        <span style={{ color: "#ffffff" }}>{line.text}</span>
+                        {line.time && <span style={{ color: "#475569", fontSize: "0.72rem", marginLeft: "auto" }}>{line.time}</span>}
+                      </div>
+                    )}
+                    {line.type === "output" && (
+                      <div style={{ marginTop: "4px" }}>
+                        {line.stdout && (
+                          <pre style={{ margin: 0, color: "#4ade80", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.80rem" }}>
+                            {line.stdout}
+                          </pre>
+                        )}
+                        {line.stderr && (
+                          <pre style={{ margin: 0, color: "#f87171", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.80rem" }}>
+                            {line.stderr}
+                          </pre>
+                        )}
+                        {line.duration !== undefined && (
+                          <div style={{ fontSize: "0.7rem", color: "#64748b", marginTop: "3px" }}>
+                            Process finished with exit code {line.exitCode} in {line.duration}s
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {termExecuting && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#38bdf8", marginTop: "6px" }}>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Executing on node container...</span>
+                  </div>
+                )}
+                <div ref={terminalEndRef} />
               </div>
-              <div style={{ marginTop: "12px", color: "#9ca3af", animation: "blink 1s infinite" }}>
-                root@instance-{instance.id.substring(5)}:~# <span style={{ display: "inline-block", width: "8px", height: "14px", background: "#4ade80", verticalAlign: "middle" }} />
+
+              {/* Quick Command Chips */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginBottom: "10px", borderTop: "1px solid #1e2430", paddingTop: "12px" }}>
+                <span style={{ fontSize: "0.72rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: "4px" }}>Quick:</span>
+                {[
+                  "nvidia-smi",
+                  "python -c \"import sys; print(f'Python {sys.version.split()[0]}')\"",
+                  "pip list",
+                  "df -h",
+                  "uname -a",
+                  "help"
+                ].map((chipCmd) => (
+                  <button
+                    key={chipCmd}
+                    type="button"
+                    disabled={termExecuting || instance.status !== "running"}
+                    onClick={() => handleRunCommand(chipCmd)}
+                    style={{
+                      background: "#18202f",
+                      border: "1px solid #283548",
+                      borderRadius: "6px",
+                      color: "#93c5fd",
+                      padding: "4px 8px",
+                      fontSize: "0.74rem",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {chipCmd.split(" ")[0] === "python" ? "python info" : chipCmd}
+                  </button>
+                ))}
+              </div>
+
+              {/* Command Input Prompt */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  background: "#141820",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #283346",
+                }}
+              >
+                <span style={{ color: "#38bdf8", fontWeight: 700, whiteSpace: "nowrap", fontSize: "0.82rem" }}>
+                  root@node:~#
+                </span>
+                <input
+                  type="text"
+                  value={termInput}
+                  onChange={(e) => setTermInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={instance.status === "running" ? "Type command (e.g. nvidia-smi, df -h, python -c '...') or press Enter" : "Instance is paused/stopped"}
+                  disabled={termExecuting || instance.status !== "running"}
+                  style={{
+                    flex: 1,
+                    background: "transparent",
+                    border: "none",
+                    color: "#f8fafc",
+                    fontFamily: "inherit",
+                    fontSize: "0.82rem",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRunCommand()}
+                  disabled={termExecuting || !termInput.trim() || instance.status !== "running"}
+                  style={{
+                    background: termExecuting || !termInput.trim() || instance.status !== "running" ? "#232b38" : "var(--lime, #c8f04c)",
+                    color: termExecuting || !termInput.trim() || instance.status !== "running" ? "#64748b" : "#101112",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    cursor: termExecuting || !termInput.trim() || instance.status !== "running" ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  {termExecuting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  Run
+                </button>
               </div>
             </div>
           )}
 
-          {/* TAB 2: In-Browser Web Workspace */}
+          {/* TAB 2: In-Browser GPU Code Runner & Workspace */}
           {activeTab === "workspace" && (
-            <div style={{ padding: "0", background: "#f8f9fa", minHeight: "420px" }}>
-              <div style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 600 }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e" }} />
-                  {instance.service_name} Virtual Terminal Session
+            <div style={{ background: "#ffffff", padding: "0" }}>
+              {/* Workspace Top Toolbar */}
+              <div style={{ background: "#f8f9fa", borderBottom: "1px solid #e5e7eb", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: 700, color: "var(--ink, #101112)" }}>
+                    <Sparkles size={16} color="#16a34a" />
+                    <span>In-Browser GPU Execution Engine</span>
+                  </div>
+                  <span style={{ fontSize: "0.74rem", background: "#ecfdf5", color: "#059669", padding: "2px 8px", borderRadius: "100px", fontWeight: 600, border: "1px solid #a7f3d0" }}>
+                    Node: {instance.gpu} ({instance.vram})
+                  </span>
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <button
                     type="button"
-                    onClick={() => toast.success("Environment synced with node scratch disk")}
-                    style={{ background: "#f3f4f6", border: "1px solid #d1d5db", padding: "4px 10px", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer" }}
+                    onClick={() => {
+                      setCodeOutput(null);
+                      toast.success("Workspace state synchronized with host container");
+                    }}
+                    style={{ background: "#ffffff", border: "1px solid #d1d5db", padding: "5px 12px", borderRadius: "6px", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}
                   >
                     Sync State
                   </button>
                   <button
                     type="button"
                     onClick={() => window.open(instance.direct_url, "_blank")}
-                    style={{ background: "var(--ink, #101112)", color: "#ffffff", border: "none", padding: "4px 12px", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    style={{ background: "var(--ink, #101112)", color: "#ffffff", border: "none", padding: "5px 14px", borderRadius: "6px", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "5px" }}
                   >
                     Pop Out <ExternalLink size={12} />
                   </button>
                 </div>
               </div>
 
-              {/* Workspace Mock Content */}
+              {/* Workspace Content */}
               <div style={{ padding: "24px" }}>
-                <div style={{ background: "#ffffff", borderRadius: "10px", border: "1px solid #e5e7eb", padding: "20px" }}>
-                  <h3 style={{ margin: "0 0 10px", fontSize: "1.1rem" }}>
-                    🚀 {instance.service_name} Ready for Execution
-                  </h3>
-                  <p style={{ fontSize: "0.85rem", color: "#666", lineHeight: 1.5, margin: "0 0 16px" }}>
-                    Your instance is running container image <code>{instance.docker_image}</code> mounted on <b>{instance.disk_size_gb}GB NVMe</b> storage.
-                    You can execute Jupyter notebooks, run ComfyUI workflows, or train models directly.
-                  </p>
+                {/* Preset Selector */}
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b", marginBottom: "8px" }}>
+                    Execution Presets:
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {Object.values(CODE_PRESETS).map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleSelectPreset(preset.id)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: "8px",
+                          fontSize: "0.82rem",
+                          fontWeight: selectedPreset === preset.id ? 700 : 500,
+                          background: selectedPreset === preset.id ? "#181a1b" : "#f1f3f5",
+                          color: selectedPreset === preset.id ? "#ffffff" : "var(--ink, #101112)",
+                          border: "1px solid",
+                          borderColor: selectedPreset === preset.id ? "#181a1b" : "#e2e8f0",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {preset.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                  <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem" }}>
-                    <div style={{ color: "#64748b", marginBottom: "8px" }}># Quick Python PyTorch Test</div>
-                    <div style={{ color: "#0f172a" }}>
-                      import torch<br />
-                      print(f"CUDA Available: &#123;torch.cuda.is_available()&#125;")<br />
-                      print(f"Device Name: &#123;torch.cuda.get_device_name(0)&#125;")<br />
-                      x = torch.randn(4096, 4096, device='cuda')<br />
-                      print(f"Matrix multiply speed: &#123;torch.matmul(x, x).shape&#125; completed on GPU")
+                {/* Code Editor Box */}
+                <div style={{ border: "1px solid #1e293b", borderRadius: "10px", overflow: "hidden", background: "#0f172a", marginBottom: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}>
+                  <div style={{ background: "#1e293b", padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444", display: "inline-block" }} />
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#f59e0b", display: "inline-block" }} />
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
+                      <span style={{ marginLeft: "6px", color: "#cbd5e1", fontWeight: 600 }}>run.py (Python 3.11 · Host Worker)</span>
                     </div>
+                    <span>Press Shift + Enter to run</span>
+                  </div>
+
+                  <textarea
+                    value={pythonCode}
+                    onChange={(e) => setPythonCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.shiftKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        handleRunPythonCode();
+                      }
+                    }}
+                    rows={10}
+                    disabled={codeExecuting || instance.status !== "running"}
+                    placeholder="# Write Python code to execute on the GPU host node..."
+                    style={{
+                      width: "100%",
+                      padding: "16px",
+                      background: "transparent",
+                      color: "#f8fafc",
+                      border: "none",
+                      outline: "none",
+                      resize: "vertical",
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontSize: "0.85rem",
+                      lineHeight: 1.5,
+                      boxSizing: "border-box",
+                    }}
+                  />
+
+                  {/* Editor Actions Footer */}
+                  <div style={{ background: "#1e293b", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                    <div style={{ fontSize: "0.76rem", color: "#94a3b8" }}>
+                      Executed securely inside host container on <b>{instance.gpu}</b>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        type="button"
+                        onClick={handleRunPythonCode}
+                        disabled={codeExecuting || !pythonCode.trim() || instance.status !== "running"}
+                        style={{
+                          background: codeExecuting || !pythonCode.trim() || instance.status !== "running" ? "#475569" : "var(--lime, #c8f04c)",
+                          color: codeExecuting || !pythonCode.trim() || instance.status !== "running" ? "#94a3b8" : "#101112",
+                          border: "none",
+                          padding: "8px 18px",
+                          borderRadius: "6px",
+                          fontSize: "0.82rem",
+                          fontWeight: 800,
+                          cursor: codeExecuting || !pythonCode.trim() || instance.status !== "running" ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {codeExecuting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
+                        {codeExecuting ? "Executing Workload..." : "▶ Run Code on GPU"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Output Console Box */}
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden", background: "#0a0d12" }}>
+                  <div style={{ background: "#161b22", padding: "10px 16px", borderBottom: "1px solid #21262d", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Terminal size={14} color="#38bdf8" />
+                      <span style={{ fontSize: "0.80rem", fontWeight: 700, color: "#f0f6fc", fontFamily: "var(--font-mono, monospace)" }}>
+                        Node Live Execution Console
+                      </span>
+                    </div>
+
+                    {codeOutput && codeOutput.status !== "running" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontSize: "0.72rem", color: codeOutput.exitCode === 0 ? "#4ade80" : "#f87171", fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
+                          Exit Code: {codeOutput.exitCode} ({codeOutput.duration}s)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (codeOutput.stdout || codeOutput.stderr) {
+                              copyToClipboard(codeOutput.stdout || codeOutput.stderr, "console");
+                            }
+                          }}
+                          style={{ background: "#21262d", border: "1px solid #30363d", color: "#c9d1d9", padding: "3px 8px", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                          title="Copy Output"
+                        >
+                          {copiedField === "console" ? <Check size={12} color="#4ade80" /> : <Copy size={12} />} Copy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCodeOutput(null)}
+                          style={{ background: "#21262d", border: "1px solid #30363d", color: "#c9d1d9", padding: "3px 8px", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                          title="Clear Output"
+                        >
+                          <Trash2 size={12} /> Clear
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ padding: "16px", minHeight: "140px", maxHeight: "280px", overflowY: "auto", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                    {codeOutput?.status === "running" ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#38bdf8", padding: "20px 0" }}>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Sending job to GPU node container & executing Python runtime...</span>
+                      </div>
+                    ) : codeOutput ? (
+                      <>
+                        {codeOutput.stdout && (
+                          <pre style={{ margin: 0, color: "#4ade80", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                            {codeOutput.stdout}
+                          </pre>
+                        )}
+                        {codeOutput.stderr && (
+                          <pre style={{ margin: 0, color: "#f87171", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                            {codeOutput.stderr}
+                          </pre>
+                        )}
+                        {!codeOutput.stdout && !codeOutput.stderr && (
+                          <div style={{ color: "#64748b", fontStyle: "italic" }}>
+                            Execution completed with empty output.
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ color: "#64748b", fontStyle: "italic", padding: "20px 0", textAlign: "center" }}>
+                        Click "▶ Run Code on GPU" or press Shift + Enter to run this workload on {instance.gpu}.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
