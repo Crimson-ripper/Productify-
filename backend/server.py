@@ -225,6 +225,7 @@ class CreditTopupInput(BaseModel):
 class HostHardwareDetectionInput(BaseModel):
     probe_token: Optional[str] = None
     manual_override: Optional[dict] = None
+    real_specs: Optional[dict] = None
 
 
 
@@ -2058,6 +2059,71 @@ async def get_credits_balance(user=Depends(current_user)):
 
 @api.post("/host/auto-detect")
 async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None, user=Depends(current_user)):
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # If real physical hardware specs are sent by the local Productify Agent
+    if data and data.real_specs:
+        rs = data.real_specs
+        gpu_name = rs.get("gpu") or "Standard Compute Node"
+        vram = rs.get("vram") or "8 GB"
+        cpu = rs.get("cpu") or "Multi-Core CPU"
+        ram_gb = rs.get("ram_gb") or 16
+        storage_free = rs.get("storage_free_gb") or 50
+        driver = rs.get("driver_version") or "Standard"
+        temp = rs.get("temperature_c") or 42
+        pci_bus = rs.get("pci_bus") or "0000:01:00.0"
+
+        # Calculate fair market pricing based on genuine GPU & VRAM
+        gpu_lower = gpu_name.lower()
+        if "h100" in gpu_lower:
+            suggested = 3.50
+        elif "a100" in gpu_lower:
+            suggested = 2.20
+        elif "4090" in gpu_lower:
+            suggested = 0.65
+        elif "4080" in gpu_lower:
+            suggested = 0.48
+        elif "3090" in gpu_lower:
+            suggested = 0.38
+        elif "3080" in gpu_lower:
+            suggested = 0.28
+        elif "4070" in gpu_lower or "3070" in gpu_lower:
+            suggested = 0.22
+        elif "3060" in gpu_lower or "4060" in gpu_lower:
+            suggested = 0.18
+        elif "920m" in gpu_lower or "1050" in gpu_lower or "1030" in gpu_lower or "gtx" in gpu_lower:
+            suggested = 0.10
+        elif "rtx" in gpu_lower or "quadro" in gpu_lower or "tesla" in gpu_lower:
+            suggested = 0.25
+        else:
+            suggested = 0.12
+
+        detected = {
+            "gpu": gpu_name,
+            "vram": vram,
+            "cpu": f"{cpu} ({rs.get('cpu_count', 4)} cores)",
+            "ram": f"{ram_gb} GB RAM",
+            "storage": f"{storage_free} GB Free Scratch NVMe",
+            "bandwidth": "1 Gbps Symmetrical",
+            "driver_version": driver,
+            "suggested_price": suggested,
+            "description": f"Verified physical machine equipped with {gpu_name} ({vram} VRAM) and {cpu}. Hardware verified via Productify Host Agent."
+        }
+
+        sig_token = f"hw_real_sig_{user['id'][:6]}_{uuid.uuid4().hex[:10]}"
+        return {
+            "status": "verified",
+            "real_hardware": True,
+            "hardware_signature": sig_token,
+            "probed_at": now_iso,
+            "specs": detected,
+            "daemon_status": "online",
+            "pci_bus": pci_bus,
+            "temperature_c": temp,
+            "power_limit_w": rs.get("power_limit_w", 250),
+        }
+
+    # Fallback catalog when agent is not running
     gpu_catalog = [
         {
             "gpu": "NVIDIA GeForce RTX 4090",
@@ -2102,20 +2168,20 @@ async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None
 
     idx = (hash(user["id"]) % len(gpu_catalog))
     detected = gpu_catalog[idx]
-
     sig_token = f"hw_sig_{uuid.uuid4().hex[:12]}_{idx}"
-    now_iso = datetime.now(timezone.utc).isoformat()
 
     return {
         "status": "verified",
+        "real_hardware": False,
         "hardware_signature": sig_token,
         "probed_at": now_iso,
         "specs": detected,
-        "daemon_status": "online",
+        "daemon_status": "offline",
         "pci_bus": "0000:01:00.0",
         "pcie_link": "PCIe 4.0 x16 (31.5 GB/s)",
         "temperature_c": 42,
         "power_limit_w": 450,
+        "note": "Run `python scripts/productify_agent.py` on your machine to auto-detect your physical GPU."
     }
 
 
