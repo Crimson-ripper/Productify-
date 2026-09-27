@@ -1,14 +1,14 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response as FastAPIResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
-import os, sys, time, subprocess, uuid, jwt, bcrypt, httpx, requests, logging, secrets, random
+import os, sys, time, subprocess, uuid, jwt, bcrypt, httpx, requests, logging, secrets, random, asyncio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("productify")
@@ -1756,6 +1756,151 @@ INSTANCE_TEMPLATES = [
 ]
 
 
+# ============== REVERSE TUNNEL MANAGER ==============
+class HostTunnelManager:
+    """Manages persistent reverse tunnels established by host agents across NAT/firewalls."""
+    def __init__(self):
+        # rental_id -> active WebSocket
+        self.active_tunnels: dict[str, WebSocket] = {}
+        # msg_id -> asyncio.Future
+        self.pending_rpcs: dict[str, asyncio.Future] = {}
+        # rental_id -> metadata dict (hardware, docker status, last_seen)
+        self.node_meta: dict[str, dict] = {}
+        # rental_id -> list of queued RPC messages for long-polling agents
+        self.poll_queues: dict[str, list] = {}
+
+    def register_ws(self, rental_id: str, ws: WebSocket, meta: dict = None):
+        self.active_tunnels[rental_id] = ws
+        if meta:
+            self.node_meta[rental_id] = {**meta, "last_seen": time.time(), "transport": "websocket"}
+        logger.info(f"Host reverse tunnel connected for rental node {rental_id}")
+
+    def unregister_ws(self, rental_id: str):
+        self.active_tunnels.pop(rental_id, None)
+        logger.info(f"Host reverse tunnel disconnected for rental node {rental_id}")
+
+    def is_connected(self, rental_id: str) -> bool:
+        if not rental_id:
+            return False
+        if rental_id in self.active_tunnels:
+            return True
+        meta = self.node_meta.get(rental_id)
+        if meta and (time.time() - meta.get("last_seen", 0) < 35):
+            return True
+        return False
+
+    async def send_rpc(self, rental_id: str, action: str, payload: dict, timeout: float = 25.0) -> dict:
+        msg_id = uuid.uuid4().hex
+        rpc_msg = {
+            "msg_id": msg_id,
+            "action": action,
+            **payload
+        }
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        self.pending_rpcs[msg_id] = fut
+
+        ws = self.active_tunnels.get(rental_id)
+        if ws:
+            try:
+                await ws.send_json(rpc_msg)
+            except Exception as e:
+                self.pending_rpcs.pop(msg_id, None)
+                raise HTTPException(502, f"Failed to send task to host tunnel: {str(e)}")
+        elif rental_id in self.poll_queues or (rental_id in self.node_meta and time.time() - self.node_meta[rental_id].get("last_seen", 0) < 35):
+            if rental_id not in self.poll_queues:
+                self.poll_queues[rental_id] = []
+            self.poll_queues[rental_id].append(rpc_msg)
+        else:
+            self.pending_rpcs.pop(msg_id, None)
+            raise HTTPException(503, "Host physical GPU node is currently offline (reverse tunnel not connected)")
+
+        try:
+            res = await asyncio.wait_for(fut, timeout=timeout)
+            return res
+        except asyncio.TimeoutError:
+            self.pending_rpcs.pop(msg_id, None)
+            raise HTTPException(504, f"Host node execution timed out ({timeout}s)")
+
+    def resolve_rpc(self, msg_id: str, result: dict):
+        fut = self.pending_rpcs.pop(msg_id, None)
+        if fut and not fut.done():
+            fut.set_result(result)
+
+
+host_tunnel_manager = HostTunnelManager()
+
+
+@app.websocket("/ws/tunnel/host/{rental_id}")
+async def host_tunnel_websocket(websocket: WebSocket, rental_id: str):
+    """Persistent bidirectional WebSocket reverse tunnel connecting host physical GPU nodes."""
+    await websocket.accept()
+    host_tunnel_manager.register_ws(rental_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "hello":
+                host_tunnel_manager.node_meta[rental_id] = {
+                    **data,
+                    "last_seen": time.time(),
+                    "transport": "websocket"
+                }
+                await websocket.send_json({"type": "hello_ack", "status": "connected", "rental_id": rental_id})
+            elif msg_type == "rpc_reply":
+                msg_id = data.get("msg_id")
+                if msg_id:
+                    host_tunnel_manager.resolve_rpc(msg_id, data)
+            elif msg_type == "ping":
+                if rental_id in host_tunnel_manager.node_meta:
+                    host_tunnel_manager.node_meta[rental_id]["last_seen"] = time.time()
+                await websocket.send_json({"type": "pong", "time": time.time()})
+    except WebSocketDisconnect:
+        host_tunnel_manager.unregister_ws(rental_id)
+    except Exception as e:
+        logger.warning(f"Tunnel exception for node {rental_id}: {e}")
+        host_tunnel_manager.unregister_ws(rental_id)
+
+
+@api.get("/tunnel/host/{rental_id}/status")
+async def host_tunnel_status(rental_id: str):
+    """Live connectivity status of the physical host reverse tunnel."""
+    connected = host_tunnel_manager.is_connected(rental_id)
+    meta = host_tunnel_manager.node_meta.get(rental_id, {})
+    return {
+        "ok": True,
+        "rental_id": rental_id,
+        "tunnel_connected": connected,
+        "transport": meta.get("transport", "none"),
+        "docker_available": meta.get("docker_available", False),
+        "docker_gpu_support": meta.get("docker_gpu_support", False),
+        "last_seen": meta.get("last_seen"),
+    }
+
+
+@api.post("/tunnel/host/{rental_id}/poll")
+async def host_tunnel_poll(rental_id: str, payload: dict):
+    """Long-poll fallback for host agents operating in environments where WebSockets are blocked."""
+    host_tunnel_manager.node_meta[rental_id] = {
+        **payload,
+        "last_seen": time.time(),
+        "transport": "long_poll"
+    }
+    queue = host_tunnel_manager.poll_queues.get(rental_id, [])
+    messages = list(queue)
+    host_tunnel_manager.poll_queues[rental_id] = []
+    return {"ok": True, "messages": messages}
+
+
+@api.post("/tunnel/host/{rental_id}/reply")
+async def host_tunnel_reply(rental_id: str, data: dict):
+    """Submit RPC execution results from host agent."""
+    msg_id = data.get("msg_id")
+    if msg_id:
+        host_tunnel_manager.resolve_rpc(msg_id, data)
+    return {"ok": True}
+
+
 @api.get("/instances/templates")
 async def list_instance_templates():
     return INSTANCE_TEMPLATES
@@ -1777,6 +1922,33 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
     ssh_port = random.randint(22000, 29999)
     host_ip = "142.132.189." + str(random.randint(12, 235))
     now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Check if seller's physical machine is connected via reverse tunnel
+    tunnel_connected = host_tunnel_manager.is_connected(rental["id"])
+    container_id = None
+    initial_logs = []
+
+    if tunnel_connected:
+        try:
+            pod_res = await host_tunnel_manager.send_rpc(
+                rental["id"],
+                action="deploy_pod",
+                payload={
+                    "instance_id": instance_id,
+                    "docker_image": template["docker_image"],
+                    "disk_size_gb": data.disk_size_gb,
+                    "ssh_public_key": data.ssh_public_key or "",
+                    "service_name": template["service_name"],
+                    "web_port": template["port"],
+                },
+                timeout=25.0
+            )
+            container_id = pod_res.get("container_id")
+            initial_logs.append(f"[{now_iso[:19]}] [tunnel] Successfully dispatched pod creation to host GPU node via reverse tunnel.")
+            initial_logs.append(f"[{now_iso[:19]}] [dockerd] Container {container_id or instance_id} allocated on physical GPU ({rental.get('gpu')}).")
+        except Exception as e:
+            logger.warning(f"Could not deploy pod via host tunnel immediately: {e}")
+            initial_logs.append(f"[{now_iso[:19]}] [tunnel] Physical node tunnel queued ({str(e)}). Container will attach upon agent sync.")
 
     doc = {
         "id": instance_id,
@@ -1811,6 +1983,9 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
         "cost_accumulated": 0.0,
         "ssh_public_key": data.ssh_public_key,
         "specs": rental.get("specs", {}),
+        "tunnel_connected": tunnel_connected,
+        "container_id": container_id,
+        "logs": initial_logs if initial_logs else None,
     }
 
     await db.instances.insert_one(doc)
@@ -1888,6 +2063,10 @@ async def get_instance(inst_id: str, user=Depends(current_user)):
         f"[{inst['created_at'][:19]}] [system] Container status healthy. Ready for user workload.",
     ]
 
+    rental_id = inst.get("rental_id")
+    inst["tunnel_connected"] = host_tunnel_manager.is_connected(rental_id)
+    inst["host_meta"] = host_tunnel_manager.node_meta.get(rental_id, {})
+
     return inst
 
 
@@ -1960,6 +2139,19 @@ async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(
             }}
         )
 
+        # Trigger physical container destruction and scratch disk wipe on host
+        rental_id = inst.get("rental_id")
+        if rental_id and host_tunnel_manager.is_connected(rental_id):
+            try:
+                await host_tunnel_manager.send_rpc(
+                    rental_id,
+                    action="destroy_pod",
+                    payload={"instance_id": inst_id},
+                    timeout=10.0
+                )
+            except Exception as e:
+                logger.warning(f"Could not destroy pod on host: {e}")
+
         seller_id = inst.get("seller_id")
         if seller_id and final_cost > 0:
             seller = await db.users.find_one({"id": seller_id})
@@ -1999,31 +2191,60 @@ async def instance_exec(inst_id: str, data: InstanceExecInput, user=Depends(curr
     start_time = time.time()
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # 1. Direct Python code execution
-    if code or command.startswith("python"):
-        script_code = code if code else command[6:].strip()
-        if script_code.startswith("-c"):
-            script_code = script_code[2:].strip().strip('"').strip("'")
+    rental_id = inst.get("rental_id")
+    is_tunnel_live = host_tunnel_manager.is_connected(rental_id)
+    executed_on_gpu = False
+    stdout = ""
+    stderr = ""
+    exit_code = 0
 
-        # Execute in isolated Python process
+    # 1. Attempt execution over live reverse tunnel directly on physical host GPU & Docker container
+    if is_tunnel_live:
         try:
-            res = subprocess.run(
-                [sys.executable, "-c", script_code],
-                capture_output=True,
-                text=True,
-                timeout=12,
+            rpc_res = await host_tunnel_manager.send_rpc(
+                rental_id,
+                action="exec",
+                payload={
+                    "instance_id": inst_id,
+                    "command": command,
+                    "code": code,
+                },
+                timeout=18.0
             )
-            stdout = res.stdout
-            stderr = res.stderr
-            exit_code = res.returncode
-        except subprocess.TimeoutExpired:
-            stdout = ""
-            stderr = "Execution timed out (12-second safety limit reached)"
-            exit_code = 124
+            stdout = rpc_res.get("stdout", "")
+            stderr = rpc_res.get("stderr", "")
+            exit_code = rpc_res.get("exit_code", 0)
+            executed_on_gpu = True
         except Exception as e:
-            stdout = ""
-            stderr = f"Execution error: {str(e)}"
-            exit_code = 1
+            logger.warning(f"Tunnel exec fallback for node {rental_id}: {e}")
+            is_tunnel_live = False
+
+    # 2. If physical host tunnel is offline, execute on secure cloud fallback
+    if not executed_on_gpu:
+        if code or command.startswith("python"):
+            script_code = code if code else command[6:].strip()
+            if script_code.startswith("-c"):
+                script_code = script_code[2:].strip().strip('"').strip("'")
+
+            # Execute in isolated Python process
+            try:
+                res = subprocess.run(
+                    [sys.executable, "-c", script_code],
+                    capture_output=True,
+                    text=True,
+                    timeout=12,
+                )
+                stdout = res.stdout
+                stderr = res.stderr
+                exit_code = res.returncode
+            except subprocess.TimeoutExpired:
+                stdout = ""
+                stderr = "Execution timed out (12-second safety limit reached)"
+                exit_code = 124
+            except Exception as e:
+                stdout = ""
+                stderr = f"Execution error: {str(e)}"
+                exit_code = 1
 
     # 2. NVIDIA-SMI Command
     elif command.startswith("nvidia-smi"):

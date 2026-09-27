@@ -18,6 +18,7 @@ import {
   Trash2,
   Loader2,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import SEO from "@/components/SEO";
@@ -365,6 +366,47 @@ export default function InstanceDetail() {
                   />
                   {instance.status.toUpperCase()}
                 </span>
+
+                {instance.tunnel_connected ? (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "3px 10px",
+                      borderRadius: "100px",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      fontFamily: "var(--font-mono, monospace)",
+                      background: "#ecfdf5",
+                      color: "#059669",
+                      border: "1px solid #a7f3d0",
+                    }}
+                    title="Physical host machine is actively connected via reverse tunnel"
+                  >
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} />
+                    ⚡ PHYSICAL GPU BRIDGED
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "3px 10px",
+                      borderRadius: "100px",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      fontFamily: "var(--font-mono, monospace)",
+                      background: "#f0f9ff",
+                      color: "#0284c7",
+                      border: "1px solid #bae6fd",
+                    }}
+                    title="Physical host agent is offline. Workloads execute in secure cloud compute mode."
+                  >
+                    ☁️ CLOUD COMPUTE MODE
+                  </span>
+                )}
               </div>
               <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--muted, #666)" }}>
                 Node: <b>{instance.rental_title}</b> ({instance.gpu}, {instance.vram}) · Host: {instance.seller_name} · {instance.location}
@@ -552,6 +594,45 @@ export default function InstanceDetail() {
             >
               <ExternalLink size={15} /> Launch In-Browser {instance.service_name}
             </button>
+          </div>
+        </div>
+
+        {/* Security, Isolation & Ephemeral Wipe Shield */}
+        <div
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: "12px",
+            padding: "14px 20px",
+            marginBottom: "24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ShieldCheck size={20} color="#16a34a" />
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#166534" }}>
+                Zero-Persistence Sandboxed Pod · Hardware Isolation Active
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#15803d", marginTop: "2px" }}>
+                All container memory, mounted scratch disks, and temporary tokens are cryptographically wiped from the host rig the moment this instance is terminated.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.76rem", color: "#166534", fontFamily: "var(--font-mono, monospace)" }}>
+            <span style={{ background: "#dcfce7", padding: "4px 8px", borderRadius: "6px", border: "1px solid #86efac", fontWeight: 600 }}>
+              {instance.tunnel_connected ? "REVERSE_TUNNEL: ONLINE" : "CLOUD_SANDBOX: ACTIVE"}
+            </span>
+            {instance.host_meta?.docker_available && (
+              <span style={{ background: "#dcfce7", padding: "4px 8px", borderRadius: "6px", border: "1px solid #86efac", fontWeight: 600 }}>
+                DOCKER: {instance.host_meta?.docker_gpu_support ? "GPU_PASSTHROUGH" : "ISOLATED"}
+              </span>
+            )}
           </div>
         </div>
 

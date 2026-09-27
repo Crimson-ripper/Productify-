@@ -256,7 +256,7 @@ export default function SellerDashboard() {
     e.preventDefault();
     setBusy(true);
     try {
-      await api.post("/rentals", {
+      const res = await api.post("/rentals", {
         title: rTitle,
         gpu: rGpu,
         vram: rVram,
@@ -272,6 +272,18 @@ export default function SellerDashboard() {
         }
       });
       toast.success("GPU node submitted with verified hardware signature!");
+
+      // Trigger automatic reverse tunnel activation on local host agent
+      if (res?.data?.id) {
+        try {
+          fetch("http://127.0.0.1:48123/tunnel/connect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ node_id: res.data.id })
+          }).catch(() => {});
+        } catch {}
+      }
+
       setRTitle(""); setRGpu(""); setRVram(""); setRPrice(""); setRLoc(""); setRDesc(""); setRImage("");
       setDetectedSignature(null);
       setListingSubTab("inventory");
