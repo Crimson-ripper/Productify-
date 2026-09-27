@@ -19,6 +19,8 @@ import {
   Loader2,
   Sparkles,
   ShieldCheck,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import SEO from "@/components/SEO";
@@ -70,6 +72,7 @@ export default function InstanceDetail() {
   const [pythonCode, setPythonCode] = useState(CODE_PRESETS.matrix.code);
   const [codeExecuting, setCodeExecuting] = useState(false);
   const [codeOutput, setCodeOutput] = useState(null);
+  const [isWorkspaceExpanded, setIsWorkspaceExpanded] = useState(false);
 
   const fetchInstance = useCallback(async (isPoll = false) => {
     try {
@@ -870,7 +873,24 @@ export default function InstanceDetail() {
 
           {/* TAB 2: In-Browser GPU Code Runner & Workspace */}
           {activeTab === "workspace" && (
-            <div style={{ background: "#ffffff", padding: "0" }}>
+            <div
+              style={
+                isWorkspaceExpanded
+                  ? {
+                      position: "fixed",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: 9999,
+                      background: "#ffffff",
+                      overflowY: "auto",
+                      padding: "0",
+                      boxShadow: "0 0 40px rgba(0,0,0,0.4)",
+                    }
+                  : { background: "#ffffff", padding: "0" }
+              }
+            >
               {/* Workspace Top Toolbar */}
               <div style={{ background: "#f8f9fa", borderBottom: "1px solid #e5e7eb", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -896,8 +916,33 @@ export default function InstanceDetail() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.open(instance.direct_url, "_blank")}
+                    onClick={() => {
+                      setIsWorkspaceExpanded((prev) => !prev);
+                      toast.info(!isWorkspaceExpanded ? "Full-screen GPU workspace enabled" : "Restored to standard view");
+                    }}
+                    style={{
+                      background: isWorkspaceExpanded ? "#059669" : "#ffffff",
+                      color: isWorkspaceExpanded ? "#ffffff" : "var(--ink, #101112)",
+                      border: "1px solid " + (isWorkspaceExpanded ? "#059669" : "#d1d5db"),
+                      padding: "5px 12px",
+                      borderRadius: "6px",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                    }}
+                    title={isWorkspaceExpanded ? "Collapse to standard page view" : "Maximize workspace to full screen"}
+                  >
+                    {isWorkspaceExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                    {isWorkspaceExpanded ? "Exit Fullscreen" : "Fullscreen"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(window.location.pathname, "_blank", "width=1280,height=850")}
                     style={{ background: "var(--ink, #101112)", color: "#ffffff", border: "none", padding: "5px 14px", borderRadius: "6px", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                    title="Open live workspace in a dedicated detached browser window"
                   >
                     Pop Out <ExternalLink size={12} />
                   </button>

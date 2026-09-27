@@ -1969,7 +1969,7 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
         "web_port": template["port"],
         "ssh_port": ssh_port,
         "host_ip": host_ip,
-        "direct_url": f"https://{instance_id}.node.productifynow.com",
+        "direct_url": f"/instances/{instance_id}?tab=workspace",
         "ssh_command": f"ssh -p {ssh_port} root@{host_ip}",
         "jupyter_token": uuid.uuid4().hex[:16],
         "disk_size_gb": data.disk_size_gb,
@@ -2066,6 +2066,8 @@ async def get_instance(inst_id: str, user=Depends(current_user)):
     rental_id = inst.get("rental_id")
     inst["tunnel_connected"] = host_tunnel_manager.is_connected(rental_id)
     inst["host_meta"] = host_tunnel_manager.node_meta.get(rental_id, {})
+    if not inst.get("direct_url") or ".node.productifynow.com" in str(inst.get("direct_url", "")):
+        inst["direct_url"] = f"/instances/{inst_id}?tab=workspace"
 
     return inst
 
