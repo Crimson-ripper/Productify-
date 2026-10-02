@@ -35,6 +35,18 @@ from currency_engine import (
     estimate_payout,
     get_commission_rate,
 )
+from gamezone import (
+    GameCreateInput,
+    GameUpdatePriceInput,
+    GameSubmitInput,
+    GameSubmissionReviewInput,
+    PrivateGameUploadInput,
+    PrivateGameQuoteInput,
+    GamePlayLaunchInput,
+    calculate_private_game_pricing,
+    calculate_session_metered_cost,
+    CURATED_GAMES,
+)
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
@@ -2807,6 +2819,566 @@ async def seed():
             {"id":"r2","title":"A100 Training Rig","gpu":"NVIDIA A100","vram":"80 GB","price":2.40,"location":"Ashburn, US","description":"Enterprise-grade LLM fine-tuning and diffusion training. Reserved slots available for multi-hour workloads.","specs":{"cpu":"AMD EPYC 7513","ram":"512 GB","storage":"4 TB NVMe RAID","bandwidth":"10 Gbps"},"image":"https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Tensor Yard","owner_id":"seed-tensor","created_at":datetime.now(timezone.utc).isoformat()},
             {"id":"r3","title":"RTX 3090 Studio","gpu":"RTX 3090","vram":"24 GB","price":0.38,"location":"Bengaluru, IN","description":"Great for solo creators — Unreal Engine, DaVinci Resolve, Substance renders at a friendly price.","specs":{"cpu":"Intel 13700K","ram":"64 GB","storage":"1 TB NVMe","bandwidth":"500 Mbps"},"image":"https://images.unsplash.com/photo-1587202372775-e229f172b9d7?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Silicon Loft","owner_id":"seed-silicon","created_at":datetime.now(timezone.utc).isoformat()},
         ])
+    if await db.games.count_documents({}) == 0:
+        await db.games.insert_many([dict(g) for g in CURATED_GAMES])
+        logger.info(f"Seeded {len(CURATED_GAMES)} games into db.games")
+
+
+# ==============================================================================
+# GAMEZONE: PUBLIC CLOUD GAMING LIBRARY ENDPOINTS
+# ==============================================================================
+
+@api.get("/games")
+async def list_games(
+    genre: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    featured_only: bool = False
+):
+    """Return public catalog of ready-to-play games with hourly credit rates."""
+    query = {"status": "published"}
+    if genre and genre.lower() != "all":
+        query["genre"] = {"$regex": genre, "$options": "i"}
+    if q and q.strip():
+        search_regex = {"$regex": q.strip(), "$options": "i"}
+        query["$or"] = [
+            {"title": search_regex},
+            {"description": search_regex},
+            {"tags": search_regex},
+        ]
+    if featured_only:
+        query["featured"] = True
+
+    games = await db.games.find(query, {"_id": 0}).sort("plays_count", -1).to_list(100)
+    if not games:
+        games = [g for g in CURATED_GAMES if g.get("status") == "published"]
+
+    # Annotate with real-time local currency pricing
+    for g in games:
+        rate = float(g.get("hourly_rate_credits", 1.0))
+        g["rate_usd"] = rate
+        g["rate_inr"] = currency_service.convert(rate, "USD", "INR")
+        g["rate_eur"] = currency_service.convert(rate, "USD", "EUR")
+
+    return {
+        "ok": True,
+        "count": len(games),
+        "games": games,
+        "genres": ["All", "Action / FPS", "Action / RPG", "Racing / Arcade", "RPG / Adventure", "Competitive FPS", "Simulation", "Indie"]
+    }
+
+
+@api.get("/games/{game_id}")
+async def get_game_details(game_id: str):
+    """Get full details, system requirements, and pricing for a single game."""
+    game = await db.games.find_one({"id": game_id}, {"_id": 0})
+    if not game:
+        game = next((g for g in CURATED_GAMES if g["id"] == game_id), None)
+        if not game:
+            raise HTTPException(404, "Game not found in library")
+
+    rate = float(game.get("hourly_rate_credits", 1.0))
+    game_out = dict(game)
+    game_out["rate_usd"] = rate
+    game_out["rate_inr"] = currency_service.convert(rate, "USD", "INR")
+    game_out["rate_eur"] = currency_service.convert(rate, "USD", "EUR")
+    return {"ok": True, "game": game_out}
+
+
+@api.post("/games/submit")
+async def submit_community_game(data: GameSubmitInput, user=Depends(current_user)):
+    """User submits a game to the public library for manual safety & malware checks."""
+    sub_id = f"gsub-{uuid.uuid4().hex[:10]}"
+    doc = {
+        "id": sub_id,
+        "user_id": user["id"],
+        "user_name": user.get("name", "Creator"),
+        "user_email": user.get("email"),
+        "title": data.title.strip(),
+        "genre": data.genre.strip(),
+        "description": data.description.strip(),
+        "package_url": data.package_url.strip(),
+        "version": data.version.strip(),
+        "min_gpu": data.min_gpu.strip(),
+        "suggested_hourly_rate": round(data.suggested_hourly_rate, 2),
+        "cover_image": data.cover_image or "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=900&auto=format&fit=crop",
+        "safety_checklist": {
+            "antivirus_scanned": False,
+            "no_crypto_miners": False,
+            "headless_gpu_tested": False,
+            "content_policy_passed": False,
+            "admin_notes": ""
+        },
+        "status": "pending_review",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.game_submissions.insert_one(doc)
+    return {
+        "ok": True,
+        "submission_id": sub_id,
+        "status": "pending_review",
+        "message": "Game submitted! It is now in the manual safety review queue."
+    }
+
+
+@api.get("/games/my-submissions")
+async def list_my_submissions(user=Depends(current_user)):
+    """Get list of games submitted to the library by the current user and their review status."""
+    subs = await db.game_submissions.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return {"ok": True, "submissions": subs}
+
+
+# ==============================================================================
+# GAMEZONE: PRIVATE GAME VAULT ("PLAY YOUR GAME") ENDPOINTS
+# ==============================================================================
+
+@api.get("/games/private")
+async def list_user_private_games(user=Depends(current_user)):
+    """List all private games uploaded by the authenticated user (strictly private to user_id)."""
+    games = await db.user_private_games.find({"user_id": user["id"]}, {"_id": 0}).sort("uploaded_at", -1).to_list(100)
+    return {"ok": True, "private_games": games}
+
+
+@api.post("/games/private/upload")
+async def upload_user_private_game(data: PrivateGameUploadInput, user=Depends(current_user)):
+    """Register a private game upload package for the user."""
+    pgame_id = f"pgame-{uuid.uuid4().hex[:10]}"
+    doc = {
+        "id": pgame_id,
+        "user_id": user["id"],
+        "title": data.title.strip(),
+        "package_url": data.package_url.strip(),
+        "package_size_gb": round(data.package_size_gb, 2),
+        "launch_executable": data.launch_executable.strip(),
+        "description": data.description.strip() if data.description else "",
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "last_played_at": None,
+        "play_count": 0,
+    }
+    await db.user_private_games.insert_one(doc)
+    doc_out = {k: v for k, v in doc.items() if k != "_id"}
+    return {"ok": True, "private_game": doc_out}
+
+
+@api.delete("/games/private/{pgame_id}")
+async def delete_user_private_game(pgame_id: str, user=Depends(current_user)):
+    """Delete a private game belonging to the user."""
+    res = await db.user_private_games.delete_one({"id": pgame_id, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Private game not found or unauthorized")
+    return {"ok": True, "message": "Private game deleted"}
+
+
+@api.post("/games/private/quote")
+async def get_private_game_pricing_quote(data: PrivateGameQuoteInput, user=Depends(current_user)):
+    """Calculate exact transparent price breakdown (GPU rate + 10% platform fee + 5% taxes)."""
+    rental = await db.rentals.find_one({"id": data.rental_id}, {"_id": 0})
+    if not rental:
+        raise HTTPException(404, "Target GPU rental node not found")
+
+    gpu_rate = float(rental.get("price", 0.60))
+    pricing = calculate_private_game_pricing(gpu_rate)
+    return {
+        "ok": True,
+        "rental_id": rental["id"],
+        "gpu": rental.get("gpu", "NVIDIA GPU"),
+        "vram": rental.get("vram", "24 GB"),
+        "pricing": pricing
+    }
+
+
+# ==============================================================================
+# GAMEZONE: SESSION EXECUTION & REMOTE HYPERVISOR DISPATCH
+# ==============================================================================
+
+@api.post("/games/play")
+async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_user)):
+    """Spin up remote gaming container on an isolated host GPU node."""
+    is_private = bool(data.private_game_id)
+    game_title = "Cloud Game"
+    hourly_rate = 1.0
+    pricing_breakdown = {}
+    docker_image = "productify/game-runner:generic"
+    game_package_url = None
+    rental = None
+
+    if is_private:
+        pgame = await db.user_private_games.find_one({"id": data.private_game_id, "user_id": user["id"]}, {"_id": 0})
+        if not pgame:
+            raise HTTPException(404, "Private game not found")
+        game_title = pgame["title"]
+        game_package_url = pgame.get("package_url")
+
+        if data.rental_id:
+            rental = await db.rentals.find_one({"id": data.rental_id}, {"_id": 0})
+        if not rental:
+            rental = await db.rentals.find_one({"is_online": True}, {"_id": 0}) or await db.rentals.find_one({}, {"_id": 0})
+        if not rental:
+            raise HTTPException(503, "No GPU nodes available to run game")
+
+        gpu_base = float(rental.get("price", 0.60))
+        pricing_breakdown = calculate_private_game_pricing(gpu_base)
+        hourly_rate = pricing_breakdown["total_hourly_credits"]
+        docker_image = "productify/game-runner:proton-wine"
+    else:
+        if not data.game_id:
+            raise HTTPException(400, "game_id or private_game_id required")
+        game = await db.games.find_one({"id": data.game_id}, {"_id": 0})
+        if not game:
+            game = next((g for g in CURATED_GAMES if g["id"] == data.game_id), None)
+        if not game:
+            raise HTTPException(404, "Game not found in library")
+
+        game_title = game["title"]
+        hourly_rate = float(game.get("hourly_rate_credits", 1.0))
+        docker_image = game.get("docker_image", "productify/game-runner:latest")
+        pricing_breakdown = {
+            "total_hourly_credits": hourly_rate,
+            "total_hourly_usd": hourly_rate,
+            "pricing_model": "library_fixed_rate"
+        }
+
+        if data.rental_id:
+            rental = await db.rentals.find_one({"id": data.rental_id}, {"_id": 0})
+        if not rental:
+            rental = await db.rentals.find_one({"is_online": True}, {"_id": 0}) or await db.rentals.find_one({}, {"_id": 0})
+
+    rental_id = rental.get("id", "r1") if rental else "r1"
+    session_id = f"gsess-{uuid.uuid4().hex[:10]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    tunnel_connected = host_tunnel_manager.is_connected(rental_id)
+    container_id = f"docker-game-{session_id[:8]}"
+
+    if tunnel_connected:
+        try:
+            rpc_res = await host_tunnel_manager.send_rpc(
+                rental_id,
+                action="launch_game_container",
+                payload={
+                    "session_id": session_id,
+                    "game_title": game_title,
+                    "docker_image": docker_image,
+                    "game_package_url": game_package_url,
+                    "is_private": is_private,
+                },
+                timeout=20.0
+            )
+            container_id = rpc_res.get("container_id", container_id)
+        except Exception as e:
+            logger.warning(f"Could not dispatch game RPC immediately: {e}")
+
+    session_doc = {
+        "id": session_id,
+        "user_id": user["id"],
+        "user_name": user.get("name", "Gamer"),
+        "game_id": data.game_id,
+        "private_game_id": data.private_game_id,
+        "game_title": game_title,
+        "is_private": is_private,
+        "rental_id": rental_id,
+        "gpu": rental.get("gpu", "NVIDIA RTX 4090") if rental else "NVIDIA RTX 4090",
+        "vram": rental.get("vram", "24 GB") if rental else "24 GB",
+        "container_id": container_id,
+        "status": "running",
+        "hourly_rate_credits": hourly_rate,
+        "pricing_breakdown": pricing_breakdown,
+        "stream_url": f"/gamezone/stream/{session_id}",
+        "tunnel_connected": tunnel_connected,
+        "started_at": now_iso,
+        "ended_at": None,
+        "total_play_seconds": 0.0,
+        "total_credits_spent": 0.0,
+    }
+    await db.game_sessions.insert_one(session_doc)
+
+    if not is_private and data.game_id:
+        await db.games.update_one({"id": data.game_id}, {"$inc": {"plays_count": 1}})
+    elif is_private and data.private_game_id:
+        await db.user_private_games.update_one(
+            {"id": data.private_game_id},
+            {"$set": {"last_played_at": now_iso}, "$inc": {"play_count": 1}}
+        )
+
+    out = {k: v for k, v in session_doc.items() if k != "_id"}
+    return {"ok": True, "session": out}
+
+
+@api.get("/games/session/{session_id}/status")
+async def get_game_session_status(session_id: str, user=Depends(current_user)):
+    """Fetch live gameplay heartbeat, elapsed seconds, and live credit meter."""
+    session = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(404, "Game session not found")
+
+    is_owner = session.get("user_id") == user["id"]
+    is_admin = user.get("role") in ["admin", "sub-admin"]
+    if not (is_owner or is_admin):
+        raise HTTPException(403, "Access denied")
+
+    elapsed_sec = float(session.get("total_play_seconds", 0.0))
+    if session.get("status") == "running" and session.get("started_at"):
+        try:
+            started = datetime.fromisoformat(session["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            elapsed_sec += max(0.0, (datetime.now(timezone.utc) - started).total_seconds())
+        except Exception:
+            pass
+
+    cost_info = calculate_session_metered_cost(
+        session.get("hourly_rate_credits", 1.0),
+        elapsed_sec
+    )
+
+    return {
+        "ok": True,
+        "session": session,
+        "elapsed_seconds": round(elapsed_sec, 1),
+        "live_cost_credits": cost_info["cost_credits"],
+        "formatted_cost": cost_info["formatted_cost"],
+        "status": session.get("status", "running")
+    }
+
+
+@api.post("/games/session/{session_id}/stop")
+async def stop_game_session(session_id: str, user=Depends(current_user)):
+    """Terminate the gaming container and finalize credit deduction."""
+    session = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(404, "Game session not found")
+
+    is_owner = session.get("user_id") == user["id"]
+    is_admin = user.get("role") in ["admin", "sub-admin"]
+    if not (is_owner or is_admin):
+        raise HTTPException(403, "Access denied")
+
+    if session.get("status") == "terminated":
+        return {"ok": True, "status": "terminated", "session": session}
+
+    now = datetime.now(timezone.utc)
+    started = datetime.fromisoformat(session.get("started_at", now.isoformat()))
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    total_sec = max(0.0, (now - started).total_seconds())
+
+    cost_info = calculate_session_metered_cost(
+        session.get("hourly_rate_credits", 1.0),
+        total_sec
+    )
+    final_cost = cost_info["cost_credits"]
+
+    rental_id = session.get("rental_id")
+    if rental_id and host_tunnel_manager.is_connected(rental_id):
+        try:
+            await host_tunnel_manager.send_rpc(
+                rental_id,
+                action="stop_game_container",
+                payload={"session_id": session_id, "container_id": session.get("container_id")},
+                timeout=10.0
+            )
+        except Exception as e:
+            logger.warning(f"Could not stop container on host: {e}")
+
+    await db.game_sessions.update_one(
+        {"id": session_id},
+        {"$set": {
+            "status": "terminated",
+            "ended_at": now.isoformat(),
+            "total_play_seconds": round(total_sec, 1),
+            "total_credits_spent": final_cost,
+        }}
+    )
+
+    return {
+        "ok": True,
+        "status": "terminated",
+        "play_seconds": round(total_sec, 1),
+        "credits_deducted": final_cost,
+        "formatted_cost": cost_info["formatted_cost"]
+    }
+
+
+# ==============================================================================
+# GAMEZONE: ADMIN MANAGEMENT ENDPOINTS
+# ==============================================================================
+
+@api.get("/admin/games")
+async def admin_list_games(user=Depends(current_user)):
+    """Admin: Return all games in the library."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    games = await db.games.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    if not games:
+        games = list(CURATED_GAMES)
+    return {"ok": True, "games": games}
+
+
+@api.post("/admin/games")
+async def admin_add_game(data: GameCreateInput, user=Depends(current_user)):
+    """Admin: Insert a new curated game into the Gamezone library."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+    game_id = f"game-{uuid.uuid4().hex[:10]}"
+    doc = {
+        "id": game_id,
+        "title": data.title.strip(),
+        "slug": data.title.lower().replace(" ", "-").replace(":", ""),
+        "genre": data.genre.strip(),
+        "description": data.description.strip(),
+        "cover_image": data.cover_image or "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=900&auto=format&fit=crop",
+        "banner_image": data.banner_image or data.cover_image or "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1400&auto=format&fit=crop",
+        "hourly_rate_credits": round(data.hourly_rate_credits, 2),
+        "min_gpu_vram": data.min_gpu_vram,
+        "recommended_gpu": data.recommended_gpu,
+        "docker_image": data.docker_image,
+        "storage_required_gb": data.storage_required_gb,
+        "tags": data.tags,
+        "featured": data.featured,
+        "status": data.status,
+        "plays_count": 0,
+        "added_by": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.games.insert_one(doc)
+    doc_out = {k: v for k, v in doc.items() if k != "_id"}
+    return {"ok": True, "game": doc_out}
+
+
+@api.put("/admin/games/{game_id}")
+async def admin_update_game_pricing(game_id: str, data: GameUpdatePriceInput, user=Depends(current_user)):
+    """Admin: Update hourly price, visibility status, or featured toggle."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+    update_fields = {"hourly_rate_credits": round(data.hourly_rate_credits, 2)}
+    if data.featured is not None:
+        update_fields["featured"] = data.featured
+    if data.status:
+        update_fields["status"] = data.status
+
+    res = await db.games.update_one({"id": game_id}, {"$set": update_fields})
+    if res.matched_count == 0:
+        seed_game = next((g for g in CURATED_GAMES if g["id"] == game_id), None)
+        if seed_game:
+            new_doc = dict(seed_game)
+            new_doc.update(update_fields)
+            await db.games.insert_one(new_doc)
+        else:
+            raise HTTPException(404, "Game not found")
+
+    return {"ok": True, "message": "Game pricing and status updated"}
+
+
+@api.delete("/admin/games/{game_id}")
+async def admin_delete_game(game_id: str, user=Depends(current_user)):
+    """Admin: Remove a game from the library."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    await db.games.delete_one({"id": game_id})
+    return {"ok": True, "message": "Game deleted"}
+
+
+@api.get("/admin/games/submissions")
+async def admin_list_game_submissions(status: Optional[str] = None, user=Depends(current_user)):
+    """Admin: View community submissions awaiting safety check."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+    query = {}
+    if status and status.lower() != "all":
+        query["status"] = status
+    subs = await db.game_submissions.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"ok": True, "submissions": subs}
+
+
+@api.post("/admin/games/submissions/{sub_id}/review")
+async def admin_review_game_submission(sub_id: str, data: GameSubmissionReviewInput, user=Depends(current_user)):
+    """Admin: Conduct manual safety verification and approve/reject community game."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+    sub = await db.game_submissions.find_one({"id": sub_id})
+    if not sub:
+        raise HTTPException(404, "Submission not found")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    safety_data = {
+        "antivirus_scanned": data.antivirus_scanned,
+        "no_crypto_miners": data.no_crypto_miners,
+        "headless_gpu_tested": data.headless_gpu_tested,
+        "content_policy_passed": data.content_policy_passed,
+        "admin_notes": data.admin_notes or "",
+        "reviewed_by": user["id"],
+        "reviewed_at": now_iso,
+    }
+
+    if data.decision == "approve":
+        if not (data.antivirus_scanned and data.no_crypto_miners and data.headless_gpu_tested):
+            raise HTTPException(400, "Cannot approve: All mandatory safety criteria (Antivirus, No Crypto-Miners, GPU Test) must pass.")
+
+        assigned_rate = data.assigned_hourly_rate or sub.get("suggested_hourly_rate", 1.0)
+        new_game = {
+            "id": f"game-{uuid.uuid4().hex[:10]}",
+            "title": sub["title"],
+            "slug": sub["title"].lower().replace(" ", "-"),
+            "genre": sub.get("genre", "Indie"),
+            "description": sub.get("description", ""),
+            "cover_image": sub.get("cover_image") or "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=900&auto=format&fit=crop",
+            "banner_image": sub.get("cover_image") or "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1400&auto=format&fit=crop",
+            "hourly_rate_credits": round(assigned_rate, 2),
+            "min_gpu_vram": sub.get("min_gpu", "8 GB"),
+            "recommended_gpu": sub.get("min_gpu", "NVIDIA RTX 3070"),
+            "docker_image": "productify/game-runner:community",
+            "package_url": sub.get("package_url"),
+            "storage_required_gb": 20.0,
+            "tags": ["community", sub.get("genre", "Indie").lower()],
+            "featured": False,
+            "status": "published",
+            "plays_count": 0,
+            "added_by": sub.get("user_id"),
+            "created_at": now_iso,
+        }
+        await db.games.insert_one(new_game)
+        await db.game_submissions.update_one(
+            {"id": sub_id},
+            {"$set": {
+                "status": "approved",
+                "safety_checklist": safety_data,
+                "approved_game_id": new_game["id"],
+                "updated_at": now_iso,
+            }}
+        )
+        return {"ok": True, "decision": "approved", "game_id": new_game["id"], "message": f"Game '{sub['title']}' approved and published to Gamezone library!"}
+    else:
+        await db.game_submissions.update_one(
+            {"id": sub_id},
+            {"$set": {
+                "status": "rejected",
+                "safety_checklist": safety_data,
+                "rejection_reason": data.admin_notes or "Did not meet platform safety requirements",
+                "updated_at": now_iso,
+            }}
+        )
+        return {"ok": True, "decision": "rejected", "message": "Submission rejected with safety notes."}
+
+
+@api.get("/admin/games/active-sessions")
+async def admin_list_active_game_sessions(user=Depends(current_user)):
+    """Admin: Real-time monitor of active game containers running across host nodes."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+    sessions = await db.game_sessions.find({"status": "running"}, {"_id": 0}).sort("started_at", -1).to_list(100)
+    total_revenue_est = sum(float(s.get("hourly_rate_credits", 0.0)) for s in sessions)
+    return {
+        "ok": True,
+        "active_count": len(sessions),
+        "total_hourly_revenue": round(total_revenue_est, 2),
+        "sessions": sessions
+    }
+
 
 app.include_router(api)
 DEFAULT_ORIGINS = [

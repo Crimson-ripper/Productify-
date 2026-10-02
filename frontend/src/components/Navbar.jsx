@@ -29,6 +29,7 @@ export default function Navbar() {
         <nav className="main-nav" data-testid="main-navigation">
           <NavLink to="/shop" data-testid="nav-shop-link">Shop</NavLink>
           <NavLink to="/rentals" data-testid="nav-rentals-link">GPU rentals</NavLink>
+          <NavLink to="/gamezone" data-testid="nav-gamezone-link">Gamezone</NavLink>
           <NavLink to="/sell" data-testid="nav-sell-link">Sell on Productify</NavLink>
         </nav>
         <form className="header-search" onSubmit={onSearch} data-testid="header-search-form">
@@ -77,6 +78,7 @@ export default function Navbar() {
         <div className="mobile-drawer" data-testid="mobile-drawer">
           <Link to="/shop" onClick={() => setMenuOpen(false)}>Shop</Link>
           <Link to="/rentals" onClick={() => setMenuOpen(false)}>GPU rentals</Link>
+          <Link to="/gamezone" onClick={() => setMenuOpen(false)}>Gamezone</Link>
           <Link to="/sell" onClick={() => setMenuOpen(false)}>Sell on Productify</Link>
           {user ? (
             <>

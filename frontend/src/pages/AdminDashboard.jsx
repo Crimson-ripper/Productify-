@@ -12,7 +12,15 @@ import {
   Trash2,
   RefreshCw,
   Clock,
-  Sparkles
+  Sparkles,
+  Gamepad2,
+  Plus,
+  Play,
+  Server,
+  Layers,
+  ShieldAlert,
+  Edit2,
+  Check
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,7 +29,7 @@ import { toast } from "sonner";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [tab, setTab] = useState("overview"); // "overview" | "users" | "reviews" | "payouts" | "catalog" | "reports"
+  const [tab, setTab] = useState("overview"); // "overview" | "users" | "reviews" | "payouts" | "catalog" | "reports" | "gamezone"
 
   // Platform Stats
   const [stats, setStats] = useState({
@@ -67,6 +75,48 @@ export default function AdminDashboard() {
   // Reports tab state
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+
+  // Gamezone tab state
+  const [gamezoneTab, setGamezoneTab] = useState("catalog"); // "catalog" | "submissions" | "sessions"
+  const [adminGames, setAdminGames] = useState([]);
+  const [adminGamesLoading, setAdminGamesLoading] = useState(false);
+  const [editingGameId, setEditingGameId] = useState(null);
+  const [editPrice, setEditPrice] = useState(1.0);
+  const [newGameModal, setNewGameModal] = useState(false);
+  const [newGameForm, setNewGameForm] = useState({
+    title: "",
+    genre: "Action",
+    description: "",
+    hourly_rate_credits: 1.25,
+    cover_image: "",
+    banner_image: "",
+    min_gpu_vram: "8 GB",
+    recommended_gpu: "NVIDIA RTX 3070",
+    docker_image: "productify/game-runner:generic",
+    storage_required_gb: 40,
+    tags: "action,fps",
+    featured: false,
+    status: "published",
+  });
+  const [creatingGame, setCreatingGame] = useState(false);
+
+  const [submissions, setSubmissions] = useState([]);
+  const [submissionFilter, setSubmissionFilter] = useState("all"); // "all" | "pending_review" | "approved" | "rejected"
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [reviewModal, setReviewModal] = useState(null);
+  const [reviewForm, setReviewForm] = useState({
+    decision: "approve",
+    antivirus_scanned: true,
+    no_crypto_miners: true,
+    headless_gpu_tested: true,
+    content_policy_passed: true,
+    admin_notes: "",
+    assigned_hourly_rate: 1.0,
+  });
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const [activeGameSessions, setActiveGameSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // Load platform stats
   const fetchStats = useCallback(async () => {
@@ -144,6 +194,141 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  // Load Admin Games
+  const fetchAdminGames = useCallback(async () => {
+    setAdminGamesLoading(true);
+    try {
+      const res = await api.get("/admin/games");
+      setAdminGames(res.data?.games || []);
+    } catch {
+      setAdminGames([]);
+    } finally {
+      setAdminGamesLoading(false);
+    }
+  }, []);
+
+  // Update Game Price / Status / Featured
+  const handleUpdateGame = async (gameId, payload) => {
+    try {
+      await api.put(`/admin/games/${gameId}`, payload);
+      toast.success("Game settings updated!");
+      setEditingGameId(null);
+      fetchAdminGames();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update game.");
+    }
+  };
+
+  // Delete Game
+  const handleDeleteGame = async (gameId, title) => {
+    if (!window.confirm(`Delete game "${title}" from the Gamezone library?`)) return;
+    try {
+      await api.delete(`/admin/games/${gameId}`);
+      toast.success("Game removed from library.");
+      fetchAdminGames();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete game.");
+    }
+  };
+
+  // Create Curated Game
+  const handleCreateGame = async (e) => {
+    e.preventDefault();
+    setCreatingGame(true);
+    try {
+      const payload = {
+        ...newGameForm,
+        hourly_rate_credits: parseFloat(newGameForm.hourly_rate_credits) || 1.0,
+        storage_required_gb: parseFloat(newGameForm.storage_required_gb) || 20.0,
+        tags: typeof newGameForm.tags === "string" ? newGameForm.tags.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) : ["gaming"]
+      };
+      await api.post("/admin/games", payload);
+      toast.success(`Game "${newGameForm.title}" added to Gamezone!`);
+      setNewGameModal(false);
+      setNewGameForm({
+        title: "",
+        genre: "Action",
+        description: "",
+        hourly_rate_credits: 1.25,
+        cover_image: "",
+        banner_image: "",
+        min_gpu_vram: "8 GB",
+        recommended_gpu: "NVIDIA RTX 3070",
+        docker_image: "productify/game-runner:generic",
+        storage_required_gb: 40,
+        tags: "action,fps",
+        featured: false,
+        status: "published",
+      });
+      fetchAdminGames();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to add game.");
+    } finally {
+      setCreatingGame(false);
+    }
+  };
+
+  // Load Submissions
+  const fetchSubmissions = useCallback(async () => {
+    setSubmissionsLoading(true);
+    try {
+      const params = submissionFilter !== "all" ? `?status=${submissionFilter}` : "";
+      const res = await api.get(`/admin/games/submissions${params}`);
+      setSubmissions(res.data?.submissions || []);
+    } catch {
+      setSubmissions([]);
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  }, [submissionFilter]);
+
+  // Review Submission
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!reviewModal) return;
+    setSubmittingReview(true);
+    try {
+      const payload = {
+        ...reviewForm,
+        assigned_hourly_rate: parseFloat(reviewForm.assigned_hourly_rate) || 1.0
+      };
+      const res = await api.post(`/admin/games/submissions/${reviewModal.id}/review`, payload);
+      toast.success(res.data?.message || `Submission ${reviewForm.decision}!`);
+      setReviewModal(null);
+      fetchSubmissions();
+      fetchAdminGames();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to submit review decision.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  // Load Active Gaming Sessions
+  const fetchActiveGameSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await api.get("/admin/games/active-sessions");
+      setActiveGameSessions(res.data?.sessions || []);
+    } catch {
+      setActiveGameSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  // Admin Force Stop Gaming Session
+  const handleForceStopSession = async (sessionId) => {
+    if (!window.confirm(`Force terminate gaming session ${sessionId}?`)) return;
+    try {
+      await api.post(`/games/session/${sessionId}/stop`);
+      toast.success(`Session ${sessionId} terminated.`);
+      fetchActiveGameSessions();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to terminate session.");
+    }
+  };
+
   // Initial load
   useEffect(() => {
     fetchStats();
@@ -157,7 +342,12 @@ export default function AdminDashboard() {
     if (tab === "payouts") fetchPayouts();
     if (tab === "catalog") fetchCatalog();
     if (tab === "reports") fetchReports();
-  }, [tab, fetchStats, fetchUsers, fetchPendingReviews, fetchPayouts, fetchCatalog, fetchReports]);
+    if (tab === "gamezone") {
+      if (gamezoneTab === "catalog") fetchAdminGames();
+      if (gamezoneTab === "submissions") fetchSubmissions();
+      if (gamezoneTab === "sessions") fetchActiveGameSessions();
+    }
+  }, [tab, gamezoneTab, fetchStats, fetchUsers, fetchPendingReviews, fetchPayouts, fetchCatalog, fetchReports, fetchAdminGames, fetchSubmissions, fetchActiveGameSessions]);
 
   // User Role Switcher
   const handleRoleChange = async (targetUser, newRole) => {
@@ -354,6 +544,9 @@ export default function AdminDashboard() {
           </button>
           <button className={tab === "reports" ? "selected" : ""} onClick={() => setTab("reports")}>
             <Flag size={14} /> Abuse Reports <b className="tab-count">{stats.open_reports_count}</b>
+          </button>
+          <button className={tab === "gamezone" ? "selected" : ""} onClick={() => setTab("gamezone")}>
+            <Gamepad2 size={14} /> Gamezone Hub
           </button>
         </div>
 
@@ -1083,6 +1276,775 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================== TAB: GAMEZONE HUB ===================== */}
+        {tab === "gamezone" && (
+          <div>
+            {/* Gamezone Subtab Navigation */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+              <div style={{ display: "flex", gap: 8, background: "#f1f2ec", padding: 4, borderRadius: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setGamezoneTab("catalog")}
+                  style={{
+                    border: "none",
+                    background: gamezoneTab === "catalog" ? "#fff" : "transparent",
+                    color: gamezoneTab === "catalog" ? "var(--ink)" : "var(--muted)",
+                    padding: "7px 14px",
+                    borderRadius: 7,
+                    fontWeight: 700,
+                    fontSize: "0.82rem",
+                    cursor: "pointer",
+                    boxShadow: gamezoneTab === "catalog" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <Layers size={14} /> Curated Catalog ({adminGames.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGamezoneTab("submissions")}
+                  style={{
+                    border: "none",
+                    background: gamezoneTab === "submissions" ? "#fff" : "transparent",
+                    color: gamezoneTab === "submissions" ? "var(--ink)" : "var(--muted)",
+                    padding: "7px 14px",
+                    borderRadius: 7,
+                    fontWeight: 700,
+                    fontSize: "0.82rem",
+                    cursor: "pointer",
+                    boxShadow: gamezoneTab === "submissions" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <ShieldCheck size={14} /> Safety Queue ({submissions.filter(s => s.status === "pending_review").length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGamezoneTab("sessions")}
+                  style={{
+                    border: "none",
+                    background: gamezoneTab === "sessions" ? "#fff" : "transparent",
+                    color: gamezoneTab === "sessions" ? "var(--ink)" : "var(--muted)",
+                    padding: "7px 14px",
+                    borderRadius: 7,
+                    fontWeight: 700,
+                    fontSize: "0.82rem",
+                    cursor: "pointer",
+                    boxShadow: gamezoneTab === "sessions" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <Server size={14} /> Live Fleet Containers ({activeGameSessions.length})
+                </button>
+              </div>
+
+              {gamezoneTab === "catalog" && (
+                <button
+                  type="button"
+                  onClick={() => setNewGameModal(true)}
+                  className="primary-button"
+                  style={{ padding: "8px 16px", fontSize: "0.84rem", display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <Plus size={14} /> Add Game to Library
+                </button>
+              )}
+            </div>
+
+            {/* Subtab 1: Curated Catalog */}
+            {gamezoneTab === "catalog" && (
+              <div>
+                {adminGamesLoading ? (
+                  <div style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Loading games catalog...</div>
+                ) : adminGames.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 12, border: "1px solid var(--line)" }}>
+                    <p style={{ color: "var(--muted)" }}>No games in library yet.</p>
+                  </div>
+                ) : (
+                  <div style={{ background: "#fff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.86rem" }}>
+                        <thead>
+                          <tr style={{ background: "#f8f9fa", borderBottom: "1px solid var(--line)", color: "var(--muted)", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                            <th style={{ padding: "12px 16px" }}>Game</th>
+                            <th style={{ padding: "12px 16px" }}>Genre</th>
+                            <th style={{ padding: "12px 16px" }}>Min Specs</th>
+                            <th style={{ padding: "12px 16px" }}>Hourly Rate</th>
+                            <th style={{ padding: "12px 16px" }}>Status</th>
+                            <th style={{ padding: "12px 16px" }}>Featured</th>
+                            <th style={{ padding: "12px 16px", textAlign: "right" }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminGames.map((g) => {
+                            const isEditing = editingGameId === g.id;
+                            return (
+                              <tr key={g.id} style={{ borderBottom: "1px solid var(--line, #dedfd9)" }}>
+                                <td style={{ padding: "12px 16px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                    <img
+                                      src={g.cover_image || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=200"}
+                                      alt={g.title}
+                                      style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover" }}
+                                    />
+                                    <div>
+                                      <div style={{ fontWeight: 700, color: "var(--ink)" }}>{g.title}</div>
+                                      <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{g.slug} · ID: {g.id}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td style={{ padding: "12px 16px" }}>
+                                  <span style={{ background: "#ede9fe", color: "#6d28d9", padding: "3px 8px", borderRadius: 4, fontSize: "0.74rem", fontWeight: 700 }}>
+                                    {g.genre}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "12px 16px", fontSize: "0.8rem", color: "var(--muted)" }}>
+                                  <div>{g.min_gpu_vram || "8 GB"} VRAM</div>
+                                  <small style={{ color: "#64748b" }}>{g.docker_image}</small>
+                                </td>
+                                <td style={{ padding: "12px 16px" }}>
+                                  {isEditing ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <input
+                                        type="number"
+                                        step="0.05"
+                                        min="0.10"
+                                        value={editPrice}
+                                        onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0.1)}
+                                        style={{ width: 80, padding: "4px 8px", borderRadius: 6, border: "1px solid var(--line)", fontSize: "0.85rem" }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateGame(g.id, { hourly_rate_credits: editPrice })}
+                                        style={{ background: "#10b981", color: "#fff", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
+                                        title="Save price"
+                                      >
+                                        <Check size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingGameId(null)}
+                                        style={{ background: "#e2e8f0", color: "#475569", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
+                                        title="Cancel"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                      <span style={{ fontWeight: 800, color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>
+                                        {parseFloat(g.hourly_rate_credits || 1).toFixed(2)} cr/hr
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingGameId(g.id);
+                                          setEditPrice(parseFloat(g.hourly_rate_credits || 1));
+                                        }}
+                                        style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", padding: 2 }}
+                                        title="Edit hourly rate"
+                                      >
+                                        <Edit2 size={13} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: "12px 16px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateGame(g.id, {
+                                      hourly_rate_credits: parseFloat(g.hourly_rate_credits || 1),
+                                      status: g.status === "published" ? "draft" : "published"
+                                    })}
+                                    style={{
+                                      background: g.status === "published" ? "#dcfce7" : "#f1f5f9",
+                                      color: g.status === "published" ? "#15803d" : "#64748b",
+                                      border: "none",
+                                      borderRadius: 4,
+                                      padding: "3px 8px",
+                                      fontSize: "0.74rem",
+                                      fontWeight: 700,
+                                      cursor: "pointer",
+                                      textTransform: "uppercase"
+                                    }}
+                                  >
+                                    {g.status || "published"}
+                                  </button>
+                                </td>
+                                <td style={{ padding: "12px 16px" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(g.featured)}
+                                    onChange={(e) => handleUpdateGame(g.id, {
+                                      hourly_rate_credits: parseFloat(g.hourly_rate_credits || 1),
+                                      featured: e.target.checked
+                                    })}
+                                    style={{ cursor: "pointer" }}
+                                  />
+                                </td>
+                                <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteGame(g.id, g.title)}
+                                    style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", padding: 4 }}
+                                    title="Delete game"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Subtab 2: Community Submissions Safety Queue */}
+            {gamezoneTab === "submissions" && (
+              <div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                  {["all", "pending_review", "approved", "rejected"].map((sf) => (
+                    <button
+                      key={sf}
+                      type="button"
+                      onClick={() => setSubmissionFilter(sf)}
+                      className={submissionFilter === sf ? "selected" : ""}
+                      style={{
+                        padding: "6px 12px",
+                        fontSize: "0.78rem",
+                        borderRadius: 6,
+                        border: "1px solid var(--line)",
+                        background: submissionFilter === sf ? "var(--ink, #1c1c1c)" : "#fff",
+                        color: submissionFilter === sf ? "#fff" : "var(--muted)",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        textTransform: "capitalize"
+                      }}
+                    >
+                      {sf.replace("_", " ")}
+                    </button>
+                  ))}
+                </div>
+
+                {submissionsLoading ? (
+                  <div style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Loading submissions queue...</div>
+                ) : submissions.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 12, border: "1px solid var(--line)" }}>
+                    <ShieldCheck size={36} color="var(--muted)" style={{ margin: "0 auto 12px" }} />
+                    <p style={{ color: "var(--muted)", margin: 0 }}>No submissions matching this filter.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {submissions.map((sub) => (
+                      <div
+                        key={sub.id}
+                        style={{
+                          background: "#fff",
+                          border: "1px solid var(--line, #dedfd9)",
+                          borderRadius: 12,
+                          padding: 20,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          flexWrap: "wrap",
+                          gap: 16
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 280 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                            <span
+                              style={{
+                                background: sub.status === "approved" ? "#dcfce7" : sub.status === "rejected" ? "#fee2e2" : "#fef3c7",
+                                color: sub.status === "approved" ? "#15803d" : sub.status === "rejected" ? "#b91c1c" : "#b45309",
+                                fontSize: "0.74rem",
+                                fontWeight: 800,
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                textTransform: "uppercase"
+                              }}
+                            >
+                              {sub.status.replace("_", " ")}
+                            </span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                              Version {sub.version || "1.0"} • Submitted {new Date(sub.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+
+                          <h3 style={{ margin: "0 0 6px", font: "700 18px 'Space Grotesk'" }}>
+                            {sub.title}
+                          </h3>
+
+                          <div style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: 10 }}>
+                            Genre: <b>{sub.genre}</b> • Submitter: <b>{sub.user_name || sub.user_id}</b> • Suggested: <b>{sub.suggested_hourly_rate} credits/hr</b>
+                          </div>
+
+                          <p style={{ fontSize: "0.85rem", color: "#334155", margin: "0 0 12px" }}>
+                            {sub.description || <i>No description provided.</i>}
+                          </p>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <a
+                              href={sub.package_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: "0.82rem",
+                                color: "#0284c7",
+                                fontWeight: 600,
+                                textDecoration: "none"
+                              }}
+                            >
+                              Download Game Package <ExternalLink size={13} />
+                            </a>
+                            {sub.approved_game_id && (
+                              <span style={{ fontSize: "0.8rem", color: "#16a34a" }}>
+                                Live in Library: ID <code>{sub.approved_game_id}</code>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {sub.status === "pending_review" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewModal(sub);
+                              setReviewForm({
+                                decision: "approve",
+                                antivirus_scanned: true,
+                                no_crypto_miners: true,
+                                headless_gpu_tested: true,
+                                content_policy_passed: true,
+                                admin_notes: "",
+                                assigned_hourly_rate: sub.suggested_hourly_rate || 1.0,
+                              });
+                            }}
+                            className="primary-button"
+                            style={{ padding: "9px 16px", fontSize: "0.84rem", display: "flex", alignItems: "center", gap: 6 }}
+                          >
+                            <ShieldCheck size={14} /> Conduct Safety Review
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Subtab 3: Live Gaming Fleet Monitor */}
+            {gamezoneTab === "sessions" && (
+              <div>
+                {sessionsLoading ? (
+                  <div style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Loading active sessions...</div>
+                ) : activeGameSessions.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 12, border: "1px solid var(--line)" }}>
+                    <Server size={36} color="var(--muted)" style={{ margin: "0 auto 12px" }} />
+                    <p style={{ color: "var(--muted)", margin: 0 }}>No game containers currently running.</p>
+                  </div>
+                ) : (
+                  <div style={{ background: "#fff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.86rem" }}>
+                        <thead>
+                          <tr style={{ background: "#f8f9fa", borderBottom: "1px solid var(--line)", color: "var(--muted)", fontSize: "0.78rem", textTransform: "uppercase" }}>
+                            <th style={{ padding: "12px 16px" }}>Session</th>
+                            <th style={{ padding: "12px 16px" }}>Game Title</th>
+                            <th style={{ padding: "12px 16px" }}>User</th>
+                            <th style={{ padding: "12px 16px" }}>Host GPU</th>
+                            <th style={{ padding: "12px 16px" }}>Container ID</th>
+                            <th style={{ padding: "12px 16px" }}>Rate</th>
+                            <th style={{ padding: "12px 16px", textAlign: "right" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeGameSessions.map((sess) => (
+                            <tr key={sess.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                              <td style={{ padding: "12px 16px" }}>
+                                <span style={{ fontWeight: 700, color: "#0284c7" }}>{sess.id}</span>
+                              </td>
+                              <td style={{ padding: "12px 16px" }}>
+                                <div style={{ fontWeight: 600 }}>{sess.game_title}</div>
+                                {sess.is_private && (
+                                  <span style={{ background: "#ede9fe", color: "#6d28d9", fontSize: "0.7rem", padding: "1px 5px", borderRadius: 4 }}>
+                                    Private Vault
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "12px 16px", color: "var(--muted)" }}>
+                                {sess.user_name || sess.user_id}
+                              </td>
+                              <td style={{ padding: "12px 16px" }}>
+                                {sess.gpu} ({sess.rental_id})
+                              </td>
+                              <td style={{ padding: "12px 16px" }}>
+                                <code>{sess.container_id}</code>
+                              </td>
+                              <td style={{ padding: "12px 16px", fontWeight: 700 }}>
+                                {sess.hourly_rate_credits} cr/hr
+                              </td>
+                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceStopSession(sess.id)}
+                                  style={{
+                                    background: "#fee2e2",
+                                    color: "#b91c1c",
+                                    border: "1px solid #fca5a5",
+                                    padding: "4px 10px",
+                                    borderRadius: 6,
+                                    fontSize: "0.76rem",
+                                    fontWeight: 700,
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  Force Terminate
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal: Add Curated Game */}
+            {newGameModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.6)",
+                  backdropFilter: "blur(4px)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 99,
+                  padding: 20
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fff",
+                    borderRadius: 16,
+                    padding: 28,
+                    maxWidth: 580,
+                    width: "100%",
+                    maxHeight: "90vh",
+                    overflowY: "auto",
+                    boxShadow: "0 20px 40px rgba(0,0,0,0.2)"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                    <h3 style={{ margin: 0, font: "700 20px 'Space Grotesk'" }}>Add Curated Game to Gamezone</h3>
+                    <button
+                      type="button"
+                      onClick={() => setNewGameModal(false)}
+                      style={{ border: "none", background: "transparent", fontSize: "1.2rem", cursor: "pointer", color: "var(--muted)" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCreateGame} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={newGameForm.title}
+                        onChange={(e) => setNewGameForm({ ...newGameForm, title: e.target.value })}
+                        placeholder="e.g. Doom Eternal"
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Genre</label>
+                        <input
+                          type="text"
+                          required
+                          value={newGameForm.genre}
+                          onChange={(e) => setNewGameForm({ ...newGameForm, genre: e.target.value })}
+                          placeholder="Action / FPS"
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Hourly Rate (Credits)</label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0.10"
+                          required
+                          value={newGameForm.hourly_rate_credits}
+                          onChange={(e) => setNewGameForm({ ...newGameForm, hourly_rate_credits: e.target.value })}
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Description</label>
+                      <textarea
+                        rows={3}
+                        required
+                        value={newGameForm.description}
+                        onChange={(e) => setNewGameForm({ ...newGameForm, description: e.target.value })}
+                        placeholder="Game storyline and cloud gaming performance specs..."
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Min GPU VRAM</label>
+                        <input
+                          type="text"
+                          value={newGameForm.min_gpu_vram}
+                          onChange={(e) => setNewGameForm({ ...newGameForm, min_gpu_vram: e.target.value })}
+                          placeholder="8 GB"
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Recommended GPU</label>
+                        <input
+                          type="text"
+                          value={newGameForm.recommended_gpu}
+                          onChange={(e) => setNewGameForm({ ...newGameForm, recommended_gpu: e.target.value })}
+                          placeholder="NVIDIA RTX 3070"
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Docker Image</label>
+                      <input
+                        type="text"
+                        value={newGameForm.docker_image}
+                        onChange={(e) => setNewGameForm({ ...newGameForm, docker_image: e.target.value })}
+                        placeholder="productify/game-runner:doom"
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>Cover Poster Image URL</label>
+                      <input
+                        type="url"
+                        value={newGameForm.cover_image}
+                        onChange={(e) => setNewGameForm({ ...newGameForm, cover_image: e.target.value })}
+                        placeholder="https://images.unsplash.com/..."
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: 20 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.84rem", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={newGameForm.featured}
+                          onChange={(e) => setNewGameForm({ ...newGameForm, featured: e.target.checked })}
+                        />
+                        Featured on Gamezone Home
+                      </label>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => setNewGameModal(false)}
+                        className="secondary-button"
+                        style={{ padding: "8px 16px" }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={creatingGame}
+                        className="primary-button"
+                        style={{ padding: "8px 20px" }}
+                      >
+                        {creatingGame ? "Adding..." : "Add to Library"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Safety Review Form */}
+            {reviewModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.6)",
+                  backdropFilter: "blur(4px)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 99,
+                  padding: 20
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fff",
+                    borderRadius: 16,
+                    padding: 28,
+                    maxWidth: 560,
+                    width: "100%",
+                    boxShadow: "0 20px 40px rgba(0,0,0,0.2)"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <ShieldCheck size={20} color="#2563eb" />
+                      <h3 style={{ margin: 0, font: "700 20px 'Space Grotesk'" }}>
+                        Safety Review: {reviewModal.title}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReviewModal(null)}
+                      style={{ border: "none", background: "transparent", fontSize: "1.2rem", cursor: "pointer", color: "var(--muted)" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSubmitReview} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div style={{ background: "#f8fafc", padding: 14, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: "0.84rem" }}>
+                      <div>Package URL: <a href={reviewModal.package_url} target="_blank" rel="noreferrer" style={{ color: "#0284c7" }}>{reviewModal.package_url}</a></div>
+                      <div>Submitter: <b>{reviewModal.user_name || reviewModal.user_id}</b></div>
+                      <div>Suggested Rate: <b>{reviewModal.suggested_hourly_rate} credits/hr</b></div>
+                    </div>
+
+                    {/* Safety Verification Checklist */}
+                    <div>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, marginBottom: 8, color: "var(--ink)" }}>
+                        Mandatory Safety Checks (All must pass to approve):
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: "0.84rem" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={reviewForm.antivirus_scanned}
+                            onChange={(e) => setReviewForm({ ...reviewForm, antivirus_scanned: e.target.checked })}
+                          />
+                          <b>Antivirus & Malware Scan Clean</b> (No trojans, spyware, or keyloggers)
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={reviewForm.no_crypto_miners}
+                            onChange={(e) => setReviewForm({ ...reviewForm, no_crypto_miners: e.target.checked })}
+                          />
+                          <b>No Crypto-Miners</b> or rogue background compute threads
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={reviewForm.headless_gpu_tested}
+                            onChange={(e) => setReviewForm({ ...reviewForm, headless_gpu_tested: e.target.checked })}
+                          />
+                          <b>Headless GPU Proton / Wine Tested</b> (Boots without fatal driver crash)
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={reviewForm.content_policy_passed}
+                            onChange={(e) => setReviewForm({ ...reviewForm, content_policy_passed: e.target.checked })}
+                          />
+                          <b>Productify Content Policy & DMCA Passed</b>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>
+                        Assigned Hourly Rate (Credits)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.10"
+                        value={reviewForm.assigned_hourly_rate}
+                        onChange={(e) => setReviewForm({ ...reviewForm, assigned_hourly_rate: e.target.value })}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>
+                        Admin Audit Notes / Feedback
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={reviewForm.admin_notes}
+                        onChange={(e) => setReviewForm({ ...reviewForm, admin_notes: e.target.value })}
+                        placeholder="Internal safety verification notes..."
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewForm({ ...reviewForm, decision: "reject" });
+                          handleSubmitReview({ preventDefault: () => {} });
+                        }}
+                        disabled={submittingReview}
+                        style={{
+                          background: "#fee2e2",
+                          color: "#b91c1c",
+                          border: "1px solid #fca5a5",
+                          padding: "9px 18px",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          fontWeight: 700,
+                          fontSize: "0.86rem"
+                        }}
+                      >
+                        Reject Submission
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submittingReview}
+                        onClick={() => setReviewForm({ ...reviewForm, decision: "approve" })}
+                        className="primary-button"
+                        style={{ padding: "9px 20px", fontSize: "0.86rem", display: "flex", alignItems: "center", gap: 6 }}
+                      >
+                        <Check size={14} /> Approve & Publish to Library
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
           </div>
