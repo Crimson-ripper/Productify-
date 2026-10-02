@@ -24,7 +24,7 @@ import {
   Layers,
   Monitor
 } from "lucide-react";
-import api, { money } from "@/lib/api";
+import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";

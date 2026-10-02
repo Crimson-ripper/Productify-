@@ -8,3 +8,5 @@ api.interceptors.request.use((cfg) => {
 });
 export const money = (n, ccy = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: ccy }).format(Number(n || 0));
+
+export default api;
