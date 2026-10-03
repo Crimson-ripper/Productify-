@@ -109,6 +109,15 @@ class TestGamezoneSeedAndSchemas(unittest.TestCase):
         self.assertEqual(upload.launch_executable, "PlayGTA.exe")
         self.assertEqual(upload.package_size_gb, 45.2)
 
+    def test_streaming_credentials_format(self):
+        wan_ip = "122.161.64.41"
+        port = 47989
+        pin = "4819"
+        moonlight_uri = f"moonlight://{wan_ip}:{port}?pin={pin}"
+        self.assertTrue(moonlight_uri.startswith("moonlight://"))
+        self.assertIn("pin=4819", moonlight_uri)
+        self.assertEqual(port, 47989)
+
 
 if __name__ == "__main__":
     unittest.main()

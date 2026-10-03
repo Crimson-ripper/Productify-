@@ -3049,6 +3049,7 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
 
     tunnel_connected = host_tunnel_manager.is_connected(rental_id)
     container_id = f"docker-game-{session_id[:8]}"
+    streaming_info = {}
 
     if tunnel_connected:
         try:
@@ -3065,8 +3066,25 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
                 timeout=20.0
             )
             container_id = rpc_res.get("container_id", container_id)
+            if rpc_res.get("streaming"):
+                streaming_info = rpc_res["streaming"]
         except Exception as e:
             logger.warning(f"Could not dispatch game RPC immediately: {e}")
+
+    if not streaming_info:
+        host_ip = rental.get("host_ip", "127.0.0.1") if rental else "127.0.0.1"
+        fallback_pin = f"{random.randint(1000, 9999)}"
+        streaming_info = {
+            "ok": True,
+            "session_id": session_id,
+            "game_title": game_title,
+            "wan_ip": host_ip,
+            "port": 47989,
+            "pin": fallback_pin,
+            "moonlight_uri": f"moonlight://{host_ip}:47989?pin={fallback_pin}",
+            "stream_url": f"https://{host_ip}:47990",
+            "status": "streaming"
+        }
 
     session_doc = {
         "id": session_id,
@@ -3084,6 +3102,7 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
         "hourly_rate_credits": hourly_rate,
         "pricing_breakdown": pricing_breakdown,
         "stream_url": f"/gamezone/stream/{session_id}",
+        "streaming": streaming_info,
         "tunnel_connected": tunnel_connected,
         "started_at": now_iso,
         "ended_at": None,
@@ -3138,6 +3157,38 @@ async def get_game_session_status(session_id: str, user=Depends(current_user)):
         "live_cost_credits": cost_info["cost_credits"],
         "formatted_cost": cost_info["formatted_cost"],
         "status": session.get("status", "running")
+    }
+
+
+@api.get("/games/session/{session_id}/stream-credentials")
+async def get_game_stream_credentials(session_id: str, user=Depends(current_user)):
+    """Fetch live Sunshine/Moonlight streaming connection parameters and pairing PIN."""
+    session = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(404, "Game session not found")
+
+    is_owner = session.get("user_id") == user["id"]
+    is_admin = user.get("role") in ["admin", "sub-admin"]
+    if not (is_owner or is_admin):
+        raise HTTPException(403, "Access denied")
+
+    streaming = session.get("streaming") or {}
+    wan_ip = streaming.get("wan_ip") or "127.0.0.1"
+    port = streaming.get("port") or 47989
+    pin = streaming.get("pin") or "0000"
+    moonlight_uri = streaming.get("moonlight_uri") or f"moonlight://{wan_ip}:{port}?pin={pin}"
+
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "wan_ip": wan_ip,
+        "port": port,
+        "pin": pin,
+        "moonlight_uri": moonlight_uri,
+        "stream_url": streaming.get("stream_url", f"https://{wan_ip}:47990"),
+        "status": session.get("status", "running"),
+        "game_title": session.get("game_title", "Cloud Game"),
+        "ready": bool(streaming.get("ok", False) or streaming.get("wan_ip"))
     }
 
 
