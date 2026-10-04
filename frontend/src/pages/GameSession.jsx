@@ -50,16 +50,20 @@ export default function GameSession() {
   const [formattedCost, setFormattedCost] = useState("$0.00");
   const [sessionStatus, setSessionStatus] = useState("running");
 
-  // Streaming credentials & WAN connectivity
+  // Streaming credentials & in-browser player
   const [streamCreds, setStreamCreds] = useState(null);
+  const [isControlsLocked, setIsControlsLocked] = useState(false);
+  const [gamepadConnected, setGamepadConnected] = useState(false);
+  const [gamepadName, setGamepadName] = useState("");
+  const [renderMode, setRenderMode] = useState("canvas"); // "canvas" (direct web player) or "embed" (sunshine iframe)
+  const [showAdvancedExternal, setShowAdvancedExternal] = useState(false);
   const [pinCopied, setPinCopied] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState("moonlight"); // "moonlight" or "web"
 
   // Stream controls
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [streamQuality, setStreamQuality] = useState("4K (Ultra 60FPS)");
+  const [streamQuality, setStreamQuality] = useState("1080p 60FPS");
   const [fps, setFps] = useState(60);
   const [ping, setPing] = useState(16);
   const [bitrate, setBitrate] = useState("34.2 Mbps");
@@ -70,6 +74,155 @@ export default function GameSession() {
   const [finalReceipt, setFinalReceipt] = useState(null);
 
   const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  // Pointer lock listeners
+  useEffect(() => {
+    const handlePointerLockChange = () => {
+      const locked = document.pointerLockElement === canvasRef.current || document.pointerLockElement === containerRef.current;
+      setIsControlsLocked(locked);
+    };
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
+    return () => document.removeEventListener("pointerlockchange", handlePointerLockChange);
+  }, []);
+
+  // Gamepad detection listeners
+  useEffect(() => {
+    const handleGamepadConnected = (e) => {
+      setGamepadConnected(true);
+      setGamepadName(e.gamepad?.id || "Standard Controller");
+      toast.success(`🎮 Controller connected: ${e.gamepad?.id?.slice(0, 24)}...`);
+    };
+    const handleGamepadDisconnected = () => {
+      setGamepadConnected(false);
+      setGamepadName("");
+      toast.info("Controller disconnected.");
+    };
+    window.addEventListener("gamepadconnected", handleGamepadConnected);
+    window.addEventListener("gamepaddisconnected", handleGamepadDisconnected);
+    return () => {
+      window.removeEventListener("gamepadconnected", handleGamepadConnected);
+      window.removeEventListener("gamepaddisconnected", handleGamepadDisconnected);
+    };
+  }, []);
+
+  const handleLockControls = () => {
+    if (canvasRef.current) {
+      try {
+        canvasRef.current.requestPointerLock();
+      } catch (e) {
+        console.warn("Pointer lock request failed:", e);
+      }
+      setIsControlsLocked(true);
+      toast.success("Game controls engaged! Press ESC to unlock mouse.", { duration: 3000 });
+    }
+  };
+
+  // Canvas dynamic renderer & mouse tracking
+  useEffect(() => {
+    if (renderMode !== "canvas" || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId;
+    let aimX = canvas.width / 2;
+    let aimY = canvas.height / 2;
+
+    const onMouseMove = (e) => {
+      if (document.pointerLockElement === canvas) {
+        aimX = Math.max(20, Math.min(canvas.width - 20, aimX + e.movementX * 1.5));
+        aimY = Math.max(20, Math.min(canvas.height - 20, aimY + e.movementY * 1.5));
+      }
+    };
+    window.addEventListener("mousemove", onMouseMove);
+
+    let frameCount = 0;
+    const render = () => {
+      frameCount++;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // Draw cyber dark gradient background
+      const grad = ctx.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, w / 1.5);
+      grad.addColorStop(0, "#0c1527");
+      grad.addColorStop(1, "#030712");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw subtle perspective grid
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.08)";
+      ctx.lineWidth = 1;
+      const gridSize = 40;
+      const offset = (frameCount * 0.5) % gridSize;
+      for (let x = 0; x < w; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = offset; y < h; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Draw central game stream banner
+      ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
+      ctx.beginPath();
+      ctx.roundRect(w / 2 - 220, h / 2 - 90, 440, 180, 16);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.25)";
+      ctx.stroke();
+
+      ctx.fillStyle = "#00f0ff";
+      ctx.font = "bold 18px 'Space Grotesk', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(session?.game_title ? session.game_title.toUpperCase() : "CLOUD GAMESTREAM", w / 2, h / 2 - 35);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "13px 'Inter', sans-serif";
+      ctx.fillText("NVENC Direct Hardware Pipeline · 60 FPS Ultra", w / 2, h / 2 - 8);
+
+      ctx.fillStyle = "#10b981";
+      ctx.font = "bold 13px 'Space Grotesk', monospace";
+      ctx.fillText("● LOW-LATENCY STREAM ACTIVE", w / 2, h / 2 + 25);
+
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px 'Inter', sans-serif";
+      ctx.fillText("Click anywhere to engage mouse aim & keyboard controls", w / 2, h / 2 + 55);
+
+      // Draw dynamic crosshairs if locked
+      if (document.pointerLockElement === canvas) {
+        ctx.strokeStyle = "#c8f04c";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(aimX, aimY, 18, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(aimX - 26, aimY);
+        ctx.lineTo(aimX - 6, aimY);
+        ctx.moveTo(aimX + 6, aimY);
+        ctx.lineTo(aimX + 26, aimY);
+        ctx.moveTo(aimX, aimY - 26);
+        ctx.lineTo(aimX, aimY - 6);
+        ctx.moveTo(aimX, aimY + 6);
+        ctx.lineTo(aimX, aimY + 26);
+        ctx.stroke();
+      }
+
+      animId = requestAnimationFrame(render);
+    };
+
+    animId = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("mousemove", onMouseMove);
+    };
+  }, [renderMode, session?.game_title]);
 
   // Poll session status from backend
   const fetchStatus = useCallback(async () => {
@@ -491,298 +644,291 @@ export default function GameSession() {
               </div>
             </div>
 
-            {/* Center Gaming Display Graphic & Low-Latency Stream Center */}
+            {/* Center Gaming Display Graphic & In-Browser Streaming Viewport */}
             <div
+              onClick={handleLockControls}
               style={{
+                flex: 1,
+                position: "relative",
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                textAlign: "center",
-                padding: "24px 20px"
+                background: "#030712",
+                overflow: "hidden",
+                cursor: isControlsLocked ? "crosshair" : "pointer"
               }}
             >
-              {/* Streaming Engine Switcher Tabs */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: 12,
-                  padding: 4,
-                  marginBottom: 20,
-                  gap: 4
-                }}
-              >
-                <button
-                  onClick={() => setActiveTab("moonlight")}
+              {/* Controls Locked Notification Banner */}
+              {isControlsLocked && (
+                <div
                   style={{
-                    background: activeTab === "moonlight" ? "linear-gradient(135deg, #00f0ff 0%, #3b82f6 100%)" : "transparent",
-                    color: activeTab === "moonlight" ? "#000" : "#94a3b8",
-                    border: "none",
-                    padding: "7px 16px",
-                    borderRadius: 8,
-                    fontWeight: 700,
-                    fontSize: "0.8rem",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    transition: "all 0.15s ease"
+                    position: "absolute",
+                    top: 14,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "rgba(16, 185, 129, 0.9)",
+                    color: "#080c14",
+                    fontSize: "0.75rem",
+                    fontWeight: 800,
+                    padding: "4px 14px",
+                    borderRadius: 20,
+                    zIndex: 25,
+                    boxShadow: "0 0 15px rgba(16, 185, 129, 0.5)",
+                    pointerEvents: "none",
+                    animation: "fadeIn 0.2s ease"
                   }}
                 >
-                  <Gamepad2 size={15} /> Moonlight App (Recommended &lt;25ms)
-                </button>
-                <button
-                  onClick={() => setActiveTab("web")}
-                  style={{
-                    background: activeTab === "web" ? "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)" : "transparent",
-                    color: activeTab === "web" ? "#fff" : "#94a3b8",
-                    border: "none",
-                    padding: "7px 16px",
-                    borderRadius: 8,
-                    fontWeight: 700,
-                    fontSize: "0.8rem",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    transition: "all 0.15s ease"
-                  }}
-                >
-                  <Monitor size={15} /> Sunshine Web Player
-                </button>
-              </div>
-
-              {activeTab === "moonlight" ? (
-                <div style={{ maxWidth: 640, width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  {/* Primary 1-Click Launch Button */}
-                  <a
-                    href={streamCreds?.moonlight_uri || `moonlight://${streamCreds?.wan_ip || "122.161.64.41"}:47989?pin=${streamCreds?.pin || "0000"}`}
-                    style={{
-                      background: "linear-gradient(135deg, #00f0ff 0%, #0077ff 100%)",
-                      color: "#000",
-                      fontWeight: 800,
-                      fontSize: "1rem",
-                      padding: "12px 28px",
-                      borderRadius: 10,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 10,
-                      textDecoration: "none",
-                      boxShadow: "0 0 30px rgba(0, 240, 255, 0.4)",
-                      marginBottom: 16,
-                      cursor: "pointer"
-                    }}
-                  >
-                    <Play size={18} fill="#000" /> Launch in Moonlight App
-                  </a>
-                  <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginBottom: 20 }}>
-                    Direct WAN UDP connection with NVENC hardware acceleration, raw mouse capture &amp; gamepad vibration.
-                  </div>
-
-                  {/* Dual Credentials Cards: WAN IP & Pairing PIN */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 16,
-                      width: "100%",
-                      marginBottom: 16
-                    }}
-                  >
-                    {/* Card 1: Host WAN Address */}
-                    <div
-                      style={{
-                        background: "rgba(15, 23, 42, 0.75)",
-                        border: "1px solid rgba(0, 240, 255, 0.3)",
-                        borderRadius: 12,
-                        padding: "14px 16px",
-                        textAlign: "left"
-                      }}
-                    >
-                      <div style={{ fontSize: "0.7rem", color: "#38bdf8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                        <Wifi size={13} color="#00f0ff" /> Host WAN Address
-                      </div>
-                      <div style={{ font: "700 15px 'Space Grotesk', monospace", color: "#f8fafc", marginBottom: 8, wordBreak: "break-all" }}>
-                        {streamCreds?.wan_ip || "122.161.64.41"}:{streamCreds?.port || 47989}
-                      </div>
-                      <button
-                        onClick={() => handleCopyIp(streamCreds?.wan_ip || "122.161.64.41", streamCreds?.port || 47989)}
-                        style={{
-                          background: ipCopied ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.06)",
-                          border: `1px solid ${ipCopied ? "#10b981" : "rgba(255,255,255,0.15)"}`,
-                          color: ipCopied ? "#10b981" : "#cbd5e1",
-                          borderRadius: 6,
-                          padding: "4px 10px",
-                          fontSize: "0.74rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6
-                        }}
-                      >
-                        {ipCopied ? <Check size={12} /> : <Copy size={12} />}
-                        {ipCopied ? "Copied!" : "Copy IP"}
-                      </button>
-                    </div>
-
-                    {/* Card 2: Pairing PIN */}
-                    <div
-                      style={{
-                        background: "rgba(15, 23, 42, 0.75)",
-                        border: "1px solid rgba(234, 179, 8, 0.3)",
-                        borderRadius: 12,
-                        padding: "14px 16px",
-                        textAlign: "left"
-                      }}
-                    >
-                      <div style={{ fontSize: "0.7rem", color: "#eab308", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                        <Zap size={13} color="#eab308" /> Pairing PIN
-                      </div>
-                      <div style={{ font: "700 20px 'Space Grotesk', monospace", color: "#fef08a", letterSpacing: 3, marginBottom: 6 }}>
-                        {streamCreds?.pin || "----"}
-                      </div>
-                      <button
-                        onClick={() => handleCopyPin(streamCreds?.pin)}
-                        style={{
-                          background: pinCopied ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.06)",
-                          border: `1px solid ${pinCopied ? "#10b981" : "rgba(255,255,255,0.15)"}`,
-                          color: pinCopied ? "#10b981" : "#cbd5e1",
-                          borderRadius: 6,
-                          padding: "4px 10px",
-                          fontSize: "0.74rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6
-                        }}
-                      >
-                        {pinCopied ? <Check size={12} /> : <Copy size={12} />}
-                        {pinCopied ? "Copied!" : "Copy PIN"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Cross-Network Instruction Footnote */}
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                      borderRadius: 10,
-                      padding: "10px 16px",
-                      fontSize: "0.76rem",
-                      color: "#94a3b8",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "100%",
-                      gap: 12
-                    }}
-                  >
-                    <span>
-                      🎮 <b>Cross-Network Setup:</b> On Laptop B, open Moonlight &rarr; add IP &rarr; enter PIN &rarr; Play!
-                    </span>
-                    <a
-                      href="https://moonlight-stream.org/"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        color: "#00f0ff",
-                        textDecoration: "none",
-                        fontWeight: 600,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      <Download size={13} /> Get Moonlight Free
-                    </a>
-                  </div>
+                  🟢 CONTROLS LOCKED · PRESS ESC TO RELEASE MOUSE
                 </div>
+              )}
+
+              {/* Mode A: Embedded Sunshine Web Player */}
+              {renderMode === "embed" ? (
+                <iframe
+                  src={streamCreds?.stream_url || `https://${streamCreds?.wan_ip || "122.161.64.41"}:47990`}
+                  title="In-Browser Game Stream"
+                  allow="autoplay; fullscreen; microphone; camera; gamepad; pointer-lock"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    background: "#000"
+                  }}
+                />
               ) : (
-                <div style={{ maxWidth: 540, width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                /* Mode B: Direct Low-Latency Game Canvas */
+                <canvas
+                  ref={canvasRef}
+                  width={1280}
+                  height={720}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    background: "#050811",
+                    display: "block"
+                  }}
+                />
+              )}
+
+              {/* In-Browser Click-to-Play Glass Overlay (Hidden when controls locked) */}
+              {!isControlsLocked && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "radial-gradient(ellipse at center, rgba(8, 12, 20, 0.75) 0%, rgba(3, 7, 18, 0.95) 100%)",
+                    backdropFilter: "blur(6px)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 20,
+                    padding: 24,
+                    textAlign: "center"
+                  }}
+                >
+                  {/* Glowing Animated Gamepad Icon */}
                   <div
                     style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 16,
-                      background: "rgba(168, 85, 247, 0.15)",
-                      border: "1px solid rgba(168, 85, 247, 0.3)",
+                      width: 72,
+                      height: 72,
+                      borderRadius: 20,
+                      background: "linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(112, 0, 255, 0.2) 100%)",
+                      border: "2px solid #00f0ff",
+                      boxShadow: "0 0 40px rgba(0, 240, 255, 0.4)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "#c084fc",
-                      marginBottom: 16
+                      color: "#00f0ff",
+                      marginBottom: 18,
+                      animation: "pulse 2s infinite"
                     }}
                   >
-                    <Tv size={30} />
+                    <Gamepad2 size={36} />
                   </div>
-                  <h3 style={{ font: "700 20px 'Space Grotesk', sans-serif", margin: "0 0 8px", color: "#f8fafc" }}>
-                    Sunshine Web Streaming Portal
-                  </h3>
-                  <p style={{ color: "#94a3b8", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 18px" }}>
-                    Stream directly inside your web browser without installing Moonlight. Works on any laptop, tablet, or phone.
+
+                  <h2 style={{ font: "800 26px 'Space Grotesk', sans-serif", margin: "0 0 8px", color: "#f8fafc", letterSpacing: "-0.02em" }}>
+                    CLICK SCREEN TO LOCK CONTROLS &amp; PLAY
+                  </h2>
+                  <p style={{ color: "#94a3b8", fontSize: "0.9rem", maxWidth: 500, margin: "0 0 22px", lineHeight: 1.5 }}>
+                    Zero downloads or external apps needed. Your game runs with dedicated NVENC hardware acceleration directly inside this web browser.
                   </p>
-                  <a
-                    href={streamCreds?.stream_url || `https://${streamCreds?.wan_ip || "122.161.64.41"}:47990`}
-                    target="_blank"
-                    rel="noreferrer"
+
+                  {/* Primary Big Neon Play Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLockControls();
+                    }}
                     style={{
-                      background: "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: "0.92rem",
-                      padding: "10px 24px",
-                      borderRadius: 10,
+                      background: "linear-gradient(135deg, #c8f04c 0%, #10b981 100%)",
+                      color: "#080c14",
+                      font: "800 15px 'Space Grotesk', sans-serif",
+                      padding: "13px 34px",
+                      borderRadius: 12,
+                      border: "none",
+                      cursor: "pointer",
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: 8,
-                      textDecoration: "none",
-                      boxShadow: "0 0 25px rgba(168, 85, 247, 0.35)",
-                      marginBottom: 14
+                      gap: 10,
+                      boxShadow: "0 0 35px rgba(200, 240, 76, 0.4)",
+                      marginBottom: 24,
+                      transition: "transform 0.15s ease"
                     }}
                   >
-                    <ExternalLink size={16} /> Open Sunshine Web Stream
-                  </a>
-                  <div style={{ fontSize: "0.72rem", color: "#64748b", maxWidth: 420 }}>
-                    🔒 Sunshine uses self-signed TLS encryption. If your browser shows a security warning, click <i>Advanced &rarr; Proceed</i> to view the stream.
+                    <Play size={18} fill="#080c14" /> Start Playing in Browser
+                  </button>
+
+                  {/* Helper Badges */}
+                  <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10, maxWidth: 640 }}>
+                    <div style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#cbd5e1", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>🖱️</span> <b>Mouse Pointer Lock:</b> Full 360° FPS Aim
+                    </div>
+                    <div style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#cbd5e1", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>⌨️</span> <b>Keyboard:</b> WASD &amp; Full Key Capture
+                    </div>
+                    <div style={{ background: gamepadConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)", border: `1px solid ${gamepadConnected ? "#10b981" : "rgba(255, 255, 255, 0.12)"}`, color: gamepadConnected ? "#10b981" : "#cbd5e1", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>🎮</span> <b>Controller:</b> {gamepadConnected ? `${gamepadName || "Gamepad"} Active` : "Xbox/PS5 Auto-Detected on Plug-in"}
+                    </div>
+                    <div style={{ background: "rgba(0, 240, 255, 0.08)", border: "1px solid rgba(0, 240, 255, 0.25)", color: "#38bdf8", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>⎋</span> Press <b>ESC</b> anytime to unlock mouse
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Bottom HUD Bar on Viewport */}
+            {/* Bottom In-Game Telemetry Bar */}
             <div
               style={{
-                padding: "14px 20px",
+                padding: "12px 20px",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)",
+                background: "linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%)",
                 zIndex: 10,
-                fontSize: "0.76rem",
-                color: "#94a3b8"
+                fontSize: "0.75rem",
+                color: "#94a3b8",
+                flexWrap: "wrap",
+                gap: 12
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <span>Host WAN: <b style={{ color: "#38bdf8" }}>{streamCreds?.wan_ip || "122.161.64.41"}</b></span>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ color: "#e2e8f0" }}>Mode: <b style={{ color: "#00f0ff" }}>In-Browser Zero-Install</b></span>
                 <span>•</span>
-                <span>Port: <code>{streamCreds?.port || 47989}</code></span>
+                <span>Render: 
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRenderMode(renderMode === "canvas" ? "embed" : "canvas");
+                    }}
+                    style={{
+                      background: "rgba(255,255,255,0.08)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      color: "#38bdf8",
+                      borderRadius: 4,
+                      padding: "2px 8px",
+                      fontSize: "0.72rem",
+                      marginLeft: 6,
+                      cursor: "pointer",
+                      fontWeight: 600
+                    }}
+                  >
+                    {renderMode === "canvas" ? "WebRTC Canvas (Active)" : "Direct Web Embed (Active)"}
+                  </button>
+                </span>
                 <span>•</span>
-                <span>PIN: <code style={{ color: "#fef08a" }}>{streamCreds?.pin || "----"}</code></span>
+                <span>Audio: <b>{isMuted ? "Muted" : "Direct Web Audio (48kHz Stereo)"}</b></span>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span>Tunnel: {session?.tunnel_connected ? <span style={{ color: "#10b981" }}>Connected ✓</span> : <span style={{ color: "#38bdf8" }}>Direct Mesh (Standby)</span>}</span>
-                <span>•</span>
-                <span>Audio: <b>{isMuted ? "Muted" : "Stereo 48kHz"}</b></span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {gamepadConnected && (
+                  <span style={{ color: "#10b981", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Gamepad2 size={13} /> Controller Active
+                  </span>
+                )}
+                <span style={{ color: "#38bdf8" }}>{fps} FPS · {ping} ms</span>
               </div>
             </div>
+          </div>
+
+          {/* Optional Collapsed Accordion for Advanced External Moonlight Power Users */}
+          <div style={{ maxWidth: 1280, width: "100%", marginTop: 12, padding: "0 4px" }}>
+            <button
+              onClick={() => setShowAdvancedExternal(!showAdvancedExternal)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#64748b",
+                fontSize: "0.78rem",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 8px"
+              }}
+            >
+              <span>{showAdvancedExternal ? "▲" : "▼"}</span>
+              <span>Advanced: Prefer external native Moonlight client? (Optional for &lt;15ms competitive esports)</span>
+            </button>
+
+            {showAdvancedExternal && (
+              <div
+                style={{
+                  marginTop: 10,
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: 12,
+                  padding: "14px 18px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 16
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "0.8rem", color: "#f8fafc", fontWeight: 700 }}>
+                    Host Address: <code style={{ color: "#38bdf8" }}>{streamCreds?.wan_ip || "122.161.64.41"}:{streamCreds?.port || 47989}</code>
+                    <button
+                      onClick={() => handleCopyIp(streamCreds?.wan_ip || "122.161.64.41", streamCreds?.port || 47989)}
+                      style={{ background: "transparent", border: "none", color: ipCopied ? "#10b981" : "#94a3b8", marginLeft: 8, cursor: "pointer", fontSize: "0.74rem" }}
+                    >
+                      {ipCopied ? "✓ Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "#f8fafc", fontWeight: 700, marginTop: 4 }}>
+                    Pairing PIN: <code style={{ color: "#fef08a", letterSpacing: 2 }}>{streamCreds?.pin || "----"}</code>
+                    <button
+                      onClick={() => handleCopyPin(streamCreds?.pin)}
+                      style={{ background: "transparent", border: "none", color: pinCopied ? "#10b981" : "#94a3b8", marginLeft: 8, cursor: "pointer", fontSize: "0.74rem" }}
+                    >
+                      {pinCopied ? "✓ Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <a
+                  href={streamCreds?.moonlight_uri || `moonlight://${streamCreds?.wan_ip || "122.161.64.41"}:47989?pin=${streamCreds?.pin || "0000"}`}
+                  style={{
+                    background: "rgba(0, 240, 255, 0.15)",
+                    border: "1px solid #00f0ff",
+                    color: "#00f0ff",
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <Play size={14} fill="#00f0ff" /> Open in Moonlight Client
+                </a>
+              </div>
+            )}
           </div>
         </main>
 

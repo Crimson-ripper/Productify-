@@ -999,8 +999,8 @@ export default function Gamezone() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: "rgba(0, 0, 0, 0.8)",
-              backdropFilter: "blur(6px)",
+              background: "rgba(3, 7, 18, 0.85)",
+              backdropFilter: "blur(10px)",
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
@@ -1010,74 +1010,185 @@ export default function Gamezone() {
           >
             <div
               style={{
-                background: "#111827",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                borderRadius: 16,
+                background: "linear-gradient(180deg, #0e1424 0%, #080c14 100%)",
+                border: "1px solid rgba(0, 240, 255, 0.3)",
+                borderRadius: 20,
                 padding: "28px 32px",
-                maxWidth: 480,
+                maxWidth: 520,
                 width: "100%",
-                color: "#ffffff"
+                color: "#ffffff",
+                boxShadow: "0 20px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 240, 255, 0.15)"
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                <div>
-                  <div style={{ fontSize: "0.75rem", color: "#a5b4fc", textTransform: "uppercase", fontWeight: 700 }}>Confirm Cloud Launch</div>
-                  <h3 style={{ margin: "4px 0 0", font: "700 22px 'Space Grotesk', sans-serif" }}>{selectedGame.title}</h3>
+              {/* Modal Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: "linear-gradient(135deg, #00f0ff 0%, #7000ff 100%)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#000"
+                    }}
+                  >
+                    <Gamepad2 size={24} />
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: "0.72rem", color: "#00f0ff", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Instant Cloud Play
+                      </span>
+                      <span style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#10b981", fontSize: "0.68rem", fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>
+                        IN-BROWSER
+                      </span>
+                    </div>
+                    <h3 style={{ margin: "4px 0 0", font: "700 22px 'Space Grotesk', sans-serif" }}>
+                      {selectedGame.title}
+                    </h3>
+                  </div>
                 </div>
                 <button
                   onClick={() => setSelectedGame(null)}
-                  style={{ background: "transparent", border: "none", color: "#9ca3af", fontSize: "1.2rem", cursor: "pointer" }}
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: "1rem", cursor: "pointer" }}
                 >
                   ✕
                 </button>
               </div>
 
-              <p style={{ color: "#9ca3af", fontSize: "0.88rem", lineHeight: 1.5, marginBottom: 20 }}>
-                This will spin up an isolated Docker container with dedicated GPU passthrough on an active host compute node.
-              </p>
+              {/* Zero-Install Banner */}
+              <div
+                style={{
+                  background: "rgba(0, 240, 255, 0.08)",
+                  border: "1px solid rgba(0, 240, 255, 0.2)",
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 18,
+                  fontSize: "0.82rem",
+                  color: "#cbd5e1"
+                }}
+              >
+                <Sparkles size={16} color="#00f0ff" style={{ flexShrink: 0 }} />
+                <span>
+                  <b>100% In-Browser Play:</b> No downloads or 3rd-party apps needed. Play directly in your web browser with mouse lock and gamepad support!
+                </span>
+              </div>
 
-              <div style={{ background: "rgba(255, 255, 255, 0.04)", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: "0.85rem" }}>
-                  <span style={{ color: "#9ca3af" }}>Hourly Rate:</span>
-                  <b style={{ color: "#10b981", fontSize: "1.05rem" }}>{selectedGame.hourly_rate_credits.toFixed(2)} credits/hr</b>
+              {/* Pricing & Host Specs Card */}
+              <div
+                style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: 12,
+                  padding: "16px 18px",
+                  marginBottom: 20
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, fontSize: "0.88rem" }}>
+                  <span style={{ color: "#94a3b8" }}>Hourly Rate:</span>
+                  <div style={{ textAlign: "right" }}>
+                    <b style={{ color: "#c8f04c", fontSize: "1.15rem", fontFamily: "'Space Grotesk', sans-serif" }}>
+                      {selectedGame.hourly_rate_credits.toFixed(2)} credits/hr
+                    </b>
+                    <span style={{ fontSize: "0.76rem", color: "#94a3b8", display: "block" }}>
+                      (~${selectedGame.hourly_rate_credits.toFixed(2)}/hr · Metered second-by-second)
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: "0.85rem" }}>
-                  <span style={{ color: "#9ca3af" }}>Min Requirement:</span>
-                  <span>{selectedGame.min_gpu_vram} VRAM</span>
+                  <span style={{ color: "#94a3b8" }}>Allocated Cloud GPU:</span>
+                  <span style={{ color: "#38bdf8", fontWeight: 600 }}>{availableRentals[0]?.gpu || "NVIDIA RTX 4090"} (Dedicated NVENC)</span>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                  <span style={{ color: "#9ca3af" }}>Host Node:</span>
-                  <span style={{ color: "#38bdf8" }}>{availableRentals[0]?.gpu || "NVIDIA RTX 4090"}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8, marginTop: 8 }}>
+                  <span style={{ color: "#94a3b8" }}>Your Current Balance:</span>
+                  <b style={{ color: user ? "#10b981" : "#f59e0b" }}>
+                    {user ? `${(user.compute_credits ?? user.balance ?? 10.0).toFixed(2)} credits` : "Sign In to Check"}
+                  </b>
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 12 }}>
-                <button
-                  onClick={() => setSelectedGame(null)}
-                  style={{ flex: 1, padding: "11px", background: "transparent", border: "1px solid rgba(255, 255, 255, 0.2)", borderRadius: 8, color: "#ffffff", fontWeight: 600, cursor: "pointer" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleLaunchGame}
-                  disabled={launchingSession}
-                  style={{
-                    flex: 2,
-                    padding: "11px",
-                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                    border: "none",
-                    borderRadius: 8,
-                    color: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)"
-                  }}
-                >
-                  {launchingSession ? "Spinning up..." : "Confirm & Launch"}
-                </button>
-              </div>
+              {/* Action Buttons */}
+              {!user ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <button
+                    onClick={() => {
+                      sessionStorage.setItem("productify_pending_game", JSON.stringify(selectedGame));
+                      navigate("/login");
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "13px",
+                      background: "linear-gradient(135deg, #00f0ff 0%, #0077ff 100%)",
+                      border: "none",
+                      borderRadius: 10,
+                      color: "#000",
+                      fontWeight: 800,
+                      fontSize: "0.95rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      boxShadow: "0 0 25px rgba(0, 240, 255, 0.4)"
+                    }}
+                  >
+                    <Play size={18} fill="#000" /> Sign In &amp; Start Playing
+                  </button>
+                  <p style={{ textAlign: "center", color: "#64748b", fontSize: "0.78rem", margin: 0 }}>
+                    New here? Registering takes 10 seconds and includes free trial compute credits!
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 12 }}>
+                  <button
+                    onClick={() => setSelectedGame(null)}
+                    style={{
+                      flex: 1,
+                      padding: "12px",
+                      background: "transparent",
+                      border: "1px solid rgba(255, 255, 255, 0.2)",
+                      borderRadius: 10,
+                      color: "#ffffff",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleLaunchGame}
+                    disabled={launchingSession}
+                    style={{
+                      flex: 2,
+                      padding: "12px",
+                      background: "linear-gradient(135deg, #c8f04c 0%, #10b981 100%)",
+                      border: "none",
+                      borderRadius: 10,
+                      color: "#080c14",
+                      fontWeight: 800,
+                      fontSize: "0.95rem",
+                      cursor: "pointer",
+                      boxShadow: "0 0 30px rgba(200, 240, 76, 0.35)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    <Play size={16} fill="#080c14" />
+                    {launchingSession ? "Spinning up Cloud GPU..." : "Start Playing in Browser"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
