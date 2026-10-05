@@ -13,7 +13,7 @@ import {
   Wallet,
   Clock
 } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
@@ -86,7 +86,7 @@ export default function GpuRentalSpace() {
       setRental(rRes.data);
       setCredits(Number(cRes.data?.compute_credits || 0.0));
     } catch (err) {
-      toast.error("Failed to load GPU node details");
+      toast.error(getErrorMessage(err, "Failed to load GPU node details"));
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ export default function GpuRentalSpace() {
       setCredits(Number(res.data.compute_credits));
       toast.success(`Successfully added ${money(amt)} to your Compute Credits!`);
     } catch (err) {
-      toast.error("Failed to add compute credits");
+      toast.error(getErrorMessage(err, "Failed to add compute credits"));
     } finally {
       setTopupBusy(false);
     }
@@ -133,7 +133,7 @@ export default function GpuRentalSpace() {
       toast.success("Instance container launched! Connecting to node...");
       navigate(`/instances/${res.data.id}`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to launch GPU instance");
+      toast.error(getErrorMessage(err, "Failed to launch GPU instance"));
     } finally {
       setLaunching(false);
     }

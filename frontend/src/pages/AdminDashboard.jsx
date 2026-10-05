@@ -22,7 +22,7 @@ import {
   Edit2,
   Check
 } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
@@ -200,7 +200,8 @@ export default function AdminDashboard() {
     try {
       const res = await api.get("/admin/games");
       setAdminGames(res.data?.games || []);
-    } catch {
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not load Gamezone catalog"));
       setAdminGames([]);
     } finally {
       setAdminGamesLoading(false);
@@ -215,7 +216,7 @@ export default function AdminDashboard() {
       setEditingGameId(null);
       fetchAdminGames();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to update game.");
+      toast.error(getErrorMessage(err, "Failed to update game"));
     }
   };
 
@@ -227,7 +228,7 @@ export default function AdminDashboard() {
       toast.success("Game removed from library.");
       fetchAdminGames();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to delete game.");
+      toast.error(getErrorMessage(err, "Failed to delete game"));
     }
   };
 
@@ -238,6 +239,8 @@ export default function AdminDashboard() {
     try {
       const payload = {
         ...newGameForm,
+        cover_image: newGameForm.cover_image?.trim() || null,
+        banner_image: newGameForm.banner_image?.trim() || null,
         hourly_rate_credits: parseFloat(newGameForm.hourly_rate_credits) || 1.0,
         storage_required_gb: parseFloat(newGameForm.storage_required_gb) || 20.0,
         tags: typeof newGameForm.tags === "string" ? newGameForm.tags.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) : ["gaming"]
@@ -262,7 +265,7 @@ export default function AdminDashboard() {
       });
       fetchAdminGames();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to add game.");
+      toast.error(getErrorMessage(err, "Failed to add game"));
     } finally {
       setCreatingGame(false);
     }
@@ -275,7 +278,8 @@ export default function AdminDashboard() {
       const params = submissionFilter !== "all" ? `?status=${submissionFilter}` : "";
       const res = await api.get(`/admin/games/submissions${params}`);
       setSubmissions(res.data?.submissions || []);
-    } catch {
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load submissions"));
       setSubmissions([]);
     } finally {
       setSubmissionsLoading(false);
@@ -298,7 +302,7 @@ export default function AdminDashboard() {
       fetchSubmissions();
       fetchAdminGames();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to submit review decision.");
+      toast.error(getErrorMessage(err, "Failed to submit review decision"));
     } finally {
       setSubmittingReview(false);
     }
@@ -310,7 +314,8 @@ export default function AdminDashboard() {
     try {
       const res = await api.get("/admin/games/active-sessions");
       setActiveGameSessions(res.data?.sessions || []);
-    } catch {
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load active gaming sessions"));
       setActiveGameSessions([]);
     } finally {
       setSessionsLoading(false);
@@ -325,7 +330,7 @@ export default function AdminDashboard() {
       toast.success(`Session ${sessionId} terminated.`);
       fetchActiveGameSessions();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to terminate session.");
+      toast.error(getErrorMessage(err, "Failed to terminate session"));
     }
   };
 
@@ -359,7 +364,7 @@ export default function AdminDashboard() {
       setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? { ...u, role: newRole, seller_verified: newRole === "seller" ? true : u.seller_verified } : u)));
       fetchStats();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Could not update user role.");
+      toast.error(getErrorMessage(err, "Could not update user role"));
     } finally {
       setUpdatingUserId(null);
     }
@@ -377,7 +382,7 @@ export default function AdminDashboard() {
       toast.success(`Account for ${targetUser.email} is now ${isBanning ? "SUSPENDED" : "ACTIVE"}.`);
       setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? { ...u, banned: isBanning } : u)));
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Could not update user status.");
+      toast.error(getErrorMessage(err, "Could not update user status"));
     } finally {
       setUpdatingUserId(null);
     }
@@ -395,7 +400,7 @@ export default function AdminDashboard() {
       setPendingReviews((prev) => prev.filter((x) => x.id !== item.id));
       fetchStats();
     } catch (err) {
-      toast.error(err.response?.data?.detail || `Failed to ${decision} listing`);
+      toast.error(getErrorMessage(err, `Failed to ${decision} listing`));
     }
   };
 
@@ -407,7 +412,7 @@ export default function AdminDashboard() {
       setPayouts((prev) => prev.map((p) => (p.id === withdrawalId ? { ...p, status: decision } : p)));
       fetchStats();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to update payout request");
+      toast.error(getErrorMessage(err, "Failed to update payout request"));
     }
   };
 
@@ -420,7 +425,7 @@ export default function AdminDashboard() {
       setCatalogItems((prev) => prev.filter((x) => x.id !== item.id));
       fetchStats();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to delete listing.");
+      toast.error(getErrorMessage(err, "Failed to delete listing"));
     }
   };
 
@@ -433,7 +438,7 @@ export default function AdminDashboard() {
       toast.success(decision === "dismiss" ? "Report dismissed." : "Infringing listing removed.");
       fetchStats();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to resolve report.");
+      toast.error(getErrorMessage(err, "Failed to resolve report"));
     }
   };
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -29,7 +29,7 @@ export default function GoogleLoginButton({ text = "signin_with" }) {
           navigate("/dashboard", { replace: true });
         }
       } catch (err) {
-        toast.error(err.response?.data?.detail || "Google sign-in failed");
+        toast.error(getErrorMessage(err, "Google sign-in failed"));
       }
     };
 

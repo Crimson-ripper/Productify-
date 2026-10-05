@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { HardDrive, ShieldCheck, Zap, X, CheckCircle2, Loader2, Key } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -94,7 +94,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
       onClose();
       navigate(`/instances/${res.data.id}`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to deploy GPU instance");
+      toast.error(getErrorMessage(err, "Failed to deploy GPU instance"));
     } finally {
       setIsDeploying(false);
     }

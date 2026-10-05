@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,7 +19,7 @@ export default function ImageUpload({ value, onChange, label = "Upload image", t
       onChange(publicUrl, data);
       toast.success("Image uploaded");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Upload failed");
+      toast.error(getErrorMessage(err, "Upload failed"));
     } finally {
       setBusy(false);
       if (ref.current) ref.current.value = "";

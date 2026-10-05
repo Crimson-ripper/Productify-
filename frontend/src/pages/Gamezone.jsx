@@ -21,7 +21,7 @@ import {
   Server,
   DollarSign
 } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
@@ -84,7 +84,7 @@ export default function Gamezone() {
         if (res.data.genres) setGenres(res.data.genres);
       }
     } catch (err) {
-      toast.error("Could not load games catalog.");
+      toast.error(getErrorMessage(err, "Could not load games catalog"));
     } finally {
       setLoading(false);
     }
@@ -173,7 +173,7 @@ export default function Gamezone() {
         navigate(`/gamezone/session/${res.data.session.id}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to start game session.");
+      toast.error(getErrorMessage(err, "Failed to start game session"));
     } finally {
       setLaunchingSession(false);
     }
@@ -196,7 +196,7 @@ export default function Gamezone() {
         navigate(`/gamezone/session/${res.data.session.id}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to launch private game container.");
+      toast.error(getErrorMessage(err, "Failed to launch private game container"));
     } finally {
       setLaunchingSession(false);
     }
@@ -225,7 +225,7 @@ export default function Gamezone() {
       });
       fetchMySubmissions();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to submit game.");
+      toast.error(getErrorMessage(err, "Failed to submit game"));
     } finally {
       setSubmitting(false);
     }
@@ -251,7 +251,7 @@ export default function Gamezone() {
       });
       fetchPrivateGames();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save private game.");
+      toast.error(getErrorMessage(err, "Failed to save private game"));
     } finally {
       setUploadingPrivate(false);
     }
@@ -264,8 +264,8 @@ export default function Gamezone() {
       await api.delete(`/games/private/${pgameId}`);
       toast.success("Game removed.");
       fetchPrivateGames();
-    } catch {
-      toast.error("Could not delete game.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not delete game"));
     }
   };
 

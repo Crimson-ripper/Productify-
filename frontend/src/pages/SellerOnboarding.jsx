@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import ImageUpload from "@/components/ImageUpload";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/api";
 
 export default function SellerOnboarding() {
   const { user, registerEmail, sendSellerOtp, confirmSellerOtp, checkUsername, activateSeller, upgradeSellerTier } = useAuth();
@@ -123,7 +124,7 @@ export default function SellerOnboarding() {
         toast.success("Account registered! Please verify your email and phone.");
         setStep(2);
       } catch (err) {
-        toast.error(err.response?.data?.detail || "Registration failed. This email might already exist.");
+        toast.error(getErrorMessage(err, "Registration failed"));
       } finally {
         setBusy(false);
       }
@@ -150,7 +151,7 @@ export default function SellerOnboarding() {
         if (res.debug_code) toast.info(`Preview SMS code: ${res.debug_code}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || `Failed to send code to ${val}`);
+      toast.error(getErrorMessage(err, `Failed to send code to ${val}`));
     } finally {
       if (type === "email") setSendingEmailCode(false);
       else setSendingPhoneCode(false);
@@ -176,7 +177,7 @@ export default function SellerOnboarding() {
         toast.success("Phone verified successfully!");
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || err.message || "Invalid code. Please try again.");
+      toast.error(getErrorMessage(err, "Invalid verification code"));
     } finally {
       if (type === "email") setVerifyingEmail(false);
       else setVerifyingPhone(false);
@@ -214,7 +215,7 @@ export default function SellerOnboarding() {
       toast.success("Seller account activated successfully!");
       setStep(4);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Activation failed. Please check your details.");
+      toast.error(getErrorMessage(err, "Activation failed"));
     } finally {
       setBusy(false);
     }

@@ -9,7 +9,7 @@ import {
   ArrowRight,
   Plus
 } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
 
@@ -24,7 +24,7 @@ export default function MyInstances() {
       const res = await api.get("/instances");
       setInstances(res.data);
     } catch (err) {
-      toast.error("Failed to load instances");
+      toast.error(getErrorMessage(err, "Failed to load instances"));
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export default function MyInstances() {
       toast.success(`Instance ${action}d`);
       fetchInstances();
     } catch (err) {
-      toast.error(err.response?.data?.detail || `Failed to ${action} instance`);
+      toast.error(getErrorMessage(err, `Failed to ${action} instance`));
     }
   };
 

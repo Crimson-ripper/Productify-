@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Flag, X } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -33,7 +33,7 @@ export default function ReportButton({ listingId, listingKind }) {
       setDone(true);
       toast.success("Report received — our team will review it.");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Report failed");
+      toast.error(getErrorMessage(err, "Report failed"));
     } finally { setBusy(false); }
   };
 

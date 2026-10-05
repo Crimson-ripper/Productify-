@@ -48,7 +48,7 @@ class GameSubmitInput(BaseModel):
 
 
 class GameSubmissionReviewInput(BaseModel):
-    decision: str = Field(..., regex="^(approve|reject)$")
+    decision: str = Field(..., pattern="^(approve|reject)$")
     antivirus_scanned: bool = True
     no_crypto_miners: bool = True
     headless_gpu_tested: bool = True

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, CreditCard, Wallet, Landmark } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
@@ -51,7 +51,7 @@ export default function Checkout() {
       });
       window.location.href = data.checkout_url;
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Could not start checkout");
+      toast.error(getErrorMessage(err, "Could not start checkout"));
     } finally {
       setBusy(false);
     }

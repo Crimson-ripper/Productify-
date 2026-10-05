@@ -30,7 +30,7 @@ import {
   Wifi,
   Tv
 } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
@@ -330,7 +330,7 @@ export default function GameSession() {
         toast.success("Game container safely terminated. Credits finalized.");
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to stop game session.");
+      toast.error(getErrorMessage(err, "Failed to stop game session"));
       setStopping(false);
     }
   };

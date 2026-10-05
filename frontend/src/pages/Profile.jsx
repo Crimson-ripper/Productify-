@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import ImageUpload from "@/components/ImageUpload";
 import SEO from "@/components/SEO";
@@ -24,7 +24,7 @@ export default function Profile() {
       await refresh();
       toast.success("Profile updated");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Update failed");
+      toast.error(getErrorMessage(err, "Update failed"));
     } finally { setBusy(false); }
   };
 

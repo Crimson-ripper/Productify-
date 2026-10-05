@@ -6,6 +6,7 @@ import { Navigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import SEO from "@/components/SEO";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/api";
 
 export default function DashboardHome() {
   const { user, becomeSeller } = useAuth();
@@ -21,7 +22,7 @@ export default function DashboardHome() {
       await becomeSeller();
       toast.success("Welcome to Seller Studio! You can now publish digital products & GPU nodes.");
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Could not activate seller account");
+      toast.error(getErrorMessage(e, "Could not activate seller account"));
     } finally {
       setUpgrading(false);
     }

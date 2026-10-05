@@ -26,7 +26,7 @@ import {
   Download,
   RefreshCw
 } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import ImageUpload from "@/components/ImageUpload";
 import SEO from "@/components/SEO";
@@ -250,7 +250,7 @@ export default function SellerDashboard() {
       setPTitle(""); setPDesc(""); setPPrice(""); setPTags(""); setPImage("");
       setListingSubTab("inventory");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Publish failed");
+      toast.error(getErrorMessage(err, "Product submission failed"));
     } finally {
       setBusy(false);
     }
@@ -311,7 +311,7 @@ export default function SellerDashboard() {
         setShowAgentModal(true);
       }
     } catch (err) {
-      toast.error("Auto-detect failed. Please check connection.");
+      toast.error(getErrorMessage(err, "Auto-detect failed"));
     } finally {
       setAutoDetecting(false);
     }
@@ -374,7 +374,7 @@ export default function SellerDashboard() {
       setDetectedSignature(null);
       setListingSubTab("inventory");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Publish failed");
+      toast.error(getErrorMessage(err, "GPU node submission failed"));
     } finally {
       setBusy(false);
     }
@@ -447,7 +447,7 @@ export default function SellerDashboard() {
       toast.success(`Subscription switched to Productify ${newTier === "pro" ? "Pro" : newTier === "plus" ? "Plus" : "Free"}!`);
       setProModalOpen(false);
     } catch (err) {
-      toast.error("Failed to update subscription tier.");
+      toast.error(getErrorMessage(err, "Failed to update subscription tier"));
     } finally {
       setBusy(false);
     }
