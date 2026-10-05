@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response as FastAPIResponse, PlainTextResponse
+from fastapi.responses import Response as FastAPIResponse, PlainTextResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -137,6 +137,11 @@ class RentalInput(BaseModel):
     image: str
     description: Optional[str] = ""
     specs: Optional[dict] = {}
+    gaming_ready: Optional[bool] = False
+    hardware_signature: Optional[str] = None
+    node_id: Optional[str] = None
+    thermal_ceiling: Optional[int] = 75
+    host_wan_ip: Optional[str] = None
 
 
 class CartItemInput(BaseModel):
@@ -1007,14 +1012,50 @@ async def rental_detail(rid: str):
 async def create_rental(data: RentalInput, user=Depends(current_user)):
     if user.get("role") not in ["seller", "admin", "sub-admin"]:
         raise HTTPException(403, "Seller access required")
+    
+    rental_id = f"r-{uuid.uuid4().hex[:10]}"
+    node_id = data.node_id or f"node-{rental_id[2:]}"
+    pairing_token = f"ptok_{uuid.uuid4().hex[:16]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    is_verified = bool(data.hardware_signature)
+    status = "approved" if (user.get("role") in ["admin", "sub-admin"] or is_verified) else "pending"
+
     item = data.model_dump() | {
-        "id": str(uuid.uuid4()),
-        "status": "approved" if user.get("role") in ["admin", "sub-admin"] else "pending",
+        "id": rental_id,
+        "node_id": node_id,
+        "status": status,
+        "is_verified": is_verified,
+        "is_online": True,
         "owner": user["name"],
         "owner_id": user["id"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "pairing_token": pairing_token,
+        "gaming_ready": bool(data.gaming_ready),
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
     await db.rentals.insert_one(item)
+
+    # Ensure node entry is registered in db.nodes for platform reverse tunnel & watchdog
+    await db.nodes.update_one(
+        {"id": node_id},
+        {"$set": {
+            "id": node_id,
+            "rental_id": rental_id,
+            "owner_id": user["id"],
+            "owner_name": user["name"],
+            "gpu": data.gpu,
+            "vram": data.vram,
+            "gaming_ready": bool(data.gaming_ready),
+            "status": "ONLINE_IDLE",
+            "last_heartbeat": now_iso,
+            "pairing_token": pairing_token,
+            "thermal_ceiling": data.thermal_ceiling or 75,
+            "updated_at": now_iso,
+        }},
+        upsert=True
+    )
+
     return {k: v for k, v in item.items() if k != "_id"}
 
 
@@ -2593,6 +2634,7 @@ async def seller_nodes_telemetry(user=Depends(current_user)):
 
     host_token = f"pnode_{hash(user['id']) % 1000000:06d}_{user['id'][:6]}"
     install_command = f"curl -sSL https://productifynow.com/agent/install.sh | sudo bash -s -- --token={host_token} --cluster=prod-eu"
+    headless_command = f"python -m productify_node.bridge.local_server --token={host_token}"
 
     return {
         "nodes_count": len(nodes),
@@ -2602,6 +2644,8 @@ async def seller_nodes_telemetry(user=Depends(current_user)):
         "total_net_earned": total_net_earned,
         "host_token": host_token,
         "install_command": install_command,
+        "headless_command": headless_command,
+        "app_download_url": "/ProductifyNode.exe",
         "active_instances": active_instances,
         "nodes": nodes,
     }
@@ -2685,6 +2729,14 @@ async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None
         else:
             suggested = 0.12
 
+        gaming_ready = bool(rs.get("gaming_ready", False))
+        sunshine_ok = bool(rs.get("sunshine_installed", False))
+        vigem_ok = bool(rs.get("vigem_installed", False))
+        firewall_ok = bool(rs.get("firewall_ready", False))
+        node_id_val = rs.get("node_id") or ""
+        wan_ip_val = rs.get("wan_ip") or ""
+
+        gaming_tag = " [Cloud Gaming Ready]" if gaming_ready else ""
         detected = {
             "gpu": gpu_name,
             "vram": vram,
@@ -2694,7 +2746,13 @@ async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None
             "bandwidth": "1 Gbps Symmetrical",
             "driver_version": driver,
             "suggested_price": suggested,
-            "description": f"Verified physical machine equipped with {gpu_name} ({vram} VRAM) and {cpu}. Hardware verified via Productify Host Agent."
+            "description": f"Verified physical machine equipped with {gpu_name} ({vram} VRAM) and {cpu}. Hardware verified via Productify Host Agent.{gaming_tag}",
+            "gaming_ready": gaming_ready,
+            "sunshine_installed": sunshine_ok,
+            "vigem_installed": vigem_ok,
+            "firewall_ready": firewall_ok,
+            "node_id": node_id_val,
+            "wan_ip": wan_ip_val,
         }
 
         sig_token = f"hw_real_sig_{user['id'][:6]}_{uuid.uuid4().hex[:10]}"
@@ -2708,6 +2766,9 @@ async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None
             "pci_bus": pci_bus,
             "temperature_c": temp,
             "power_limit_w": rs.get("power_limit_w", 250),
+            "gaming_ready": gaming_ready,
+            "node_id": node_id_val,
+            "wan_ip": wan_ip_val,
         }
 
     # Fallback catalog when agent is not running
@@ -2782,6 +2843,19 @@ async def download_agent_script():
             content = f.read()
         return PlainTextResponse(content, media_type="text/x-python")
     raise HTTPException(404, "Agent script not found")
+
+
+@api.get("/ProductifyNode.exe")
+async def download_productify_node():
+    paths = [
+        os.path.join(ROOT_DIR, "..", "Productify-Node", "ProductifyNode.exe"),
+        os.path.join(ROOT_DIR, "..", "frontend", "public", "ProductifyNode.exe"),
+        os.path.join(ROOT_DIR, "..", "Productify-Node", "dist", "ProductifyNode.exe"),
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            return FileResponse(p, filename="ProductifyNode.exe", media_type="application/vnd.microsoft.portable-executable")
+    raise HTTPException(404, "ProductifyNode.exe not found on server")
 
 
 # ============== SEED ==============

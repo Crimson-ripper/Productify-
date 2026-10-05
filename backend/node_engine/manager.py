@@ -37,6 +37,7 @@ class NodeRecord:
         self.transport: str = "none"
         self.thermal: Dict[str, Any] = {}
         self.hardware: Dict[str, Any] = {}
+        self.gaming_ready: bool = False
 
         # Session tracking
         self.state_entered_at: datetime = utc_now()
@@ -67,6 +68,7 @@ class NodeRecord:
             "state_duration_formatted": format_duration(self.current_state_duration_seconds),
             "thermal": self.thermal,
             "hardware": self.hardware,
+            "gaming_ready": self.gaming_ready,
         }
 
 
@@ -104,6 +106,11 @@ class NodeLifecycleManager:
         node.is_live = bool(payload.get("is_live", payload.get("status") == "LIVE"))
         node.active_pods = int(payload.get("active_pods", 0))
         node.client_timezone = payload.get("client_timezone") or node.client_timezone or "UTC"
+
+        if "gaming_ready" in payload:
+            node.gaming_ready = bool(payload["gaming_ready"])
+        elif isinstance(payload.get("hardware"), dict) and "gaming_ready" in payload["hardware"]:
+            node.gaming_ready = bool(payload["hardware"]["gaming_ready"])
 
         if "thermal" in payload:
             node.thermal = payload["thermal"]

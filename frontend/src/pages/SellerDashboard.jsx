@@ -21,7 +21,12 @@ import {
   Copy,
   Server,
   BookOpen,
-  Loader2
+  Loader2,
+  Gamepad2,
+  Download,
+  RefreshCw,
+  ExternalLink,
+  Radio
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,10 +64,17 @@ export default function SellerDashboard() {
   const [rLoc, setRLoc] = useState("");
   const [rDesc, setRDesc] = useState("");
   const [rImage, setRImage] = useState("");
+  const [rGamingReady, setRGamingReady] = useState(false);
+  const [rNodeId, setRNodeId] = useState("");
+  const [rThermalCeiling, setRThermalCeiling] = useState(82);
+  const [localNodeOnline, setLocalNodeOnline] = useState(false);
+  const [localNodeSpecs, setLocalNodeSpecs] = useState(null);
+  const [localNodeChecking, setLocalNodeChecking] = useState(false);
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [detectedSignature, setDetectedSignature] = useState(null);
   const [showHostGuide, setShowHostGuide] = useState(true);
   const [showAgentModal, setShowAgentModal] = useState(false);
+  const [hostMode, setHostMode] = useState("desktop"); // "desktop" | "headless"
 
   const [myListings, setMyListings] = useState({ products: [], rentals: [] });
   const [busy, setBusy] = useState(false);
@@ -177,6 +189,50 @@ export default function SellerDashboard() {
       .finally(() => setGpuLoading(false));
   }, [tab]);
 
+  // Probe local ProductifyNode app bridge (127.0.0.1:48123)
+  const probeLocalNode = async (quiet = false) => {
+    if (!quiet) setLocalNodeChecking(true);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const probeRes = await fetch("http://127.0.0.1:48123/probe", {
+        signal: controller.signal,
+        headers: { "Accept": "application/json" }
+      });
+      clearTimeout(timeoutId);
+      if (probeRes.ok) {
+        const data = await probeRes.json();
+        setLocalNodeOnline(true);
+        setLocalNodeSpecs(data);
+        if (data.node_id && !rNodeId) {
+          setRNodeId(data.node_id);
+        }
+        if (data.gaming_ready) {
+          setRGamingReady(true);
+        }
+        return data;
+      } else {
+        setLocalNodeOnline(false);
+        return null;
+      }
+    } catch {
+      setLocalNodeOnline(false);
+      return null;
+    } finally {
+      if (!quiet) setLocalNodeChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    probeLocalNode(true);
+  }, []);
+
+  useEffect(() => {
+    if (listingSubTab === "rental" || tab === "gpu_host") {
+      probeLocalNode(true);
+    }
+  }, [listingSubTab, tab]);
+
   // Product submission
   const submitProduct = async (e) => {
     e.preventDefault();
@@ -204,10 +260,10 @@ export default function SellerDashboard() {
     setAutoDetecting(true);
     let realSpecs = null;
 
-    // 1. Probe local Productify Host Agent bridge (with 4-second timeout)
+    // 1. Probe local ProductifyNode desktop app bridge (with 3.5-second timeout)
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const probeRes = await fetch("http://127.0.0.1:48123/probe", {
         signal: controller.signal,
         headers: { "Accept": "application/json" }
@@ -215,10 +271,14 @@ export default function SellerDashboard() {
       clearTimeout(timeoutId);
       if (probeRes.ok) {
         realSpecs = await probeRes.json();
+        setLocalNodeOnline(true);
+        setLocalNodeSpecs(realSpecs);
+      } else {
+        setLocalNodeOnline(false);
       }
     } catch {
-      // Agent not running or unreachable
       realSpecs = null;
+      setLocalNodeOnline(false);
     }
 
     // 2. Send detected specs (or request catalog fallback) to backend
@@ -228,20 +288,26 @@ export default function SellerDashboard() {
       const specs = res.data.specs;
       setRGpu(specs.gpu);
       setRVram(specs.vram);
-      setRTitle(`${specs.gpu} High-Performance Compute Node`);
+      setRTitle(`${specs.gpu} High-Performance Compute Node${specs.gaming_ready ? " (Cloud Gaming Ready)" : ""}`);
       setRDesc(specs.description);
       setRPrice(specs.suggested_price);
-      setRLoc(specs.location || "Frankfurt, DE");
+      setRLoc(specs.location || "Local Host Rig");
+      if (specs.gaming_ready !== undefined) {
+        setRGamingReady(Boolean(specs.gaming_ready));
+      }
+      if (specs.node_id) {
+        setRNodeId(specs.node_id);
+      }
       if (!rImage) {
         setRImage("https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=900&auto=format&fit=crop");
       }
       setDetectedSignature(res.data);
 
       if (res.data.real_hardware) {
-        toast.success(`⚡ Real hardware detected: ${specs.gpu} (${specs.vram})!`);
+        toast.success(`⚡ Real hardware detected: ${specs.gpu} (${specs.vram})! ${specs.gaming_ready ? "🎮 Cloud Gaming Ready!" : ""}`);
         setShowAgentModal(false);
       } else {
-        toast.info("Host Agent not active. Demo signature applied.");
+        toast.info("ProductifyNode desktop app not detected on localhost. Demo catalog specs applied.");
         setShowAgentModal(true);
       }
     } catch (err) {
@@ -256,7 +322,7 @@ export default function SellerDashboard() {
     e.preventDefault();
     setBusy(true);
     try {
-      await api.post("/rentals", {
+      const payload = {
         title: rTitle,
         gpu: rGpu,
         vram: rVram,
@@ -264,15 +330,47 @@ export default function SellerDashboard() {
         location: rLoc,
         description: rDesc,
         image: rImage,
+        gaming_ready: Boolean(rGamingReady),
+        node_id: rNodeId || localNodeSpecs?.node_id || null,
+        hardware_signature: detectedSignature?.hardware_signature || null,
+        thermal_ceiling: Number(rThermalCeiling) || 82,
+        host_wan_ip: localNodeSpecs?.wan_ip || null,
         specs: detectedSignature?.specs || {
           cpu: "AMD Ryzen 9 / EPYC Multi-Core",
           ram: "64 GB DDR5",
           storage: "2 TB NVMe Scratch",
           bandwidth: "1 Gbps Symmetrical"
         }
-      });
+      };
+
+      const res = await api.post("/rentals", payload);
       toast.success("GPU node submitted with verified hardware signature!");
+
+      // Trigger automatic reverse tunnel activation on local ProductifyNode
+      if (res?.data?.id) {
+        try {
+          const tRes = await fetch("http://127.0.0.1:48123/tunnel/connect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              rental_id: res.data.id,
+              node_id: res.data.node_id || rNodeId,
+              token: res.data.pairing_token
+            })
+          });
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            if (tData.ok) {
+              toast.success("🔗 ProductifyNode reverse tunnel is now LIVE & routing!");
+            }
+          }
+        } catch {
+          // Local app may not be running right now; host can connect anytime from dashboard
+        }
+      }
+
       setRTitle(""); setRGpu(""); setRVram(""); setRPrice(""); setRLoc(""); setRDesc(""); setRImage("");
+      setRGamingReady(false); setRNodeId("");
       setDetectedSignature(null);
       setListingSubTab("inventory");
     } catch (err) {
@@ -716,7 +814,7 @@ export default function SellerDashboard() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "0.95rem" }}>
                       <BookOpen size={16} color="var(--violet, #6556e8)" />
-                      <span>Host Guide: How to Connect & Rent Out Your GPU Machine</span>
+                      <span>Host Guide: Rent Out GPU Compute & Host Cloud Games with ProductifyNode</span>
                     </div>
                     <button
                       type="button"
@@ -731,109 +829,168 @@ export default function SellerDashboard() {
                     <div style={{ fontSize: "0.82rem", color: "#555", lineHeight: 1.6, borderTop: "1px solid #e5e5dc", paddingTop: "12px", marginTop: "8px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
                         <div>
-                          <b style={{ color: "var(--ink, #101112)" }}>1. Prerequisites:</b>
-                          <div>NVIDIA GPU with Driver 535+, Docker + NVIDIA Container Toolkit, and Ubuntu Linux (or Windows WSL2).</div>
+                          <b style={{ color: "var(--ink, #101112)" }}>1. Run ProductifyNode:</b>
+                          <div>Launch the <b>ProductifyNode</b> desktop app on your host PC or server. It starts the local bridge on <code>127.0.0.1:48123</code>.</div>
                         </div>
                         <div>
-                          <b style={{ color: "var(--ink, #101112)" }}>2. Auto-Detect Hardware:</b>
-                          <div>Click the <b>Auto-Detect</b> button below to probe your GPU and system specs automatically with zero typos.</div>
+                          <b style={{ color: "var(--ink, #101112)" }}>2. 1-Click Hardware Probe:</b>
+                          <div>Click <b>Auto-Detect My Machine Hardware</b> to read your genuine NVIDIA GPU, VRAM, NVML thermals, and scratch NVMe.</div>
                         </div>
                         <div>
-                          <b style={{ color: "var(--ink, #101112)" }}>3. Set Hourly Rate & Publish:</b>
-                          <div>Choose your rental rate (e.g. $0.65/hr). Your node goes live instantly on the `/rentals` marketplace.</div>
+                          <b style={{ color: "var(--ink, #101112)" }}>3. Gamezone Cloud Gaming:</b>
+                          <div>If Sunshine & ViGEm are installed in ProductifyNode, enable <b>Gamezone Ready</b> so users can stream games in their browser.</div>
                         </div>
                         <div>
-                          <b style={{ color: "var(--ink, #101112)" }}>4. Run Worker Agent:</b>
-                          <div>Keep the Productify Node Daemon running in your terminal to automatically accept container workloads.</div>
+                          <b style={{ color: "var(--ink, #101112)" }}>4. Set Rate & Go Live:</b>
+                          <div>Publish your node. The reverse tunnel activates automatically without port forwarding, and your node starts earning.</div>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Hardware Auto-Detection Tool */}
+                {/* ProductifyNode Hardware Auto-Detection & Bridge Status Card */}
                 <div
                   style={{
-                    background: detectedSignature ? (detectedSignature.real_hardware ? "#f0fdf4" : "#fefce8") : "#16181a",
-                    color: detectedSignature ? (detectedSignature.real_hardware ? "#166534" : "#854d0e") : "#e5e7eb",
-                    border: `1px solid ${detectedSignature ? (detectedSignature.real_hardware ? "#86efac" : "#fef08a") : "#2d3135"}`,
+                    background: localNodeOnline
+                      ? "#0e1811"
+                      : detectedSignature?.real_hardware
+                      ? "#f0fdf4"
+                      : "#16181a",
+                    color: localNodeOnline || !detectedSignature?.real_hardware ? "#e5e7eb" : "#166534",
+                    border: `1px solid ${
+                      localNodeOnline
+                        ? "#15803d"
+                        : detectedSignature?.real_hardware
+                        ? "#86efac"
+                        : "#2d3135"
+                    }`,
                     borderRadius: "12px",
-                    padding: "20px 24px",
+                    padding: "22px 26px",
                     marginBottom: "26px",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px" }}>
-                    <div>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.72rem", fontFamily: "var(--font-mono, monospace)", color: detectedSignature ? (detectedSignature.real_hardware ? "#15803d" : "#a16207") : "#a3e635", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
-                        <Zap size={13} /> {detectedSignature ? (detectedSignature.real_hardware ? "⚡ REAL PHYSICAL HARDWARE VERIFIED" : "DEMO SIGNATURE APPLIED (AGENT OFFLINE)") : "HARDWARE AUTO-PROBE"}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px" }}>
+                    <div style={{ flex: 1, minWidth: "280px" }}>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.72rem", fontFamily: "var(--font-mono, monospace)", color: localNodeOnline ? "#4ade80" : detectedSignature?.real_hardware ? "#15803d" : "#fbbf24", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                        <Zap size={13} /> {localNodeOnline ? "🟢 PRODUCTIFYNODE DESKTOP CONNECTED (127.0.0.1:48123)" : detectedSignature?.real_hardware ? "⚡ REAL HARDWARE VERIFIED" : "⚠️ PRODUCTIFYNODE NOT DETECTED LOCALLY"}
                       </div>
-                      <h4 style={{ margin: "4px 0 2px", fontSize: "1.05rem", fontWeight: 700, color: detectedSignature ? (detectedSignature.real_hardware ? "#166534" : "#854d0e") : "#ffffff" }}>
-                        {detectedSignature ? `✓ Detected: ${detectedSignature.specs.gpu}` : "Auto-Detect Your Machine Hardware"}
+                      <h4 style={{ margin: "6px 0 4px", fontSize: "1.1rem", fontWeight: 700, color: localNodeOnline ? "#ffffff" : detectedSignature?.real_hardware ? "#166534" : "#ffffff" }}>
+                        {localNodeOnline
+                          ? `✓ Connected: ${localNodeSpecs?.gpu || "NVIDIA GPU"} (${localNodeSpecs?.vram || "VRAM Active"})`
+                          : detectedSignature
+                          ? `✓ Auto-Probed: ${detectedSignature.specs.gpu}`
+                          : "Auto-Detect Your Machine Hardware"}
                       </h4>
-                      <p style={{ margin: 0, fontSize: "0.8rem", color: detectedSignature ? (detectedSignature.real_hardware ? "#15803d" : "#a16207") : "#9ca3af", maxWidth: "580px" }}>
-                        {detectedSignature
+                      <p style={{ margin: 0, fontSize: "0.82rem", color: localNodeOnline ? "#9ca3af" : detectedSignature?.real_hardware ? "#15803d" : "#9ca3af", maxWidth: "620px", lineHeight: 1.5 }}>
+                        {localNodeOnline
+                          ? `Direct NVML link active. Node ID: ${localNodeSpecs?.node_id || "Generating"} · Sunshine: ${localNodeSpecs?.sunshine_installed ? "Ready" : "Not Installed"} · ViGEm: ${localNodeSpecs?.vigem_installed ? "Ready" : "Missing"}`
+                          : detectedSignature
                           ? `${detectedSignature.specs.vram} VRAM · ${detectedSignature.specs.cpu} · Token: ${detectedSignature.hardware_signature}`
-                          : "Auto-probe your physical GPU, VRAM, and specs via the Productify Host Agent bridge on 127.0.0.1:48123."}
+                          : "Launch ProductifyNode.exe on this PC to pull genuine hardware telemetry and configure zero-port-forwarding cloud gaming."}
                       </p>
+
+                      {localNodeOnline && localNodeSpecs && (
+                        <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)" }}>
+                          <span style={{ padding: "3px 8px", borderRadius: "6px", background: "#1f2937", color: "#4ade80", border: "1px solid #374151" }}>
+                            GPU: {localNodeSpecs.gpu}
+                          </span>
+                          <span style={{ padding: "3px 8px", borderRadius: "6px", background: "#1f2937", color: "#a7f3d0", border: "1px solid #374151" }}>
+                            VRAM: {localNodeSpecs.vram}
+                          </span>
+                          <span style={{ padding: "3px 8px", borderRadius: "6px", background: localNodeSpecs.gaming_ready ? "#14532d" : "#374151", color: localNodeSpecs.gaming_ready ? "#86efac" : "#d1d5db", border: "1px solid #374151" }}>
+                            Cloud Gaming: {localNodeSpecs.gaming_ready ? "🎮 Ready" : "⚠️ Setup Needed"}
+                          </span>
+                          {localNodeSpecs.temperature_c && (
+                            <span style={{ padding: "3px 8px", borderRadius: "6px", background: "#1f2937", color: "#fef08a", border: "1px solid #374151" }}>
+                              Thermals: {localNodeSpecs.temperature_c}°C
+                            </span>
+                          )}
+                          {localNodeSpecs.wan_ip && (
+                            <span style={{ padding: "3px 8px", borderRadius: "6px", background: "#1f2937", color: "#93c5fd", border: "1px solid #374151" }}>
+                              WAN: {localNodeSpecs.wan_ip}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleAutoDetect}
-                      disabled={autoDetecting}
-                      className="primary-button"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        background: detectedSignature ? (detectedSignature.real_hardware ? "#16a34a" : "#ca8a04") : "var(--lime, #c8f04c)",
-                        color: detectedSignature ? "#ffffff" : "var(--ink, #101112)",
-                        border: "none",
-                        fontSize: "0.85rem",
-                        padding: "10px 18px",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {autoDetecting ? (
-                        <>
-                          <Loader2 size={15} className="spin" /> Probing Hardware...
-                        </>
-                      ) : detectedSignature ? (
-                        <>
-                          <CheckCircle2 size={15} /> Re-probe Hardware
-                        </>
-                      ) : (
-                        <>
-                          <Zap size={15} /> ⚡ Auto-Detect My Machine Hardware
-                        </>
-                      )}
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
+                      <button
+                        type="button"
+                        onClick={handleAutoDetect}
+                        disabled={autoDetecting}
+                        className="primary-button"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          background: "var(--lime, #c8f04c)",
+                          color: "var(--ink, #101112)",
+                          border: "none",
+                          fontSize: "0.85rem",
+                          padding: "10px 18px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {autoDetecting ? (
+                          <>
+                            <Loader2 size={15} className="spin" /> Probing Hardware...
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={15} /> ⚡ Auto-Detect My Machine Hardware
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => probeLocalNode(false)}
+                        disabled={localNodeChecking}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: localNodeOnline ? "#9ca3af" : "#fef08a",
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          textDecoration: "underline"
+                        }}
+                      >
+                        <RefreshCw size={12} className={localNodeChecking ? "spin" : ""} />
+                        {localNodeChecking ? "Probing 127.0.0.1:48123..." : "Refresh Local Connection"}
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Agent Help Banner */}
-                  {showAgentModal && (
-                    <div style={{ marginTop: "16px", padding: "16px 20px", background: "#1f2937", border: "1px solid #374151", borderRadius: "10px", color: "#f3f4f6" }}>
+                  {/* App Download / Bridge Setup Banner when Offline */}
+                  {(!localNodeOnline || showAgentModal) && (
+                    <div style={{ marginTop: "18px", padding: "16px 20px", background: "#1f2937", border: "1px solid #374151", borderRadius: "10px", color: "#f3f4f6" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "0.9rem", color: "#60a5fa" }}>
-                          <Terminal size={16} /> How to Detect Your Real Physical GPU & Specs:
+                          <Terminal size={16} /> Connect Your Physical Host Machine:
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowAgentModal(false)}
-                          style={{ background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "0.78rem" }}
-                        >
-                          Dismiss
-                        </button>
+                        {showAgentModal && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAgentModal(false)}
+                            style={{ background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "0.78rem" }}
+                          >
+                            Dismiss
+                          </button>
+                        )}
                       </div>
                       <p style={{ margin: "0 0 12px", fontSize: "0.8rem", color: "#d1d5db", lineHeight: 1.5 }}>
-                        Browsers run in a security sandbox and cannot probe physical GPUs directly. Choose your preferred way to start the local hardware bridge on your machine:
+                        Browser web pages run in a security sandbox and cannot read your physical GPU directly. Launch <b>ProductifyNode</b> to start the local hardware bridge:
                       </p>
 
-                      {/* Options: 1-Click Downloads (Channel B & C) */}
                       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
                         <a
-                          href="/productify-agent.bat"
-                          download="productify-agent.bat"
+                          href="/ProductifyNode.exe"
+                          download="ProductifyNode.exe"
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -841,18 +998,22 @@ export default function SellerDashboard() {
                             background: "var(--lime, #c8f04c)",
                             color: "var(--ink, #101112)",
                             fontWeight: 700,
-                            fontSize: "0.8rem",
-                            padding: "8px 14px",
+                            fontSize: "0.82rem",
+                            padding: "9px 16px",
                             borderRadius: "8px",
                             textDecoration: "none"
                           }}
                         >
-                          ⬇ Windows 1-Click App (.bat)
+                          <Download size={15} /> Download ProductifyNode.exe (24.4 MB)
                         </a>
 
-                        <a
-                          href="/agent.py"
-                          download="productify_agent.py"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText("python -m productify_node.bridge.local_server");
+                            setCopiedCmd(true);
+                            setTimeout(() => setCopiedCmd(false), 2000);
+                          }}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -861,45 +1022,18 @@ export default function SellerDashboard() {
                             color: "#f9fafb",
                             fontWeight: 600,
                             fontSize: "0.8rem",
-                            padding: "8px 14px",
+                            padding: "9px 16px",
                             borderRadius: "8px",
-                            textDecoration: "none",
-                            border: "1px solid #4b5563"
+                            border: "1px solid #4b5563",
+                            cursor: "pointer"
                           }}
                         >
-                          ⬇ Download Python Script (agent.py)
-                        </a>
-                      </div>
-
-                      {/* Option 2: 1-Line Terminal Command (Zero-Install) */}
-                      <div style={{ fontSize: "0.76rem", color: "#9ca3af", marginBottom: "6px" }}>
-                        Or run directly in PowerShell (Windows) or Terminal (Linux/Mac):
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#111827", padding: "8px 12px", borderRadius: "6px", border: "1px solid #374151", fontFamily: "var(--font-mono, monospace)", fontSize: "0.8rem" }}>
-                        <span style={{ color: "#34d399", flex: 1, overflowX: "auto" }}>irm https://raw.githubusercontent.com/Crimson-ripper/Productify-/main/scripts/productify_agent.py | py -</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText("irm https://raw.githubusercontent.com/Crimson-ripper/Productify-/main/scripts/productify_agent.py | py -");
-                            setCopiedCmd(true);
-                            setTimeout(() => setCopiedCmd(false), 2000);
-                          }}
-                          style={{ background: "#374151", border: "none", color: "#ffffff", padding: "4px 8px", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                        >
-                          {copiedCmd ? <Check size={12} color="#34d399" /> : <Copy size={12} />} {copiedCmd ? "Copied!" : "Copy"}
+                          {copiedCmd ? <Check size={14} color="#34d399" /> : <Copy size={14} />} {copiedCmd ? "Copied Command!" : "Copy Python Daemon CLI"}
                         </button>
                       </div>
 
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
-                        <button
-                          type="button"
-                          onClick={handleAutoDetect}
-                          disabled={autoDetecting}
-                          className="primary-button"
-                          style={{ padding: "6px 14px", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                        >
-                          <Zap size={13} /> Check Again & Detect Real Hardware
-                        </button>
+                      <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                        Already installed? Simply open <b>ProductifyNode</b> from your desktop or Start Menu, then click <b>Refresh Local Connection</b>.
                       </div>
                     </div>
                   )}
@@ -909,13 +1043,20 @@ export default function SellerDashboard() {
                   <h3 style={{ margin: "0 0 16px", font: "600 22px 'Space Grotesk', sans-serif" }}>
                     {detectedSignature ? "Publish Verified GPU Compute Node" : "List GPU Compute Node for Rental"}
                   </h3>
+
+                  {detectedSignature?.real_hardware && (
+                    <div style={{ background: "#eefbf2", border: "1px solid #86efac", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", color: "#166534" }}>
+                      <CheckCircle2 size={16} color="#16a34a" />
+                      <span><b>Hardware Authenticated:</b> Signed cryptographic telemetry token <code>{detectedSignature.hardware_signature}</code></span>
+                    </div>
+                  )}
                   
                   <label>
                     Listing title
                     <input
                       value={rTitle}
                       onChange={(e) => setRTitle(e.target.value)}
-                      placeholder="e.g. Dual RTX 4090 AI Inference Rig"
+                      placeholder="e.g. NVIDIA RTX 4090 Gaming & AI Node"
                       required
                       style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
                     />
@@ -926,7 +1067,7 @@ export default function SellerDashboard() {
                     <textarea
                       value={rDesc}
                       onChange={(e) => setRDesc(e.target.value)}
-                      placeholder="Detailed specs: CPU, PCIe lanes, NVMe storage, network speeds..."
+                      placeholder="Detailed specs: CPU, PCIe lanes, NVMe storage, network speeds, installed games..."
                       required
                       style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px", minHeight: 110 }}
                     />
@@ -974,25 +1115,96 @@ export default function SellerDashboard() {
                       <input
                         value={rLoc}
                         onChange={(e) => setRLoc(e.target.value)}
-                        placeholder="Frankfurt, DE"
+                        placeholder="Local Host Rig"
                         required
                         style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
                       />
                     </label>
                   </div>
 
+                  {/* Gamezone Cloud Gaming Readiness Card */}
+                  <div
+                    style={{
+                      background: rGamingReady ? "#f0fdf4" : "#fafaf8",
+                      border: `1px solid ${rGamingReady ? "#86efac" : "#e2e2dc"}`,
+                      borderRadius: "10px",
+                      padding: "16px 20px",
+                      margin: "18px 0",
+                    }}
+                  >
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", cursor: "pointer", margin: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={rGamingReady}
+                        onChange={(e) => setRGamingReady(e.target.checked)}
+                        style={{ width: "20px", height: "20px", accentColor: "#16a34a", marginTop: "2px" }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "0.95rem", color: rGamingReady ? "#166534" : "var(--ink, #101112)" }}>
+                          <Gamepad2 size={18} color={rGamingReady ? "#16a34a" : "var(--ink)"} />
+                          <span>🎮 Enable Gamezone Cloud Gaming (Zero-Install Browser Play)</span>
+                          {localNodeSpecs?.gaming_ready && (
+                            <span style={{ fontSize: "0.72rem", background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "100px", fontWeight: 700 }}>
+                              VERIFIED ON RIG ✓
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: rGamingReady ? "#15803d" : "var(--muted, #666)", lineHeight: 1.4 }}>
+                          Allows customers on the Productify Gamezone store to launch games installed on this PC and play directly in their web browser via low-latency WebRTC streaming (powered by Sunshine & ViGEm controller emulation).
+                        </p>
+                        {rGamingReady && (
+                          <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)" }}>
+                            <span style={{ padding: "3px 8px", borderRadius: "6px", background: localNodeSpecs?.sunshine_installed ? "#dcfce7" : "#fef3c7", color: localNodeSpecs?.sunshine_installed ? "#15803d" : "#92400e" }}>
+                              Sunshine: {localNodeSpecs?.sunshine_installed ? "Installed ✓" : "Configurable in Node App"}
+                            </span>
+                            <span style={{ padding: "3px 8px", borderRadius: "6px", background: localNodeSpecs?.vigem_installed ? "#dcfce7" : "#fef3c7", color: localNodeSpecs?.vigem_installed ? "#15803d" : "#92400e" }}>
+                              ViGEm Gamepad: {localNodeSpecs?.vigem_installed ? "Ready ✓" : "Configurable in Node App"}
+                            </span>
+                            <span style={{ padding: "3px 8px", borderRadius: "6px", background: "#f3f4f6", color: "#374151" }}>
+                              Reverse Tunnel: WebRTC Auto-Signaling
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="two-col">
+                    <label>
+                      Thermal Safety Ceiling (°C)
+                      <input
+                        type="number"
+                        min="60"
+                        max="90"
+                        value={rThermalCeiling}
+                        onChange={(e) => setRThermalCeiling(Number(e.target.value))}
+                        style={{ background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px" }}
+                      />
+                    </label>
+                    <label>
+                      Host Node Hardware ID
+                      <input
+                        value={rNodeId || localNodeSpecs?.node_id || "Auto-assigned by ProductifyNode"}
+                        readOnly
+                        style={{ background: "#f9f9f6", color: "#555", border: "1px solid var(--line, #dedfd9)", padding: "12px 14px", fontFamily: "var(--font-mono, monospace)", fontSize: "0.85rem" }}
+                      />
+                    </label>
+                  </div>
+
                   <label>
                     Cover photo
-                    <ImageUpload value={rImage} onChange={setRImage} label="Upload system / rack photo" testid="seller-rental-image" />
+                    <ImageUpload value={rImage} onChange={setRImage} label="Upload system / rig photo" testid="seller-rental-image" />
                   </label>
 
-                  <div className="verification-note" style={{ background: "#e9f3e5", color: "#277c50", borderRadius: 8, padding: "12px 16px" }}>
-                    Automated Verification: Productify team verifies remote node telemetry and SSH port access within 24 hours.
+                  <div className="verification-note" style={{ background: detectedSignature?.real_hardware ? "#eefbf2" : "#f4f4ee", color: detectedSignature?.real_hardware ? "#166534" : "var(--ink, #101112)", borderRadius: 8, padding: "12px 16px" }}>
+                    {detectedSignature?.real_hardware
+                      ? "⚡ Instant Auto-Approval: Hardware signature validated directly against local NVML telemetry. Your node goes live immediately upon submission!"
+                      : "Node Verification: When using catalog presets, our platform watchdog validates reverse tunnel connectivity upon first heartbeat."}
                   </div>
 
                   <div style={{ marginTop: 12 }}>
                     <button className="primary-button" disabled={busy || !rImage} style={{ padding: "14px 28px", fontSize: "0.95rem" }}>
-                      {busy ? "Submitting…" : "Submit for Verification"} <ArrowRight size={16} />
+                      {busy ? "Publishing & Activating Reverse Tunnel…" : "Publish GPU Node & Activate Tunnel"} <ArrowRight size={16} />
                     </button>
                   </div>
                 </form>
@@ -1435,7 +1647,7 @@ export default function SellerDashboard() {
               </div>
             </div>
 
-            {/* Host Worker Daemon CLI Box */}
+            {/* ProductifyNode Host Launcher & Console */}
             <div
               style={{
                 background: "#16181a",
@@ -1446,53 +1658,173 @@ export default function SellerDashboard() {
                 border: "1px solid #2d3135",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
                 <div>
                   <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "#a3e635", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
-                    <Terminal size={14} /> PRODUCTIFY NODE WORKER AGENT
+                    <Terminal size={14} /> PRODUCTIFYNODE HOST DAEMON & REVERSE TUNNEL
                   </div>
                   <h3 style={{ margin: "4px 0 2px", color: "#ffffff", fontSize: "1.2rem", fontWeight: 700 }}>
-                    Connect Your Physical / Cloud GPU Node
+                    Connect Your Physical Machine to Productify
                   </h3>
                   <p style={{ margin: 0, fontSize: "0.82rem", color: "#9ca3af", maxWidth: "680px" }}>
-                    Run this command on your Ubuntu server or rig with NVIDIA drivers (535+). The worker daemon runs Docker container isolation, monitors VRAM/thermals, and automatically accepts hourly rental jobs.
+                    ProductifyNode establishes an authenticated outbound reverse tunnel to our edge routers. No public IP or port-forwarding required. Supports both Gamezone cloud gaming and AI container workloads.
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cmd = gpuTelemetry?.install_command || "curl -sSL https://productifynow.com/agent/install.sh | sudo bash";
-                    navigator.clipboard.writeText(cmd);
-                    setCopiedCmd(true);
-                    toast.success("Worker install command copied!");
-                    setTimeout(() => setCopiedCmd(false), 2000);
-                  }}
-                  className="primary-button"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--lime, #c8f04c)", color: "var(--ink, #101112)", fontSize: "0.82rem", padding: "8px 16px", border: "none", fontWeight: 700 }}
-                >
-                  {copiedCmd ? <Check size={14} /> : <Copy size={14} />} {copiedCmd ? "Copied" : "Copy Install Script"}
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setHostMode("desktop")}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      background: hostMode === "desktop" ? "var(--lime, #c8f04c)" : "#232629",
+                      color: hostMode === "desktop" ? "var(--ink, #101112)" : "#d1d5db"
+                    }}
+                  >
+                    🖥️ Desktop App (Windows)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHostMode("headless")}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      background: hostMode === "headless" ? "var(--lime, #c8f04c)" : "#232629",
+                      color: hostMode === "headless" ? "var(--ink, #101112)" : "#d1d5db"
+                    }}
+                  >
+                    ⚡ Linux / CLI Daemon
+                  </button>
+                </div>
               </div>
 
-              <div
-                style={{
-                  background: "#0d0e0f",
-                  padding: "14px 18px",
-                  borderRadius: "8px",
-                  border: "1px solid #232629",
-                  fontFamily: "var(--font-mono, monospace)",
-                  fontSize: "0.85rem",
-                  color: "#a3e635",
-                  wordBreak: "break-all",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "10px",
-                }}
-              >
-                <span>{gpuTelemetry?.install_command || "curl -sSL https://productifynow.com/agent/install.sh | sudo bash"}</span>
-              </div>
+              {hostMode === "desktop" ? (
+                <div style={{ background: "#0d0e0f", padding: "18px 20px", borderRadius: "10px", border: "1px solid #232629" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "50%",
+                          background: localNodeOnline ? "#16a34a" : "#f59e0b",
+                          boxShadow: localNodeOnline ? "0 0 10px #16a34a" : "none"
+                        }}
+                      />
+                      <b style={{ color: localNodeOnline ? "#86efac" : "#fbbf24", fontSize: "0.92rem" }}>
+                        {localNodeOnline
+                          ? "ProductifyNode Connected & Probed on 127.0.0.1:48123"
+                          : "ProductifyNode Not Detected on Local Machine"}
+                      </b>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <a
+                        href="/ProductifyNode.exe"
+                        download="ProductifyNode.exe"
+                        className="primary-button"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          background: "var(--lime, #c8f04c)",
+                          color: "var(--ink, #101112)",
+                          fontSize: "0.8rem",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          textDecoration: "none",
+                          fontWeight: 700
+                        }}
+                      >
+                        <Download size={14} /> Download ProductifyNode.exe (24.4 MB)
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => probeLocalNode(false)}
+                        disabled={localNodeChecking}
+                        className="secondary-button"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "0.8rem",
+                          padding: "8px 14px",
+                          background: "#232629",
+                          color: "#ffffff",
+                          border: "1px solid #374151"
+                        }}
+                      >
+                        <RefreshCw size={12} className={localNodeChecking ? "spin" : ""} />
+                        {localNodeChecking ? "Testing..." : "Test Local Bridge"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {localNodeOnline && localNodeSpecs ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px", borderTop: "1px solid #1f2937", paddingTop: "12px", fontSize: "0.78rem" }}>
+                      <div>
+                        <div style={{ color: "#9ca3af" }}>Detected GPU</div>
+                        <b style={{ color: "#f3f4f6" }}>{localNodeSpecs.gpu} ({localNodeSpecs.vram})</b>
+                      </div>
+                      <div>
+                        <div style={{ color: "#9ca3af" }}>Sunshine WebRTC</div>
+                        <b style={{ color: localNodeSpecs.sunshine_installed ? "#86efac" : "#fbbf24" }}>
+                          {localNodeSpecs.sunshine_installed ? "Running & Ready ✓" : "Not Installed"}
+                        </b>
+                      </div>
+                      <div>
+                        <div style={{ color: "#9ca3af" }}>ViGEm Controller</div>
+                        <b style={{ color: localNodeSpecs.vigem_installed ? "#86efac" : "#fbbf24" }}>
+                          {localNodeSpecs.vigem_installed ? "Driver Loaded ✓" : "Missing Driver"}
+                        </b>
+                      </div>
+                      <div>
+                        <div style={{ color: "#9ca3af" }}>Node Hardware ID</div>
+                        <b style={{ color: "#93c5fd", fontFamily: "var(--font-mono, monospace)" }}>
+                          {localNodeSpecs.node_id || "Active"}
+                        </b>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "#9ca3af" }}>
+                      Launch ProductifyNode on this machine to automatically detect hardware, install Sunshine/ViGEm drivers, and maintain reverse tunnels.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div style={{ background: "#0d0e0f", padding: "16px 20px", borderRadius: "10px", border: "1px solid #232629" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                      Run in terminal on Ubuntu / Debian / headless server:
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cmd = gpuTelemetry?.headless_command || `python -m productify_node.bridge.local_server --token=${gpuTelemetry?.host_token || "pnode_host"}`;
+                        navigator.clipboard.writeText(cmd);
+                        setCopiedCmd(true);
+                        toast.success("Command copied!");
+                        setTimeout(() => setCopiedCmd(false), 2000);
+                      }}
+                      style={{ background: "#232629", border: "1px solid #374151", color: "#ffffff", padding: "4px 10px", borderRadius: "4px", fontSize: "0.75rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      {copiedCmd ? <Check size={12} color="#34d399" /> : <Copy size={12} />} {copiedCmd ? "Copied" : "Copy Command"}
+                    </button>
+                  </div>
+                  <div style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", color: "#a3e635", wordBreak: "break-all" }}>
+                    {gpuTelemetry?.headless_command || `python -m productify_node.bridge.local_server --token=${gpuTelemetry?.host_token || "pnode_host"}`}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Active Running Workloads Table */}

@@ -136,6 +136,23 @@ class TestNodeLifecycleManager(unittest.IsolatedAsyncioTestCase):
         await mgr.record_heartbeat("rental-102", {"is_live": True, "active_pods": 0})
         self.assertEqual(node.status, NodeStatus.ONLINE_IDLE)
 
+    async def test_gaming_ready_node_heartbeat(self):
+        mgr = NodeLifecycleManager(timeout_seconds=45.0)
+        node = mgr.get_or_create_node("rental-gaming-1", "node-pc-01")
+        self.assertFalse(node.gaming_ready)
+
+        # Heartbeat reporting gaming ready
+        await mgr.record_heartbeat("rental-gaming-1", {
+            "node_id": "node-pc-01",
+            "is_live": True,
+            "gaming_ready": True,
+            "hardware": {"gpu": "RTX 4090", "sunshine_installed": True, "vigem_installed": True}
+        })
+        self.assertTrue(node.gaming_ready)
+        d = node.to_dict()
+        self.assertTrue(d["gaming_ready"])
+        self.assertEqual(d["node_id"], "node-pc-01")
+
     async def test_watchdog_timeout_triggers_disconnect(self):
         mgr = NodeLifecycleManager(timeout_seconds=2.0)
         node = mgr.get_or_create_node("rental-103")
