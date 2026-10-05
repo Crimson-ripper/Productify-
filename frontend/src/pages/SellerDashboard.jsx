@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   ArrowRight,
   Package,
@@ -24,9 +24,7 @@ import {
   Loader2,
   Gamepad2,
   Download,
-  RefreshCw,
-  ExternalLink,
-  Radio
+  RefreshCw
 } from "lucide-react";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -190,7 +188,7 @@ export default function SellerDashboard() {
   }, [tab]);
 
   // Probe local ProductifyNode app bridge (127.0.0.1:48123)
-  const probeLocalNode = async (quiet = false) => {
+  const probeLocalNode = useCallback(async (quiet = false) => {
     if (!quiet) setLocalNodeChecking(true);
     try {
       const controller = new AbortController();
@@ -204,8 +202,8 @@ export default function SellerDashboard() {
         const data = await probeRes.json();
         setLocalNodeOnline(true);
         setLocalNodeSpecs(data);
-        if (data.node_id && !rNodeId) {
-          setRNodeId(data.node_id);
+        if (data.node_id) {
+          setRNodeId((prev) => prev || data.node_id);
         }
         if (data.gaming_ready) {
           setRGamingReady(true);
@@ -221,17 +219,17 @@ export default function SellerDashboard() {
     } finally {
       if (!quiet) setLocalNodeChecking(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     probeLocalNode(true);
-  }, []);
+  }, [probeLocalNode]);
 
   useEffect(() => {
     if (listingSubTab === "rental" || tab === "gpu_host") {
       probeLocalNode(true);
     }
-  }, [listingSubTab, tab]);
+  }, [listingSubTab, tab, probeLocalNode]);
 
   // Product submission
   const submitProduct = async (e) => {
