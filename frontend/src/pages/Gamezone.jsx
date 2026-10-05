@@ -153,22 +153,26 @@ export default function Gamezone() {
     }
   }, [selectedRentalId, user, activeTab]);
 
-  // Launch Library Game
-  const handleLaunchGame = async () => {
+  // Launch Library Game (Supports 1-Click direct launch or modal launch)
+  const handleLaunchGame = useCallback(async (targetGame) => {
+    const gameToPlay = (targetGame && targetGame.id) ? targetGame : selectedGame;
+    if (!gameToPlay) return;
+
     if (!user) {
-      toast.error("Please sign in to launch game sessions.");
+      sessionStorage.setItem("productify_pending_game", JSON.stringify(gameToPlay));
+      toast.info(`Please sign in to launch ${gameToPlay.title}.`);
       navigate("/login");
       return;
     }
-    if (!selectedGame) return;
-    setLaunchingSession(true);
+
+    setLaunchingSession(gameToPlay.id || true);
     try {
       const res = await api.post("/games/play", {
-        game_id: selectedGame.id,
+        game_id: gameToPlay.id,
         rental_id: selectedRentalId || undefined
       });
       if (res.data?.session?.id) {
-        toast.success(`Spinning up isolated GPU container for ${selectedGame.title}!`);
+        toast.success(`Spinning up isolated GPU container for ${gameToPlay.title}!`);
         setSelectedGame(null);
         navigate(`/gamezone/session/${res.data.session.id}`);
       }
@@ -177,7 +181,25 @@ export default function Gamezone() {
     } finally {
       setLaunchingSession(false);
     }
-  };
+  }, [user, selectedGame, selectedRentalId, navigate]);
+
+  // Auto-launch pending game when user logs in
+  useEffect(() => {
+    if (user) {
+      const rawPending = sessionStorage.getItem("productify_pending_game");
+      if (rawPending) {
+        try {
+          const pendingGame = JSON.parse(rawPending);
+          sessionStorage.removeItem("productify_pending_game");
+          if (pendingGame && pendingGame.id) {
+            handleLaunchGame(pendingGame);
+          }
+        } catch {
+          sessionStorage.removeItem("productify_pending_game");
+        }
+      }
+    }
+  }, [user, handleLaunchGame]);
 
   // Launch Private Game
   const handleLaunchPrivateGame = async (pgame) => {
@@ -463,6 +485,7 @@ export default function Gamezone() {
                 {games.map((game) => (
                   <div
                     key={game.id}
+                    onClick={() => setSelectedGame(game)}
                     style={{
                       background: "rgba(255, 255, 255, 0.03)",
                       border: "1px solid rgba(255, 255, 255, 0.08)",
@@ -470,6 +493,7 @@ export default function Gamezone() {
                       overflow: "hidden",
                       display: "flex",
                       flexDirection: "column",
+                      cursor: "pointer",
                       transition: "transform 0.15s ease, border-color 0.15s ease",
                     }}
                     onMouseEnter={(e) => {
@@ -556,7 +580,11 @@ export default function Gamezone() {
                         </div>
 
                         <button
-                          onClick={() => setSelectedGame(game)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLaunchGame(game);
+                          }}
+                          disabled={Boolean(launchingSession)}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -572,7 +600,7 @@ export default function Gamezone() {
                             boxShadow: "0 4px 14px rgba(16, 185, 129, 0.3)"
                           }}
                         >
-                          <Play size={15} fill="#ffffff" /> Play Now
+                          <Play size={15} fill="#ffffff" /> {launchingSession === game.id ? "Launching..." : "Play Now"}
                         </button>
                       </div>
                     </div>
@@ -1164,8 +1192,8 @@ export default function Gamezone() {
                     Cancel
                   </button>
                   <button
-                    onClick={handleLaunchGame}
-                    disabled={launchingSession}
+                    onClick={() => handleLaunchGame(selectedGame)}
+                    disabled={Boolean(launchingSession)}
                     style={{
                       flex: 2,
                       padding: "12px",

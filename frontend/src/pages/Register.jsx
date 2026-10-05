@@ -21,7 +21,8 @@ export default function Register() {
 
   useEffect(() => {
     if (user && (user.role !== "buyer" || sp.get("role") !== "seller")) {
-      navigate("/dashboard", { replace: true });
+      const pendingGame = sessionStorage.getItem("productify_pending_game");
+      navigate(pendingGame ? "/gamezone" : "/dashboard", { replace: true });
     }
   }, [user, sp, navigate]);
 
@@ -44,7 +45,8 @@ export default function Register() {
     try {
       const u = await registerEmail({ email, password, name, role });
       toast.success(`Welcome to Productify, ${u.name.split(" ")[0]}`);
-      navigate("/dashboard", { replace: true });
+      const pendingGame = sessionStorage.getItem("productify_pending_game");
+      navigate(pendingGame ? "/gamezone" : "/dashboard", { replace: true });
     } catch (e) {
       setErr(e.response?.data?.detail || "Sign-up failed");
     } finally { setBusy(false); }

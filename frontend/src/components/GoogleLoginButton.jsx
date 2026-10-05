@@ -26,7 +26,8 @@ export default function GoogleLoginButton({ text = "signin_with" }) {
           localStorage.setItem("productify-user", JSON.stringify(data.user));
           setUser(data.user);
           toast.success(`Welcome, ${data.user.name.split(" ")[0]}!`);
-          navigate("/dashboard", { replace: true });
+          const pendingGame = sessionStorage.getItem("productify_pending_game");
+          navigate(pendingGame ? "/gamezone" : "/dashboard", { replace: true });
         }
       } catch (err) {
         toast.error(getErrorMessage(err, "Google sign-in failed"));
