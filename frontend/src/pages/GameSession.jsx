@@ -55,7 +55,8 @@ export default function GameSession() {
   const [isControlsLocked, setIsControlsLocked] = useState(false);
   const [gamepadConnected, setGamepadConnected] = useState(false);
   const [gamepadName, setGamepadName] = useState("");
-  const [renderMode, setRenderMode] = useState("canvas"); // "canvas" (direct web player) or "embed" (sunshine iframe)
+  const [renderMode, setRenderMode] = useState("embed"); // Default to genuine low-latency in-browser web player
+  const [networkTarget, setNetworkTarget] = useState("auto"); // "auto" (WAN) or "lan" (Local Wi-Fi)
   const [showAdvancedExternal, setShowAdvancedExternal] = useState(false);
   const [pinCopied, setPinCopied] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
@@ -75,11 +76,30 @@ export default function GameSession() {
 
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
+  const iframeRef = useRef(null);
+
+  // Dynamic active streaming URL (supports LAN / WAN / localhost)
+  const activeStreamUrl = useCallback(() => {
+    if (!streamCreds) return "";
+    if (networkTarget === "lan" && streamCreds.lan_stream_url) {
+      return streamCreds.lan_stream_url;
+    }
+    return streamCreds.stream_url || streamCreds.lan_stream_url || `http://${streamCreds.wan_ip || "127.0.0.1"}:48080/stream.html`;
+  }, [streamCreds, networkTarget]);
+
+  // Open dedicated borderless gaming window
+  const openStandaloneWindow = () => {
+    const url = activeStreamUrl();
+    if (url) {
+      window.open(url, "ProductifyGameStream", "width=1280,height=720,menubar=no,toolbar=no,location=no,status=no");
+      toast.success("Opened dedicated gaming window!");
+    }
+  };
 
   // Pointer lock listeners
   useEffect(() => {
     const handlePointerLockChange = () => {
-      const locked = document.pointerLockElement === canvasRef.current || document.pointerLockElement === containerRef.current;
+      const locked = Boolean(document.pointerLockElement);
       setIsControlsLocked(locked);
     };
     document.addEventListener("pointerlockchange", handlePointerLockChange);
@@ -107,15 +127,20 @@ export default function GameSession() {
   }, []);
 
   const handleLockControls = () => {
-    if (canvasRef.current) {
+    setRenderMode("embed");
+    if (containerRef.current && !document.fullscreenElement) {
       try {
-        canvasRef.current.requestPointerLock();
+        containerRef.current.requestFullscreen().catch(() => {});
+        setIsFullscreen(true);
       } catch (e) {
-        console.warn("Pointer lock request failed:", e);
+        console.warn("Fullscreen request:", e);
       }
-      setIsControlsLocked(true);
-      toast.success("Game controls engaged! Press ESC to unlock mouse.", { duration: 3000 });
     }
+    setIsControlsLocked(true);
+    if (iframeRef.current) {
+      iframeRef.current.focus();
+    }
+    toast.success("Game controls engaged! Press ESC to unlock mouse.", { duration: 3000 });
   };
 
   // Canvas dynamic renderer & mouse tracking
@@ -685,14 +710,16 @@ export default function GameSession() {
               {/* Mode A: Embedded Sunshine Web Player */}
               {renderMode === "embed" ? (
                 <iframe
-                  src={streamCreds?.stream_url || `https://${streamCreds?.wan_ip || "122.161.64.41"}:47990`}
+                  ref={iframeRef}
+                  src={activeStreamUrl()}
                   title="In-Browser Game Stream"
                   allow="autoplay; fullscreen; microphone; camera; gamepad; pointer-lock"
                   style={{
                     width: "100%",
                     height: "100%",
                     border: "none",
-                    background: "#000"
+                    background: "#000",
+                    display: "block"
                   }}
                 />
               ) : (
@@ -755,30 +782,53 @@ export default function GameSession() {
                     Zero downloads or external apps needed. Your game runs with dedicated NVENC hardware acceleration directly inside this web browser.
                   </p>
 
-                  {/* Primary Big Neon Play Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleLockControls();
-                    }}
-                    style={{
-                      background: "linear-gradient(135deg, #c8f04c 0%, #10b981 100%)",
-                      color: "#080c14",
-                      font: "800 15px 'Space Grotesk', sans-serif",
-                      padding: "13px 34px",
-                      borderRadius: 12,
-                      border: "none",
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 10,
-                      boxShadow: "0 0 35px rgba(200, 240, 76, 0.4)",
-                      marginBottom: 24,
-                      transition: "transform 0.15s ease"
-                    }}
-                  >
-                    <Play size={18} fill="#080c14" /> Start Playing in Browser
-                  </button>
+                  {/* Primary Action Buttons */}
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLockControls();
+                      }}
+                      style={{
+                        background: "linear-gradient(135deg, #c8f04c 0%, #10b981 100%)",
+                        color: "#080c14",
+                        font: "800 15px 'Space Grotesk', sans-serif",
+                        padding: "13px 30px",
+                        borderRadius: 12,
+                        border: "none",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 10,
+                        boxShadow: "0 0 35px rgba(200, 240, 76, 0.4)",
+                        transition: "transform 0.15s ease"
+                      }}
+                    >
+                      <Play size={18} fill="#080c14" /> Start Playing in Browser
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openStandaloneWindow();
+                      }}
+                      style={{
+                        background: "rgba(0, 240, 255, 0.15)",
+                        border: "1px solid rgba(0, 240, 255, 0.4)",
+                        color: "#00f0ff",
+                        font: "700 14px 'Space Grotesk', sans-serif",
+                        padding: "13px 24px",
+                        borderRadius: 12,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <ExternalLink size={16} /> Open Dedicated Gaming Window
+                    </button>
+                  </div>
 
                   {/* Helper Badges */}
                   <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10, maxWidth: 640 }}>
@@ -816,6 +866,27 @@ export default function GameSession() {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <span style={{ color: "#e2e8f0" }}>Mode: <b style={{ color: "#00f0ff" }}>In-Browser Zero-Install</b></span>
+                <span>•</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255, 255, 255, 0.05)", padding: "3px 8px", borderRadius: 6 }}>
+                  <Wifi size={13} color="#00f0ff" />
+                  <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>Route:</span>
+                  <button
+                    onClick={() => setNetworkTarget(networkTarget === "auto" ? "lan" : "auto")}
+                    title="Toggle between Internet WAN and Local Wi-Fi (LAN) route"
+                    style={{
+                      background: networkTarget === "lan" ? "rgba(16, 185, 129, 0.3)" : "rgba(0, 240, 255, 0.2)",
+                      border: networkTarget === "lan" ? "1px solid #10b981" : "1px solid #00f0ff",
+                      color: networkTarget === "lan" ? "#10b981" : "#00f0ff",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                      fontSize: "0.7rem",
+                      cursor: "pointer",
+                      fontWeight: 700
+                    }}
+                  >
+                    {networkTarget === "lan" ? "Local Wi-Fi (LAN)" : "Cloud WAN (Internet)"}
+                  </button>
+                </div>
                 <span>•</span>
                 <span>Render: 
                   <button
