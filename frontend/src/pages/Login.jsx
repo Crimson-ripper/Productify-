@@ -16,16 +16,12 @@ export default function Login() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const getTargetDestination = () => {
-    if (sessionStorage.getItem("productify_pending_game")) {
-      return "/gamezone";
-    }
-    return location.state?.from?.pathname || "/dashboard";
-  };
-
   useEffect(() => {
     if (user) {
-      navigate(getTargetDestination(), { replace: true });
+      const dest = sessionStorage.getItem("productify_pending_game")
+        ? "/gamezone"
+        : (location.state?.from?.pathname || "/dashboard");
+      navigate(dest, { replace: true });
     }
   }, [user, navigate, location]);
 
@@ -35,7 +31,10 @@ export default function Login() {
     try {
       const u = await loginEmail(email, password);
       toast.success(`Welcome back, ${u.name.split(" ")[0]}`);
-      navigate(getTargetDestination(), { replace: true });
+      const dest = sessionStorage.getItem("productify_pending_game")
+        ? "/gamezone"
+        : (location.state?.from?.pathname || "/dashboard");
+      navigate(dest, { replace: true });
     } catch (e) {
       setErr(e.response?.data?.detail || "Login failed");
     } finally { setBusy(false); }
