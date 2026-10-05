@@ -42,6 +42,8 @@ const REASON_LABEL = {
   other: "Other"
 };
 
+const PRODUCTIFY_NODE_EXE_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/download/v1.0.0/ProductifyNode.exe";
+
 export default function SellerDashboard() {
   const { user, setUser, upgradeSellerTier } = useAuth();
   const [tab, setTab] = useState("analytics"); // "analytics" | "listings" | "payouts" | "reports" | "pro"
@@ -987,7 +989,9 @@ export default function SellerDashboard() {
 
                       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
                         <a
-                          href="/ProductifyNode.exe"
+                          href={PRODUCTIFY_NODE_EXE_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           download="ProductifyNode.exe"
                           style={{
                             display: "inline-flex",
@@ -1727,7 +1731,9 @@ export default function SellerDashboard() {
 
                     <div style={{ display: "flex", gap: "10px" }}>
                       <a
-                        href="/ProductifyNode.exe"
+                        href={PRODUCTIFY_NODE_EXE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         download="ProductifyNode.exe"
                         className="primary-button"
                         style={{
