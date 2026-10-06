@@ -66,6 +66,18 @@ app = FastAPI(title="Productify API")
 api = APIRouter(prefix="/api")
 
 
+@app.get("/health")
+@api.get("/health")
+async def health_check():
+    """Health check endpoint for node agent reachability test and uptime monitoring."""
+    return {
+        "ok": True,
+        "status": "healthy",
+        "service": "Productify Cloud Backend",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 # ============== STORAGE ==============
 def init_storage():
     global storage_key
