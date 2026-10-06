@@ -3169,9 +3169,11 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
             "port": 47989,
             "web_port": 48080,
             "pin": fallback_pin,
+            "web_username": "admin",
+            "web_password": "admin",
             "moonlight_uri": f"moonlight://{host_ip}:47989?pin={fallback_pin}",
-            "stream_url": f"http://{host_ip}:48080/stream.html",
-            "lan_stream_url": f"http://192.168.1.4:48080/stream.html",
+            "stream_url": f"http://{host_ip}:48080/",
+            "lan_stream_url": f"http://192.168.1.4:48080/",
             "status": "streaming"
         }
 
@@ -3267,9 +3269,10 @@ async def get_game_stream_credentials(session_id: str, user=Depends(current_user
     port = streaming.get("port") or 47989
     web_port = streaming.get("web_port") or 48080
     pin = streaming.get("pin") or "0000"
-    moonlight_uri = streaming.get("moonlight_uri") or f"moonlight://{wan_ip}:{port}?pin={pin}"
-    stream_url = streaming.get("stream_url") or f"http://{wan_ip}:{web_port}/stream.html"
-    lan_stream_url = streaming.get("lan_stream_url") or f"http://{lan_ip}:{web_port}/stream.html"
+    web_username = streaming.get("web_username") or "admin"
+    web_password = streaming.get("web_password") or "admin"
+    stream_url = streaming.get("stream_url") or f"http://{wan_ip}:{web_port}/"
+    lan_stream_url = streaming.get("lan_stream_url") or f"http://{lan_ip}:{web_port}/"
 
     return {
         "ok": True,
@@ -3279,6 +3282,8 @@ async def get_game_stream_credentials(session_id: str, user=Depends(current_user
         "port": port,
         "web_port": web_port,
         "pin": pin,
+        "web_username": web_username,
+        "web_password": web_password,
         "moonlight_uri": moonlight_uri,
         "stream_url": stream_url,
         "lan_stream_url": lan_stream_url,

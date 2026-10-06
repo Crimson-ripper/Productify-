@@ -60,6 +60,7 @@ export default function GameSession() {
   const [showAdvancedExternal, setShowAdvancedExternal] = useState(false);
   const [pinCopied, setPinCopied] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
+  const [credsCopied, setCredsCopied] = useState(false);
 
   // Stream controls
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -84,7 +85,7 @@ export default function GameSession() {
     if (networkTarget === "lan" && streamCreds.lan_stream_url) {
       return streamCreds.lan_stream_url;
     }
-    return streamCreds.stream_url || streamCreds.lan_stream_url || `http://${streamCreds.wan_ip || "127.0.0.1"}:48080/stream.html`;
+    return streamCreds.stream_url || streamCreds.lan_stream_url || `http://${streamCreds.wan_ip || "127.0.0.1"}:48080/`;
   }, [streamCreds, networkTarget]);
 
   // Open dedicated borderless gaming window
@@ -318,6 +319,13 @@ export default function GameSession() {
     setIpCopied(true);
     toast.success(`Host Address ${target} copied!`);
     setTimeout(() => setIpCopied(false), 2500);
+  };
+
+  const handleCopyCreds = (u, p) => {
+    navigator.clipboard.writeText(`${u}`);
+    setCredsCopied(true);
+    toast.success(`Copied username '${u}' (Password is also '${p}')!`);
+    setTimeout(() => setCredsCopied(false), 2500);
   };
 
   // Local second-by-second ticker
@@ -841,6 +849,9 @@ export default function GameSession() {
                     <div style={{ background: gamepadConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)", border: `1px solid ${gamepadConnected ? "#10b981" : "rgba(255, 255, 255, 0.12)"}`, color: gamepadConnected ? "#10b981" : "#cbd5e1", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
                       <span>🎮</span> <b>Controller:</b> {gamepadConnected ? `${gamepadName || "Gamepad"} Active` : "Xbox/PS5 Auto-Detected on Plug-in"}
                     </div>
+                    <div style={{ background: "rgba(16, 185, 129, 0.15)", border: "1px solid #10b981", color: "#6ee7b7", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>🔑</span> <b>Login:</b> admin / admin (Auto-Login Enabled)
+                    </div>
                     <div style={{ background: "rgba(0, 240, 255, 0.08)", border: "1px solid rgba(0, 240, 255, 0.25)", color: "#38bdf8", fontSize: "0.75rem", padding: "5px 12px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6 }}>
                       <span>⎋</span> Press <b>ESC</b> anytime to unlock mouse
                     </div>
@@ -976,6 +987,15 @@ export default function GameSession() {
                       style={{ background: "transparent", border: "none", color: pinCopied ? "#10b981" : "#94a3b8", marginLeft: 8, cursor: "pointer", fontSize: "0.74rem" }}
                     >
                       {pinCopied ? "✓ Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "#f8fafc", fontWeight: 700, marginTop: 4 }}>
+                    Web Player Login: <code style={{ color: "#a7f3d0" }}>{streamCreds?.web_username || "admin"}</code> / <code style={{ color: "#a7f3d0" }}>{streamCreds?.web_password || "admin"}</code>
+                    <button
+                      onClick={() => handleCopyCreds(streamCreds?.web_username || "admin", streamCreds?.web_password || "admin")}
+                      style={{ background: "transparent", border: "none", color: credsCopied ? "#10b981" : "#94a3b8", marginLeft: 8, cursor: "pointer", fontSize: "0.74rem" }}
+                    >
+                      {credsCopied ? "✓ Copied" : "Copy Login"}
                     </button>
                   </div>
                 </div>
