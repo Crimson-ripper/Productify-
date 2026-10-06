@@ -3111,7 +3111,12 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
             raise HTTPException(400, "game_id or private_game_id required")
         game = await db.games.find_one({"id": data.game_id}, {"_id": 0})
         if not game:
-            game = next((g for g in CURATED_GAMES if g["id"] == data.game_id), None)
+            game = next((g for g in CURATED_GAMES if g["id"] == data.game_id or g.get("slug") == data.game_id), None)
+        if not game:
+            game = await db.games.find_one({"$or": [{"slug": data.game_id}, {"title": {"$regex": f"^{re.escape(data.game_id)}$", "$options": "i"}}]}, {"_id": 0})
+        if not game and data.game_id:
+            clean_gid = data.game_id.lower().replace("-", "").replace(" ", "")
+            game = next((g for g in CURATED_GAMES if g["slug"].replace("-", "") in clean_gid or clean_gid in g["title"].lower().replace(" ", "")), None)
         if not game:
             raise HTTPException(404, "Game not found in library")
 

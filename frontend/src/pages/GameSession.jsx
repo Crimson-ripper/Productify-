@@ -88,12 +88,22 @@ export default function GameSession() {
     return streamCreds.stream_url || streamCreds.lan_stream_url || `http://${streamCreds.wan_ip || "127.0.0.1"}:48080/`;
   }, [streamCreds, networkTarget]);
 
+  // Mixed content detection (HTTPS parent embedding HTTP iframe is blocked by Chrome/Edge)
+  const isMixedContent = Boolean(
+    typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
+    activeStreamUrl() &&
+    activeStreamUrl().startsWith("http:")
+  );
+
   // Open dedicated borderless gaming window
   const openStandaloneWindow = () => {
     const url = activeStreamUrl();
     if (url) {
       window.open(url, "ProductifyGameStream", "width=1280,height=720,menubar=no,toolbar=no,location=no,status=no");
       toast.success("Opened dedicated gaming window!");
+    } else {
+      toast.error("Waiting for host stream address...");
     }
   };
 
@@ -128,6 +138,11 @@ export default function GameSession() {
   }, []);
 
   const handleLockControls = () => {
+    if (isMixedContent) {
+      openStandaloneWindow();
+      toast.info("Opened stream in dedicated window to bypass browser mixed-content restrictions.", { duration: 4000 });
+      return;
+    }
     setRenderMode("embed");
     if (containerRef.current && !document.fullscreenElement) {
       try {
@@ -664,11 +679,33 @@ export default function GameSession() {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ background: "rgba(0, 240, 255, 0.2)", border: "1px solid #00f0ff", color: "#00f0ff", fontSize: "0.72rem", fontWeight: 800, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.5 }}>
-                  NVENC ULTRA LOW-LATENCY
+                  LOW-LATENCY STREAM
                 </div>
                 <div style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid #10b981", color: "#10b981", fontSize: "0.72rem", fontWeight: 700, padding: "3px 8px", borderRadius: 4 }}>
                   GPU PASSTHROUGH ACTIVE
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openStandaloneWindow();
+                  }}
+                  title="Open stream in dedicated borderless window"
+                  style={{
+                    background: "rgba(0, 240, 255, 0.15)",
+                    border: "1px solid rgba(0, 240, 255, 0.6)",
+                    color: "#00f0ff",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    cursor: "pointer"
+                  }}
+                >
+                  <ExternalLink size={12} /> Open Dedicated Window
+                </button>
               </div>
 
               <div style={{ textAlign: "right", fontSize: "0.75rem", color: "#cbd5e1" }}>
@@ -712,6 +749,48 @@ export default function GameSession() {
                   }}
                 >
                   🟢 CONTROLS LOCKED · PRESS ESC TO RELEASE MOUSE
+                </div>
+              )}
+
+              {/* Mixed Content / Black Screen helper notification */}
+              {isMixedContent && isControlsLocked && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 16,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "rgba(15, 23, 42, 0.95)",
+                    border: "1px solid rgba(0, 240, 255, 0.4)",
+                    color: "#e2e8f0",
+                    fontSize: "0.78rem",
+                    padding: "8px 16px",
+                    borderRadius: 10,
+                    zIndex: 25,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.8)"
+                  }}
+                >
+                  <span>Black screen? Browser HTTPS blocks embedded HTTP stream.</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openStandaloneWindow();
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #c8f04c 0%, #10b981 100%)",
+                      color: "#080c14",
+                      border: "none",
+                      padding: "5px 12px",
+                      borderRadius: 6,
+                      fontWeight: 800,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Open Standalone Window ↗
+                  </button>
                 </div>
               )}
 
