@@ -97,13 +97,20 @@ export default function GameSession() {
   );
 
   // Open dedicated borderless gaming window
-  const openStandaloneWindow = () => {
-    const url = activeStreamUrl();
+  const openStandaloneWindow = async () => {
+    let url = activeStreamUrl();
+    if (!url) {
+      toast.info("Connecting to host streaming daemon...", { id: "stream-init" });
+      const creds = await fetchStreamCreds();
+      if (creds) {
+        url = creds.stream_url || creds.lan_stream_url || (creds.wan_ip ? `http://${creds.wan_ip}:48080/` : "");
+      }
+    }
     if (url) {
       window.open(url, "ProductifyGameStream", "width=1280,height=720,menubar=no,toolbar=no,location=no,status=no");
       toast.success("Opened dedicated gaming window!");
     } else {
-      toast.error("Waiting for host stream address...");
+      toast.error("Waiting for host stream address... Please wait a moment while the machine initializes.");
     }
   };
 
@@ -308,10 +315,12 @@ export default function GameSession() {
       const res = await api.get(`/games/session/${sessionId}/stream-credentials`);
       if (res.data?.ok) {
         setStreamCreds(res.data);
+        return res.data;
       }
     } catch (err) {
       console.warn("Could not fetch streaming credentials:", err);
     }
+    return null;
   }, [sessionId]);
 
   useEffect(() => {

@@ -2007,7 +2007,9 @@ class HostTunnelManager:
         msg_id = uuid.uuid4().hex
         rpc_msg = {
             "msg_id": msg_id,
+            "id": msg_id,
             "action": action,
+            "payload": payload,
             **payload
         }
         loop = asyncio.get_running_loop()
@@ -2114,9 +2116,24 @@ async def host_tunnel_poll(rental_id: str, payload: dict):
 @api.post("/tunnel/host/{rental_id}/reply")
 async def host_tunnel_reply(rental_id: str, data: dict):
     """Submit RPC execution results from host agent."""
-    msg_id = data.get("msg_id")
+    msg_id = data.get("msg_id") or data.get("id")
     if msg_id:
         host_tunnel_manager.resolve_rpc(msg_id, data)
+
+    # Persist streaming parameters to active game session in DB if reported
+    session_id = data.get("session_id") or (data.get("payload") or {}).get("session_id")
+    streaming = data.get("streaming")
+    if streaming and isinstance(streaming, dict) and streaming.get("ok"):
+        try:
+            query = {"id": session_id} if session_id else {"rental_id": rental_id, "status": "running"}
+            await db.game_sessions.update_one(
+                query,
+                {"$set": {"streaming": streaming, "status": "running"}}
+            )
+            logger.info(f"Persisted live streaming endpoints for session: {query}")
+        except Exception as e:
+            logger.warning(f"Could not persist streaming info for {rental_id}: {e}")
+
     return {"ok": True}
 
 
@@ -3500,8 +3517,22 @@ async def get_game_stream_credentials(session_id: str, user=Depends(current_user
     pin = streaming.get("pin") or "0000"
     web_username = streaming.get("web_username") or "admin"
     web_password = streaming.get("web_password") or "admin"
+
+    # If wan_ip is fallback 127.0.0.1, check live host tunnel node metadata or rental record
+    rental_id = session.get("rental_id")
+    if (wan_ip == "127.0.0.1" or not wan_ip) and rental_id:
+        meta = host_tunnel_manager.node_meta.get(rental_id, {})
+        discovered_ip = meta.get("public_ip") or meta.get("wan_ip")
+        if not discovered_ip:
+            rental = await db.rentals.find_one({"id": rental_id}, {"_id": 0})
+            if rental and rental.get("host_ip") and rental.get("host_ip") != "127.0.0.1":
+                discovered_ip = rental.get("host_ip")
+        if discovered_ip:
+            wan_ip = discovered_ip
+
     stream_url = streaming.get("stream_url") or f"http://{wan_ip}:{web_port}/"
     lan_stream_url = streaming.get("lan_stream_url") or f"http://{lan_ip}:{web_port}/"
+    moonlight_uri = streaming.get("moonlight_uri") or f"moonlight://{wan_ip}:{port}?pin={pin}"
 
     return {
         "ok": True,
@@ -3518,7 +3549,7 @@ async def get_game_stream_credentials(session_id: str, user=Depends(current_user
         "lan_stream_url": lan_stream_url,
         "status": session.get("status", "running"),
         "game_title": session.get("game_title", "Cloud Game"),
-        "ready": bool(streaming.get("ok", False) or streaming.get("wan_ip"))
+        "ready": bool(streaming.get("ok", False) or (wan_ip and wan_ip != "127.0.0.1"))
     }
 
 
