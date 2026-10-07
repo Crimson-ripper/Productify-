@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response as FastAPIResponse, PlainTextResponse, FileResponse
+from fastapi.responses import Response as FastAPIResponse, PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -78,7 +78,39 @@ async def health_check():
     }
 
 
-# ============== STORAGE ==============
+# ============== STORAGE (CLOUDFLARE R2 + EMERGENT FALLBACK) ==============
+R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "").strip()
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
+R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "").strip()
+R2_PUBLIC_URL = (os.environ.get("R2_PUBLIC_URL") or "").strip().rstrip("/")
+R2_ENDPOINT_URL = (os.environ.get("R2_ENDPOINT_URL") or "").strip() or (f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com" if R2_ACCOUNT_ID else "")
+
+r2_client = None
+
+def init_r2_storage():
+    global r2_client
+    if r2_client is not None:
+        return r2_client
+    if R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME and R2_ENDPOINT_URL:
+        try:
+            import boto3
+            from botocore.config import Config
+            r2_client = boto3.client(
+                "s3",
+                endpoint_url=R2_ENDPOINT_URL,
+                aws_access_key_id=R2_ACCESS_KEY_ID,
+                aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+                config=Config(signature_version="s3v4"),
+                region_name="auto",
+            )
+            logger.info(f"Cloudflare R2 storage client initialized for bucket: {R2_BUCKET_NAME}")
+            return r2_client
+        except Exception as e:
+            logger.error(f"Failed to initialize Cloudflare R2 client: {e}")
+    return None
+
+
 def init_storage():
     global storage_key
     if storage_key:
@@ -95,6 +127,24 @@ def init_storage():
 
 
 def put_object(path: str, data: bytes, content_type: str):
+    r2 = init_r2_storage()
+    if r2:
+        try:
+            r2.put_object(
+                Bucket=R2_BUCKET_NAME,
+                Key=path,
+                Body=data,
+                ContentType=content_type,
+            )
+            public_url = f"{R2_PUBLIC_URL}/{path}" if R2_PUBLIC_URL else f"/api/files/{path}"
+            return {
+                "path": path,
+                "size": len(data),
+                "public_url": public_url,
+            }
+        except Exception as e:
+            logger.error(f"Cloudflare R2 put_object failed for {path}: {e}")
+            # Fall back to Emergent storage if R2 fails
     key = init_storage()
     r = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
     r.raise_for_status()
@@ -102,10 +152,58 @@ def put_object(path: str, data: bytes, content_type: str):
 
 
 def get_object(path: str):
+    r2 = init_r2_storage()
+    if r2:
+        try:
+            res = r2.get_object(Bucket=R2_BUCKET_NAME, Key=path)
+            content = res["Body"].read()
+            ct = res.get("ContentType", "application/octet-stream")
+            return content, ct
+        except Exception as e:
+            logger.warning(f"Cloudflare R2 get_object error for {path}, falling back: {e}")
     key = init_storage()
     r = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
     r.raise_for_status()
     return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+def generate_r2_presigned_upload(path: str, content_type: str = "application/octet-stream", expires_in: int = 7200):
+    """Generate direct-to-R2 presigned upload URL for multi-GB game packages without buffering in server RAM."""
+    r2 = init_r2_storage()
+    if not r2 or not R2_BUCKET_NAME:
+        return None
+    try:
+        url = r2.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": R2_BUCKET_NAME, "Key": path, "ContentType": content_type},
+            ExpiresIn=expires_in,
+        )
+        return url
+    except Exception as e:
+        logger.error(f"Failed to generate R2 presigned upload URL for {path}: {e}")
+        return None
+
+
+def generate_r2_presigned_download(path: str, expires_in: int = 7200):
+    """Generate high-speed direct download URL for host nodes from Cloudflare R2 with zero egress fees."""
+    r2 = init_r2_storage()
+    if not r2 or not R2_BUCKET_NAME:
+        if R2_PUBLIC_URL and path:
+            return f"{R2_PUBLIC_URL}/{path.lstrip('/')}"
+        return None
+    try:
+        url = r2.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": R2_BUCKET_NAME, "Key": path},
+            ExpiresIn=expires_in,
+        )
+        return url
+    except Exception as e:
+        logger.error(f"Failed to generate R2 presigned download URL for {path}: {e}")
+        if R2_PUBLIC_URL and path:
+            return f"{R2_PUBLIC_URL}/{path.lstrip('/')}"
+        return None
+
 
 
 # ============== MODELS ==============
@@ -1002,6 +1100,8 @@ async def create_product(data: ProductInput, user=Depends(current_user)):
 @api.get("/rentals")
 async def rentals(q: str = "", sort: str = "recent"):
     rows = await db.rentals.find({"status": "approved"}, {"_id": 0}).to_list(200)
+    for r in rows:
+        r["is_online"] = host_tunnel_manager.is_connected(r.get("id"))
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in (r.get("title", "") + " " + r.get("gpu", "") + " " + r.get("description", "")).lower()]
@@ -1017,6 +1117,7 @@ async def rental_detail(rid: str):
     r = await db.rentals.find_one({"id": rid}, {"_id": 0})
     if not r:
         raise HTTPException(404, "Rental not found")
+    r["is_online"] = host_tunnel_manager.is_connected(rid)
     return r
 
 
@@ -1424,7 +1525,13 @@ async def upload(file: UploadFile = File(...), user=Depends(current_user)):
     }
     await db.files.insert_one(doc)
     frontend = os.environ.get("FRONTEND_URL", "").rstrip("/")
-    return {"path": result["path"], "url": f"/api/files/{result['path']}", "id": doc["id"]}
+    cdn_url = result.get("public_url")
+    return {
+        "path": result["path"],
+        "url": f"/api/files/{result['path']}",
+        "cdn_url": cdn_url or f"/api/files/{result['path']}",
+        "id": doc["id"],
+    }
 
 
 @api.get("/files/{path:path}")
@@ -2970,6 +3077,105 @@ async def get_game_details(game_id: str):
     return {"ok": True, "game": game_out}
 
 
+@api.get("/games/{game_id}/hosts")
+async def get_game_hosts(game_id: str):
+    """List all host machines with real-time online/offline presence for the Gamezone Host Selection view."""
+    game = await db.games.find_one({"id": game_id}, {"_id": 0})
+    if not game:
+        game = next((g for g in CURATED_GAMES if g["id"] == game_id or g.get("slug") == game_id), None)
+    if not game:
+        game = await db.games.find_one({"$or": [{"slug": game_id}, {"title": {"$regex": f"^{re.escape(game_id)}$", "$options": "i"}}]}, {"_id": 0})
+    if not game:
+        raise HTTPException(404, "Game not found in library")
+
+    all_rentals = await db.rentals.find({"status": "approved"}, {"_id": 0}).to_list(100)
+    if not all_rentals:
+        all_rentals = await db.rentals.find({}, {"_id": 0}).to_list(100)
+
+    hosts = []
+    for r in all_rentals:
+        rid = r.get("id", "")
+        is_online = host_tunnel_manager.is_connected(rid)
+        gpu_name = r.get("gpu") or "High-Performance GPU"
+        vram_str = r.get("vram") or "8 GB"
+        cpu_name = r.get("cpu") or "High-Speed vCPU"
+        ram_str = r.get("ram") or "16 GB"
+        price_hr = float(r.get("price", 0.60))
+
+        hosts.append({
+            "id": rid,
+            "title": r.get("title") or f"{gpu_name} Host Node",
+            "gpu": gpu_name,
+            "vram": vram_str,
+            "cpu": cpu_name,
+            "ram": ram_str,
+            "price": price_hr,
+            "region": r.get("location") or r.get("region") or "Auto / Global Edge",
+            "is_online": is_online,
+            "ping_ms": 22 if is_online else 0,
+            "can_run": True,
+            "status": "online" if is_online else "offline",
+            "host_ip": r.get("host_ip", "127.0.0.1"),
+        })
+
+    # Sort: Online hosts first (glowing green), then by price
+    hosts.sort(key=lambda h: (not h["is_online"], h["price"]))
+
+    rate = float(game.get("hourly_rate_credits", 1.0))
+    game_summary = {
+        "id": game.get("id"),
+        "title": game.get("title"),
+        "cover_image": game.get("cover_image") or game.get("image"),
+        "banner_image": game.get("banner_image") or game.get("cover_image"),
+        "genre": game.get("genre"),
+        "description": game.get("description"),
+        "rate_credits": rate,
+        "rate_usd": rate,
+        "rate_inr": currency_service.convert(rate, "USD", "INR"),
+        "rate_eur": currency_service.convert(rate, "USD", "EUR"),
+        "has_package": bool(game.get("r2_key") or game.get("package_url")),
+        "package_size_bytes": game.get("package_size_bytes", 0),
+        "min_vram": game.get("min_vram", "4 GB"),
+        "recommended_gpu": game.get("recommended_gpu", "GTX 1650 or higher"),
+    }
+
+    return {
+        "ok": True,
+        "game": game_summary,
+        "hosts": hosts,
+        "online_count": sum(1 for h in hosts if h["is_online"]),
+        "total_hosts": len(hosts)
+    }
+
+
+@api.get("/games/{game_id}/download-ticket")
+async def get_game_download_ticket(game_id: str, user=Depends(current_user)):
+    """Generate high-speed presigned download URL from Cloudflare R2 for game client."""
+    game = await db.games.find_one({"id": game_id}, {"_id": 0})
+    if not game:
+        game = next((g for g in CURATED_GAMES if g["id"] == game_id), None)
+    if not game:
+        raise HTTPException(404, "Game not found")
+
+    r2_key = game.get("r2_key")
+    if r2_key:
+        ticket_url = generate_r2_presigned_download(r2_key, expires_in=7200)
+    else:
+        ticket_url = game.get("package_url")
+
+    if not ticket_url:
+        raise HTTPException(404, "No downloadable package found for this game")
+
+    return {
+        "ok": True,
+        "game_id": game_id,
+        "download_url": ticket_url,
+        "executable_path": game.get("executable_path", ""),
+        "size_bytes": game.get("package_size_bytes", 0),
+        "expires_in": 7200,
+    }
+
+
 @api.post("/games/submit")
 async def submit_community_game(data: GameSubmitInput, user=Depends(current_user)):
     """User submits a game to the public library for manual safety & malware checks."""
@@ -3129,8 +3335,23 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
             "pricing_model": "library_fixed_rate"
         }
 
+        # Resolve game package URL (prefer R2 presigned download ticket)
+        r2_key = game.get("r2_key", "")
+        if r2_key:
+            game_package_url = generate_r2_presigned_download(r2_key, expires_in=7200)
+        elif game.get("package_url"):
+            game_package_url = game.get("package_url")
+        executable_rel_path = game.get("executable_path") or game.get("launch_command") or ""
+
         if data.rental_id:
             rental = await db.rentals.find_one({"id": data.rental_id}, {"_id": 0})
+        if not rental:
+            # Pick the first actively connected online host
+            all_approved = await db.rentals.find({"status": "approved"}, {"_id": 0}).to_list(50)
+            for r in all_approved:
+                if host_tunnel_manager.is_connected(r.get("id")):
+                    rental = r
+                    break
         if not rental:
             rental = await db.rentals.find_one({"is_online": True}, {"_id": 0}) or await db.rentals.find_one({}, {"_id": 0})
 
@@ -3149,12 +3370,15 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
                 action="launch_game_container",
                 payload={
                     "session_id": session_id,
+                    "game_id": data.game_id or (pgame.get("id") if is_private else "game"),
                     "game_title": game_title,
                     "docker_image": docker_image,
                     "game_package_url": game_package_url,
+                    "executable_rel_path": executable_rel_path if not is_private else (pgame.get("launch_executable", "") if pgame else ""),
+                    "r2_key": r2_key if not is_private else "",
                     "is_private": is_private,
                 },
-                timeout=20.0
+                timeout=25.0
             )
             container_id = rpc_res.get("container_id", container_id)
             if rpc_res.get("streaming"):
@@ -3435,6 +3659,84 @@ async def admin_delete_game(game_id: str, user=Depends(current_user)):
         raise HTTPException(403, "Admin access required")
     await db.games.delete_one({"id": game_id})
     return {"ok": True, "message": "Game deleted"}
+
+
+class GamePresignUploadInput(BaseModel):
+    game_id: str
+    filename: str
+    content_type: Optional[str] = "application/zip"
+    file_size: Optional[int] = 0
+
+
+@api.post("/admin/games/presign-upload")
+async def presign_game_upload(data: GamePresignUploadInput, user=Depends(current_user)):
+    """Generate direct presigned PUT upload URL to Cloudflare R2 for multi-GB game archives."""
+    if user.get("role") not in ["admin", "seller", "sub-admin"]:
+        raise HTTPException(403, "Admin or Seller privileges required to upload game packages")
+
+    clean_filename = os.path.basename(data.filename).replace(" ", "_")
+    r2_key = f"games/{data.game_id}/{clean_filename}"
+    upload_url = generate_r2_presigned_upload(r2_key, data.content_type or "application/zip", expires_in=7200)
+
+    if not upload_url:
+        raise HTTPException(500, "Cloudflare R2 storage credentials are not properly configured")
+
+    public_url = f"{R2_PUBLIC_URL}/{r2_key}" if R2_PUBLIC_URL else ""
+
+    return {
+        "ok": True,
+        "upload_url": upload_url,
+        "r2_key": r2_key,
+        "public_url": public_url,
+        "bucket": R2_BUCKET_NAME,
+        "expires_in": 7200,
+    }
+
+
+class GameCompleteUploadInput(BaseModel):
+    game_id: str
+    r2_key: str
+    filename: str
+    size_bytes: Optional[int] = 0
+    executable_path: Optional[str] = ""
+
+
+@api.post("/admin/games/complete-upload")
+async def complete_game_upload(data: GameCompleteUploadInput, user=Depends(current_user)):
+    """Mark direct-to-R2 game package upload complete and link executable path."""
+    if user.get("role") not in ["admin", "seller", "sub-admin"]:
+        raise HTTPException(403, "Admin or Seller privileges required")
+
+    r2 = init_r2_storage()
+    real_size = data.size_bytes or 0
+    if r2:
+        try:
+            head = r2.head_object(Bucket=R2_BUCKET_NAME, Key=data.r2_key)
+            real_size = head.get("ContentLength", real_size)
+        except Exception as e:
+            logger.warning(f"Could not verify R2 head_object for {data.r2_key}: {e}")
+
+    public_url = f"{R2_PUBLIC_URL}/{data.r2_key}" if R2_PUBLIC_URL else f"/api/files/{data.r2_key}"
+
+    update_fields = {
+        "r2_key": data.r2_key,
+        "package_url": public_url,
+        "package_filename": data.filename,
+        "package_size_bytes": real_size,
+        "has_package": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if data.executable_path:
+        update_fields["executable_path"] = data.executable_path.strip()
+
+    await db.games.update_one({"id": data.game_id}, {"$set": update_fields}, upsert=True)
+    updated = await db.games.find_one({"id": data.game_id}, {"_id": 0})
+
+    return {
+        "ok": True,
+        "message": "Game package successfully linked and stored in Cloudflare R2",
+        "game": updated,
+    }
 
 
 @api.get("/admin/games/submissions")

@@ -24,6 +24,7 @@ import {
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
+import GamePackageUploader from "@/components/GamePackageUploader";
 import { toast } from "sonner";
 
 export default function Gamezone() {
@@ -153,8 +154,8 @@ export default function Gamezone() {
     }
   }, [selectedRentalId, user, activeTab]);
 
-  // Launch Library Game (Supports 1-Click direct launch or modal launch)
-  const handleLaunchGame = useCallback(async (targetGame) => {
+  // Launch Library Game: Navigates to the interactive Machine Selection page
+  const handleLaunchGame = useCallback((targetGame) => {
     const gameToPlay = (targetGame && targetGame.id) ? targetGame : selectedGame;
     if (!gameToPlay) return;
 
@@ -165,23 +166,9 @@ export default function Gamezone() {
       return;
     }
 
-    setLaunchingSession(gameToPlay.id || true);
-    try {
-      const res = await api.post("/games/play", {
-        game_id: gameToPlay.id,
-        rental_id: selectedRentalId || undefined
-      });
-      if (res.data?.session?.id) {
-        toast.success(`Spinning up isolated GPU container for ${gameToPlay.title}!`);
-        setSelectedGame(null);
-        navigate(`/gamezone/session/${res.data.session.id}`);
-      }
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to start game session"));
-    } finally {
-      setLaunchingSession(false);
-    }
-  }, [user, selectedGame, selectedRentalId, navigate]);
+    setSelectedGame(null);
+    navigate(`/gamezone/select-host/${gameToPlay.id}`);
+  }, [user, selectedGame, navigate]);
 
   // Auto-launch pending game when user logs in
   useEffect(() => {
@@ -663,16 +650,26 @@ export default function Gamezone() {
                 </div>
 
                 <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 6, fontWeight: 600 }}>Package / Build Download Link (ZIP / Executable) *</label>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 6, fontWeight: 600 }}>Game Package (Direct Cloudflare R2 Upload or External Link) *</label>
+                  <div style={{ marginBottom: 12 }}>
+                    <GamePackageUploader
+                      gameId={submitForm.title ? submitForm.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "community-game"}
+                      value={submitForm.package_url}
+                      onComplete={(data) => {
+                        setSubmitForm({ ...submitForm, package_url: data.public_url });
+                      }}
+                      label="Upload Multi-GB Game Package (.zip / .7z / .tar.gz)"
+                    />
+                  </div>
                   <input
                     required
                     type="url"
-                    placeholder="https://drive.google.com/file/... or https://s3.amazonaws.com/build.zip"
+                    placeholder="https://... or uploaded via Cloudflare R2 above"
                     value={submitForm.package_url}
                     onChange={(e) => setSubmitForm({ ...submitForm, package_url: e.target.value })}
                     style={{ width: "100%", padding: "10px 14px", background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.12)", borderRadius: 8, color: "#f3f4f6", outline: "none" }}
                   />
-                  <small style={{ color: "#6b7280", marginTop: 4, display: "block" }}>Provide a direct accessible download link to your standalone game archive.</small>
+                  <small style={{ color: "#6b7280", marginTop: 4, display: "block" }}>Game archive is securely stored on Cloudflare R2 with zero egress fees and distributed to online host nodes on-demand.</small>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18 }}>

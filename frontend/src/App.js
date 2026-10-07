@@ -29,6 +29,7 @@ import MyInstances from "@/pages/MyInstances";
 import InstanceDetail from "@/pages/InstanceDetail";
 import GpuRentalSpace from "@/pages/GpuRentalSpace";
 import Gamezone from "@/pages/Gamezone";
+import GameHostSelect from "@/pages/GameHostSelect";
 import GameSession from "@/pages/GameSession";
 import NotFound from "@/pages/NotFound";
 import PrivacyPolicy from "@/pages/policies/PrivacyPolicy";
@@ -53,6 +54,7 @@ function AppRouter() {
           <Route path="/shop" element={<Shop />} />
           <Route path="/rentals" element={<Rentals />} />
           <Route path="/gamezone" element={<Gamezone />} />
+          <Route path="/gamezone/select-host/:gameId" element={<ProtectedRoute><GameHostSelect /></ProtectedRoute>} />
           <Route path="/gamezone/session/:id" element={<ProtectedRoute><GameSession /></ProtectedRoute>} />
           <Route path="/rentals/reserve/:id" element={<ProtectedRoute><GpuRentalSpace /></ProtectedRoute>} />
           <Route path="/rental/reserve/:id" element={<ProtectedRoute><GpuRentalSpace /></ProtectedRoute>} />
