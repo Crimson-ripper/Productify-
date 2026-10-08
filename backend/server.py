@@ -3397,9 +3397,15 @@ async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_us
                 },
                 timeout=25.0
             )
+            if rpc_res and not rpc_res.get("ok"):
+                err_msg = rpc_res.get("error") or "Host machine failed to start game container."
+                raise HTTPException(status_code=400, detail=err_msg)
+
             container_id = rpc_res.get("container_id", container_id)
             if rpc_res.get("streaming"):
                 streaming_info = rpc_res["streaming"]
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning(f"Could not dispatch game RPC immediately: {e}")
 
