@@ -898,8 +898,9 @@ async def seller_analytics(user=Depends(current_user)):
     net_earnings = round(total_gross * (1 - comm_rate), 2)
     available_balance = max(0.0, round(net_earnings - total_withdrawn, 2))
     
-    active_rentals_count = sum(1 for r in my_rentals if r.get("status") == "approved")
-    gpu_hours = active_rentals_count * 28 + (len(orders) * 4)
+    # Real GPU hours: runtime recorded on instances that renters ran on this seller's machines.
+    my_instances = await db.instances.find({"seller_id": uid}, {"_id": 0, "total_runtime_seconds": 1}).to_list(1000)
+    gpu_hours = round(sum(float(i.get("total_runtime_seconds", 0) or 0) for i in my_instances) / 3600.0, 1)
     
     return {
         "total_gross": round(total_gross, 2),
@@ -915,6 +916,17 @@ async def seller_analytics(user=Depends(current_user)):
         "tier": user.get("seller_tier", "free"),
         "recent_transactions": recent_transactions[:10],
     }
+
+
+@api.get("/seller/listings")
+async def seller_listings(user=Depends(current_user)):
+    """The signed-in seller's own products and GPU listings, including ones still awaiting review."""
+    uid = user["id"]
+    products = await db.products.find({"seller_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    rentals = await db.rentals.find({"owner_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    for r in rentals:
+        r["is_online"] = host_tunnel_manager.is_connected(r.get("id"))
+    return {"products": products, "rentals": rentals}
 
 
 @api.get("/seller/payout-settings")
@@ -962,7 +974,8 @@ async def get_seller_wallet(currency: Optional[str] = Query(None), user=Depends(
         preferred_currency = "USD"
 
     avail_usd = float(analytics.get("available_balance", 0.0))
-    pending_usd = round(float(analytics.get("total_gross", 0.0)) * 0.15, 2)
+    # Pending = withdrawals requested but not yet paid out.
+    pending_usd = round(sum(float(h.get("amount", 0) or 0) for h in history if h.get("status") == "processing"), 2)
     withdrawn_usd = float(analytics.get("total_withdrawn", 0.0))
 
     avail_local = currency_service.convert(avail_usd, "USD", preferred_currency)
@@ -1214,7 +1227,7 @@ async def admin_stats(user=Depends(current_user)):
     completed_orders = await db.orders.find({"status": "completed"}, {"_id": 0, "total": 1}).to_list(1000)
     total_gmv = round(sum(o.get("total", 0.0) for o in completed_orders), 2)
     
-    open_reports = await db.reports.count_documents({"status": "open"})
+    open_reports = await db.abuse_reports.count_documents({"status": "open"})
     active_products = await db.products.count_documents({"approved": True})
     active_rentals = await db.rentals.count_documents({"status": "approved"})
 
@@ -2673,23 +2686,16 @@ async def seller_nodes_telemetry(user=Depends(current_user)):
         total_compute_hours += total_sec / 3600.0
         total_gross_earned += inst["live_cost"]
 
-    fee_rate = 0.05 if user.get("seller_tier") == "pro" else 0.10
+    fee_rate = get_commission_rate(user.get("seller_tier"))
     total_net_earned = round(total_gross_earned * (1.0 - fee_rate), 2)
 
-    host_token = f"pnode_{hash(user['id']) % 1000000:06d}_{user['id'][:6]}"
-    install_command = f"curl -sSL https://productifynow.com/agent/install.sh | sudo bash -s -- --token={host_token} --cluster=prod-eu"
-    headless_command = f"python -m productify_node.bridge.local_server --token={host_token}"
-
+    # Each machine pairs with its own listing's pairing_token (returned on the node records below).
     return {
         "nodes_count": len(nodes),
         "running_instances_count": running_count,
         "total_compute_hours": round(total_compute_hours, 1),
         "total_gross_earned": round(total_gross_earned, 2),
         "total_net_earned": total_net_earned,
-        "host_token": host_token,
-        "install_command": install_command,
-        "headless_command": headless_command,
-        "app_download_url": "/ProductifyNode.exe",
         "active_instances": active_instances,
         "nodes": nodes,
     }
