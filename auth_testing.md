@@ -1,6 +1,6 @@
 # Productify Authentication Testing
 
-Admin: `admin@productify.now` / `ProductifyAdmin123!`
+Admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` from your backend `.env` (never commit real values).
 
 1. Register a buyer or seller at `/api/auth/register`.
 2. Login at `/api/auth/login` and store the returned bearer token.
