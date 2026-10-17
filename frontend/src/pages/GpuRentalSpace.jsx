@@ -16,6 +16,7 @@ import {
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
+import TemplateIcon from "@/components/TemplateIcon";
 import { toast } from "sonner";
 
 const WORKLOAD_TEMPLATES = [
@@ -24,7 +25,6 @@ const WORKLOAD_TEMPLATES = [
     name: "PyTorch 2.4 + JupyterLab",
     category: "Deep Learning & AI",
     description: "CUDA 12.4, PyTorch 2.4, TorchVision, Torchaudio, FlashAttention-2, JupyterLab in-browser.",
-    icon: "⚡",
     port: 8888,
     service_name: "JupyterLab",
   },
@@ -33,7 +33,6 @@ const WORKLOAD_TEMPLATES = [
     name: "ComfyUI + SDXL & Flux",
     category: "Generative Art",
     description: "Pre-loaded with SDXL Turbo, Flux weights, and ControlNet for visual generation.",
-    icon: "🎨",
     port: 8188,
     service_name: "ComfyUI Web",
   },
@@ -42,7 +41,6 @@ const WORKLOAD_TEMPLATES = [
     name: "Ollama + Open WebUI",
     category: "LLMs & Chat",
     description: "Host DeepSeek-R1, Llama 3.3, and Mistral with lightning-fast inference and UI.",
-    icon: "🦙",
     port: 11434,
     service_name: "Ollama API & WebUI",
   },
@@ -51,7 +49,6 @@ const WORKLOAD_TEMPLATES = [
     name: "Ubuntu 22.04 LTS (CUDA Base)",
     category: "Custom Compute",
     description: "Pure Linux root shell with NVIDIA Drivers 550, Docker, Git, and full SSH access.",
-    icon: "💻",
     port: 22,
     service_name: "SSH Shell",
   },
@@ -195,19 +192,18 @@ export default function GpuRentalSpace() {
           style={{
             background: "#ffffff",
             border: "1px solid var(--line, #e2e2dc)",
-            borderRadius: "16px",
+            borderRadius: 0,
             padding: "28px 32px",
             display: "grid",
             gridTemplateColumns: "1.4fr 1fr",
             gap: "24px",
             alignItems: "center",
             marginBottom: "28px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.02)",
           }}
         >
           <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "8px" }}>
-              <Zap size={14} /> DEDICATED ON-DEMAND COMPUTE SPACE
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "var(--ok)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "8px" }}>
+              <Zap size={14} /> Rent this GPU
             </div>
             <h1 style={{ margin: "2px 0 8px", fontSize: "clamp(1.8rem, 3vw, 2.4rem)", fontWeight: 800, fontFamily: "var(--font-heading, sans-serif)", letterSpacing: "-0.03em" }}>
               {rental.title}
@@ -232,7 +228,7 @@ export default function GpuRentalSpace() {
             style={{
               background: "#fafaf7",
               border: "1px solid var(--line, #e2e2dc)",
-              borderRadius: "14px",
+              borderRadius: 0,
               padding: "20px 24px",
               display: "flex",
               flexDirection: "column",
@@ -248,7 +244,7 @@ export default function GpuRentalSpace() {
                   {money(totalPerHour)}
                 </span>
                 <span style={{ fontSize: "0.9rem", color: "#666" }}>/ hour</span>
-                <span style={{ fontSize: "0.8rem", color: "#16a34a", fontFamily: "var(--font-mono, monospace)" }}>
+                <span style={{ fontSize: "0.8rem", color: "var(--ok)", fontFamily: "var(--font-mono, monospace)" }}>
                   (~${perMinute.toFixed(4)}/min)
                 </span>
               </div>
@@ -258,7 +254,7 @@ export default function GpuRentalSpace() {
             </div>
 
             <div style={{ borderTop: "1px solid #e5e5dc", marginTop: "14px", paddingTop: "12px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", color: "#444" }}>
-              <Clock size={15} color="#16a34a" />
+              <Clock size={15} color="var(--ok)" />
               <span>
                 Your <b>{money(credits)}</b> credit balance covers <b>~{hoursCovered} hours</b> of compute.
               </span>
@@ -271,10 +267,9 @@ export default function GpuRentalSpace() {
           style={{
             background: "#ffffff",
             border: "1px solid var(--line, #e2e2dc)",
-            borderRadius: "14px",
+            borderRadius: 0,
             padding: "24px 28px",
             marginBottom: "28px",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "16px" }}>
@@ -297,11 +292,11 @@ export default function GpuRentalSpace() {
                   fontSize: "1.35rem",
                   fontWeight: 800,
                   fontFamily: "var(--font-mono, monospace)",
-                  color: credits > 0 ? "#16a34a" : "#d97706",
-                  background: credits > 0 ? "#f0fdf4" : "#fef8e7",
+                  color: credits > 0 ? "var(--ok)" : "#a56b1a",
+                  background: credits > 0 ? "#e9f3e5" : "#fef8e7",
                   border: `1px solid ${credits > 0 ? "#bbf7d0" : "#fed7aa"}`,
                   padding: "4px 14px",
-                  borderRadius: "8px",
+                  borderRadius: 0,
                 }}
               >
                 {money(credits)}
@@ -310,7 +305,7 @@ export default function GpuRentalSpace() {
           </div>
 
           {/* Quick Top-Up Preset Chips */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", background: "#fafaf7", padding: "14px 18px", borderRadius: "10px", border: "1px solid #ebece4" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", background: "#fafaf7", padding: "14px 18px", borderRadius: 0, border: "1px solid #ebece4" }}>
             <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--ink, #101112)", display: "flex", alignItems: "center", gap: "6px" }}>
               <CreditCard size={15} /> Quick Top-Up:
             </span>
@@ -324,7 +319,7 @@ export default function GpuRentalSpace() {
                 style={{
                   background: "#ffffff",
                   border: "1px solid var(--line, #dedfd9)",
-                  borderRadius: "8px",
+                  borderRadius: 0,
                   padding: "6px 14px",
                   fontSize: "0.82rem",
                   fontWeight: 700,
@@ -344,7 +339,7 @@ export default function GpuRentalSpace() {
                 step="1"
                 value={topupAmount}
                 onChange={(e) => setTopupAmount(Number(e.target.value))}
-                style={{ width: "70px", padding: "5px 8px", borderRadius: "6px", border: "1px solid var(--line, #dedfd9)", fontSize: "0.82rem", background: "#ffffff" }}
+                style={{ width: "70px", padding: "5px 8px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", fontSize: "0.82rem", background: "#ffffff" }}
               />
               <button
                 type="button"
@@ -364,10 +359,9 @@ export default function GpuRentalSpace() {
           style={{
             background: "#ffffff",
             border: "1px solid var(--line, #e2e2dc)",
-            borderRadius: "14px",
+            borderRadius: 0,
             padding: "28px 32px",
             marginBottom: "28px",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
           }}
         >
           <div style={{ marginBottom: "18px" }}>
@@ -388,7 +382,7 @@ export default function GpuRentalSpace() {
                   onClick={() => setSelectedTemplate(tpl.id)}
                   style={{
                     padding: "16px",
-                    borderRadius: "12px",
+                    borderRadius: 0,
                     border: active ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #e2e2dc)",
                     background: active ? "#fafaf7" : "#ffffff",
                     cursor: "pointer",
@@ -397,7 +391,7 @@ export default function GpuRentalSpace() {
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "1.3rem" }}>{tpl.icon}</span>
+                    <TemplateIcon id={tpl.id} size={20} />
                     <span style={{ fontSize: "0.72rem", background: "#f0f2ea", color: "#4f5348", padding: "2px 8px", borderRadius: "100px", fontFamily: "var(--font-mono, monospace)" }}>
                       Port {tpl.port}
                     </span>
@@ -417,7 +411,7 @@ export default function GpuRentalSpace() {
           </div>
 
           {/* NVMe Storage Slider */}
-          <div style={{ background: "#fafaf7", padding: "20px", borderRadius: "12px", border: "1px solid #ebece4", marginBottom: "22px" }}>
+          <div style={{ background: "#fafaf7", padding: "20px", borderRadius: 0, border: "1px solid #ebece4", marginBottom: "22px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.9rem", fontWeight: 700 }}>
                 <HardDrive size={16} /> Fast NVMe Scratch Disk
@@ -458,7 +452,7 @@ export default function GpuRentalSpace() {
                   onChange={(e) => setSshKey(e.target.value)}
                   placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... or ssh-rsa AAAAB3NzaC1yc2E..."
                   rows={3}
-                  style={{ width: "100%", fontSize: "0.8rem", fontFamily: "var(--font-mono, monospace)", padding: "10px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
+                  style={{ width: "100%", fontSize: "0.8rem", fontFamily: "var(--font-mono, monospace)", padding: "10px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
                 />
                 <span style={{ fontSize: "0.72rem", color: "#777" }}>
                   Optional. You can always use the in-browser interactive terminal directly on the instance page.
@@ -473,14 +467,13 @@ export default function GpuRentalSpace() {
           style={{
             background: "var(--ink, #101112)",
             color: "#ffffff",
-            borderRadius: "16px",
+            borderRadius: 0,
             padding: "24px 32px",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
             flexWrap: "wrap",
             gap: "20px",
-            boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
           }}
         >
           <div>
@@ -488,7 +481,7 @@ export default function GpuRentalSpace() {
               READY TO LAUNCH
             </div>
             <div style={{ fontSize: "1.45rem", fontWeight: 800, fontFamily: "var(--font-heading, sans-serif)", margin: "4px 0 2px" }}>
-              {money(totalPerHour)} <small style={{ fontSize: "0.85rem", color: "#9ca3af", fontWeight: 400 }}>/ hour</small>
+              {money(totalPerHour)} <small style={{ fontSize: "0.85rem", color: "var(--muted)", fontWeight: 400 }}>/ hour</small>
             </div>
             <span style={{ fontSize: "0.8rem", color: "#d1d5db" }}>
               Billed per minute · Stop, pause, or terminate anytime
@@ -520,7 +513,7 @@ export default function GpuRentalSpace() {
                 </>
               ) : (
                 <>
-                  <Zap size={18} /> ⚡ 1-Click Launch Rented GPU <ArrowRight size={16} />
+                  <Zap size={18} /> 1-Click Launch Rented GPU <ArrowRight size={16} />
                 </>
               )}
             </button>

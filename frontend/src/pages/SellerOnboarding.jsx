@@ -277,10 +277,9 @@ export default function SellerOnboarding() {
             style={{
               background: "#ffffff",
               border: "1px solid var(--line, #dedfd9)",
-              borderRadius: 14,
+              borderRadius: 0,
               padding: "20px 24px",
-              marginBottom: 32,
-              boxShadow: "0 2px 10px rgba(0,0,0,0.02)"
+              marginBottom: 32
             }}
           >
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, position: "relative" }}>
@@ -338,7 +337,7 @@ export default function SellerOnboarding() {
             </div>
 
             {/* Stepper horizontal line */}
-            <div style={{ height: 4, background: "var(--line, #dedfd9)", borderRadius: 10, marginTop: 16, overflow: "hidden" }}>
+            <div style={{ height: 4, background: "var(--line, #dedfd9)", borderRadius: 0, marginTop: 16, overflow: "hidden" }}>
               <div
                 style={{
                   height: "100%",
@@ -355,9 +354,8 @@ export default function SellerOnboarding() {
             style={{
               background: "#ffffff",
               border: "1px solid var(--line, #dedfd9)",
-              borderRadius: 14,
-              padding: "36px 32px",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.03)"
+              borderRadius: 0,
+              padding: "36px 32px"
             }}
           >
 
@@ -375,7 +373,7 @@ export default function SellerOnboarding() {
                 </div>
 
                 {user && (
-                  <div style={{ padding: "12px 16px", background: "rgba(101, 86, 232, 0.08)", border: "1px solid rgba(101, 86, 232, 0.25)", color: "var(--ink)", borderRadius: 8, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ padding: "12px 16px", background: "rgba(101, 86, 232, 0.08)", border: "1px solid rgba(101, 86, 232, 0.25)", color: "var(--ink)", borderRadius: 0, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: 8 }}>
                     <ShieldCheck size={18} color="var(--violet, #6556e8)" />
                     <span>Signed in as <b>{user.email}</b>. We have pre-filled your available details.</span>
                   </div>
@@ -494,7 +492,7 @@ export default function SellerOnboarding() {
                   style={{
                     background: emailVerified ? "rgba(112, 213, 158, 0.1)" : "#fafaf8",
                     border: emailVerified ? "1px solid #70d59e" : "1px solid var(--line, #dedfd9)",
-                    borderRadius: 12,
+                    borderRadius: 0,
                     padding: 20,
                     marginBottom: 20
                   }}
@@ -555,7 +553,7 @@ export default function SellerOnboarding() {
                   style={{
                     background: phoneVerified ? "rgba(112, 213, 158, 0.1)" : "#fafaf8",
                     border: phoneVerified ? "1px solid #70d59e" : "1px solid var(--line, #dedfd9)",
-                    borderRadius: 12,
+                    borderRadius: 0,
                     padding: 20,
                     marginBottom: 24
                   }}
@@ -667,15 +665,15 @@ export default function SellerOnboarding() {
                         {usernameChecking ? (
                           <span style={{ color: "var(--muted, #747570)" }}>Checking…</span>
                         ) : usernameStatus?.available ? (
-                          <span style={{ color: "#10B981", fontWeight: 700 }}>✓ Available</span>
+                          <span style={{ color: "var(--ok)", fontWeight: 700 }}>✓ Available</span>
                         ) : usernameStatus && !usernameStatus.available ? (
-                          <span style={{ color: "#EF4444", fontWeight: 700 }}>✗ Taken</span>
+                          <span style={{ color: "var(--danger)", fontWeight: 700 }}>✗ Taken</span>
                         ) : null}
                       </div>
                     </div>
                   </label>
                   {usernameStatus && !usernameStatus.available && (
-                    <small style={{ color: "#EF4444", display: "block", marginTop: 4, fontSize: "0.78rem" }}>
+                    <small style={{ color: "var(--danger)", display: "block", marginTop: 4, fontSize: "0.78rem" }}>
                       {usernameStatus.reason}
                     </small>
                   )}
@@ -766,21 +764,21 @@ export default function SellerOnboarding() {
                 {recoveryKey && (
                   <div
                     style={{
-                      background: "rgba(245, 158, 11, 0.08)",
-                      border: "1px solid rgba(245, 158, 11, 0.35)",
-                      borderRadius: 12,
+                      background: "rgba(165, 107, 26, 0.08)",
+                      border: "1px solid rgba(165, 107, 26, 0.35)",
+                      borderRadius: 0,
                       padding: 18,
                       marginBottom: 28
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#B45309", fontWeight: 700, fontSize: "0.85rem", marginBottom: 6 }}>
-                      <KeyRound size={16} /> EMERGENCY ACCOUNT RECOVERY KEY
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#a56b1a", fontWeight: 700, fontSize: "0.85rem", marginBottom: 6 }}>
+                      <KeyRound size={16} /> Recovery key
                     </div>
                     <p style={{ fontSize: "0.82rem", color: "#78350F", margin: "0 0 10px", lineHeight: 1.5 }}>
                       If you ever lose access to your verified email or mobile phone, this key allows you to safely recover your seller account and balance. Store it securely!
                     </p>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <code style={{ flex: 1, padding: "8px 12px", background: "#fff", border: "1px solid rgba(245, 158, 11, 0.4)", borderRadius: 6, font: "700 0.95rem 'DM Mono', monospace", color: "var(--ink)" }}>
+                      <code style={{ flex: 1, padding: "8px 12px", background: "#fff", border: "1px solid rgba(165, 107, 26, 0.4)", borderRadius: 0, font: "700 0.95rem 'DM Mono', monospace", color: "var(--ink)" }}>
                         {recoveryKey}
                       </code>
                       <button
@@ -789,7 +787,7 @@ export default function SellerOnboarding() {
                         className="secondary-button"
                         style={{ padding: "8px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: "0.82rem" }}
                       >
-                        {copiedKey ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                        {copiedKey ? <Check size={14} color="var(--ok)" /> : <Copy size={14} />}
                         {copiedKey ? "Copied" : "Copy Key"}
                       </button>
                     </div>
@@ -815,7 +813,7 @@ export default function SellerOnboarding() {
                       style={{
                         background: selectedTier === "free" ? "#ffffff" : "#fafaf8",
                         border: selectedTier === "free" ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #dedfd9)",
-                        borderRadius: 12,
+                        borderRadius: 0,
                         padding: 20,
                         cursor: "pointer",
                         position: "relative",
@@ -833,9 +831,9 @@ export default function SellerOnboarding() {
                       <div style={{ font: "800 24px 'Space Grotesk', sans-serif", margin: "6px 0 2px" }}>$0 <small style={{ font: "400 11px 'DM Mono'", color: "var(--muted)" }}>/ forever</small></div>
                       <p style={{ fontSize: "0.78rem", color: "var(--muted, #747570)", marginBottom: 12 }}>100% Free activation with standard 10% commission on sales.</p>
                       <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="#10B981" /> Unlimited digital products</li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="#10B981" /> GPU rental node listings</li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="#10B981" /> Weekly automated bank payouts</li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> Unlimited digital products</li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> GPU rental node listings</li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> Weekly automated bank payouts</li>
                       </ul>
                     </div>
 
@@ -845,7 +843,7 @@ export default function SellerOnboarding() {
                       style={{
                         background: selectedTier === "plus" ? "rgba(101, 86, 232, 0.05)" : "#fafaf8",
                         border: selectedTier === "plus" ? "2px solid var(--violet, #6556e8)" : "1px solid var(--line, #dedfd9)",
-                        borderRadius: 12,
+                        borderRadius: 0,
                         padding: 20,
                         cursor: "pointer",
                         position: "relative",
@@ -875,9 +873,9 @@ export default function SellerOnboarding() {
                     <div
                       onClick={() => handleSelectTier("pro")}
                       style={{
-                        background: selectedTier === "pro" ? "rgba(245, 158, 11, 0.08)" : "#fafaf8",
-                        border: selectedTier === "pro" ? "2px solid #F59E0B" : "1px solid var(--line, #dedfd9)",
-                        borderRadius: 12,
+                        background: selectedTier === "pro" ? "rgba(165, 107, 26, 0.08)" : "#fafaf8",
+                        border: selectedTier === "pro" ? "2px solid #a56b1a" : "1px solid var(--line, #dedfd9)",
+                        borderRadius: 0,
                         padding: 20,
                         cursor: "pointer",
                         position: "relative",
@@ -885,9 +883,9 @@ export default function SellerOnboarding() {
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ font: "700 10px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "#D97706" }}>PRO</span>
+                        <span style={{ font: "700 10px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "#a56b1a" }}>PRO</span>
                         {selectedTier === "pro" ? (
-                          <span style={{ background: "#F59E0B", color: "#000", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
+                          <span style={{ background: "#a56b1a", color: "#000", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
                             ACTIVE ✓
                           </span>
                         ) : (
@@ -897,9 +895,9 @@ export default function SellerOnboarding() {
                       <div style={{ font: "800 24px 'Space Grotesk', sans-serif", margin: "6px 0 2px" }}>$29 <small style={{ font: "400 11px 'DM Mono'", color: "var(--muted)" }}>/ month</small></div>
                       <p style={{ fontSize: "0.78rem", color: "var(--muted, #747570)", marginBottom: 12 }}>Keep 100% of sales with zero fee and instant automated payouts.</p>
                       <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#F59E0B" /> <b>0% Marketplace Fee</b></li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#F59E0B" /> Instant 15-Minute bank cashouts</li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#F59E0B" /> Golden Badge & GPU telemetry</li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#a56b1a" /> <b>0% Marketplace Fee</b></li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#a56b1a" /> Instant 15-Minute bank cashouts</li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#a56b1a" /> Golden Badge & GPU telemetry</li>
                       </ul>
                     </div>
                   </div>

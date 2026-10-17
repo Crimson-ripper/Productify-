@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { UploadCloud, CheckCircle2, AlertCircle, Loader2, HardDrive, FileArchive, X } from "lucide-react";
+import { useState, useRef } from "react";
+import { UploadCloud, CheckCircle2, AlertCircle, FileArchive, X } from "lucide-react";
 import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -113,7 +113,7 @@ export default function GamePackageUploader({
       if (onChange) onChange(finalUrl, { r2_key, filename: file.name, size_bytes: file.size });
       if (onComplete) onComplete({ r2_key, public_url: finalUrl, filename: file.name, size_bytes: file.size });
 
-      toast.success(`Game package '${file.name}' stored in Cloudflare R2!`);
+      toast.success(`${file.name} uploaded`);
     } catch (err) {
       console.error("Direct R2 upload failed:", err);
       const errMsg = getErrorMessage(err, "Direct R2 upload failed.");
@@ -136,155 +136,39 @@ export default function GamePackageUploader({
   };
 
   return (
-    <div style={{ width: "100%", borderRadius: 12, background: "rgba(255, 255, 255, 0.03)", border: "1px dashed rgba(99, 102, 241, 0.35)", padding: 20 }}>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".zip,.7z,.tar,.gz,.tgz,.iso,.rar"
-        onChange={handleFileChange}
-        style={{ display: "none" }}
-      />
+    <div className="pkg-uploader">
+      <input ref={fileInputRef} type="file" accept=".zip,.7z,.tar,.gz,.tgz,.iso,.rar" onChange={handleFileChange} hidden />
 
       {!uploading && !uploadedUrl && (
-        <div
-          onClick={handleSelectFile}
-          style={{
-            cursor: "pointer",
-            textAlign: "center",
-            padding: "24px 16px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: "50%",
-              background: "rgba(99, 102, 241, 0.15)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#818cf8",
-            }}
-          >
-            <UploadCloud size={26} />
-          </div>
-          <div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#f3f4f6", marginBottom: 4 }}>
-              {label}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
-              Direct S3-Compatible Upload to Cloudflare R2 (Supports Multi-GB ZIP, 7Z, TAR archives)
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleSelectFile}
-            style={{
-              marginTop: 6,
-              background: "rgba(99, 102, 241, 0.25)",
-              border: "1px solid rgba(99, 102, 241, 0.4)",
-              color: "#c7d2fe",
-              padding: "7px 16px",
-              borderRadius: 8,
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Select Game File from Computer
-          </button>
-        </div>
+        <button type="button" className="pkg-drop" onClick={handleSelectFile}>
+          <UploadCloud size={22} />
+          <b>{label}</b>
+          <small>Large files are fine — it uploads straight to storage.</small>
+        </button>
       )}
 
       {uploading && (
-        <div style={{ padding: "12px 6px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <FileArchive size={20} color="#818cf8" />
-              <div>
-                <strong style={{ fontSize: "0.88rem", color: "#f3f4f6" }}>{fileInfo?.name}</strong>
-                <span style={{ fontSize: "0.76rem", color: "#9ca3af", marginLeft: 8 }}>({fileInfo?.formattedSize})</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleCancelUpload}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#ef4444",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                fontSize: "0.78rem",
-              }}
-            >
-              <X size={14} /> Cancel
-            </button>
+        <div className="pkg-progress">
+          <div className="pkg-file">
+            <FileArchive size={16} />
+            <b>{fileInfo?.name}</b>
+            <small>{fileInfo?.formattedSize}</small>
+            <button type="button" className="text-button text-button-dark danger" onClick={handleCancelUpload}><X size={13} /> Cancel</button>
           </div>
-
-          {/* Progress bar */}
-          <div style={{ width: "100%", height: 8, background: "rgba(255, 255, 255, 0.1)", borderRadius: 999, overflow: "hidden", marginBottom: 8 }}>
-            <div
-              style={{
-                width: `${progress}%`,
-                height: "100%",
-                background: "linear-gradient(90deg, #6366f1, #22c55e)",
-                borderRadius: 999,
-                transition: "width 0.2s ease",
-              }}
-            />
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem", color: "#9ca3af" }}>
-            <span>Streaming directly to Cloudflare R2... ({progress}%)</span>
-            <span>{uploadSpeed}</span>
-          </div>
+          <div className="pkg-bar"><span style={{ width: `${progress}%` }} /></div>
+          <div className="pkg-meta"><span>Uploading… {progress}%</span><span>{uploadSpeed}</span></div>
         </div>
       )}
 
       {uploadedUrl && !uploading && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <CheckCircle2 size={18} color="#22c55e" />
-            <div>
-              <div style={{ fontSize: "0.84rem", fontWeight: 600, color: "#86efac" }}>
-                Cloudflare R2 Package Ready ({fileInfo?.name || "Game Archive"})
-              </div>
-              <div style={{ fontSize: "0.74rem", color: "#a7f3d0" }}>
-                Stored with zero egress fees for instant streaming deployment
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleSelectFile}
-            style={{
-              background: "rgba(255, 255, 255, 0.08)",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
-              color: "#f3f4f6",
-              padding: "5px 12px",
-              borderRadius: 6,
-              fontSize: "0.76rem",
-              cursor: "pointer",
-            }}
-          >
-            Replace File
-          </button>
+        <div className="pkg-done">
+          <CheckCircle2 size={16} />
+          <span>Uploaded{fileInfo?.name ? `: ${fileInfo.name}` : ""}</span>
+          <button type="button" className="text-button text-button-dark" onClick={handleSelectFile}>Replace</button>
         </div>
       )}
 
-      {error && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#fca5a5", fontSize: "0.78rem", marginTop: 10 }}>
-          <AlertCircle size={14} />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <div className="pkg-error"><AlertCircle size={14} /> {error}</div>}
     </div>
   );
 }

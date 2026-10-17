@@ -147,7 +147,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 540, width: "92%", padding: "28px", borderRadius: "14px", position: "relative", background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)", boxShadow: "0 20px 40px rgba(0,0,0,0.15)" }}
+        style={{ maxWidth: 540, width: "92%", padding: "28px", borderRadius: 0, position: "relative", background: "#ffffff", color: "var(--ink, #101112)", border: "1px solid var(--line, #dedfd9)" }}
       >
         <button
           onClick={onClose}
@@ -193,7 +193,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
         </div>
 
         {errorMsg && (
-          <div style={{ background: "#fdeaea", border: "1px solid #f1c8c8", color: "#963f3f", padding: "10px 14px", borderRadius: "8px", fontSize: "0.88rem", marginBottom: "16px" }}>
+          <div style={{ background: "#fdeaea", border: "1px solid #f1c8c8", color: "#963f3f", padding: "10px 14px", borderRadius: 0, fontSize: "0.88rem", marginBottom: "16px" }}>
             {errorMsg}
           </div>
         )}
@@ -222,7 +222,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, marginBottom: "8px" }}>
                   <Mail size={16} /> Step 1: Verify Registered Email
                 </div>
-                <div style={{ background: "#fafaf8", border: "1px solid var(--line, #dedfd9)", borderRadius: "8px", padding: "12px 14px", marginBottom: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ background: "#fafaf8", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, padding: "12px 14px", marginBottom: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>{user?.email || "No email on file"}</span>
                   <button
                     type="button"
@@ -236,7 +236,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                 </div>
 
                 {emailDebugCode && (
-                  <div style={{ fontSize: "0.8rem", color: "#277c50", background: "#e9f3e5", padding: "6px 10px", borderRadius: "6px", marginBottom: "12px" }}>
+                  <div style={{ fontSize: "0.8rem", color: "#277c50", background: "#e9f3e5", padding: "6px 10px", borderRadius: 0, marginBottom: "12px" }}>
                     <b>Preview OTP code:</b> {emailDebugCode} (enter this below)
                   </div>
                 )}
@@ -251,7 +251,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                       onChange={(e) => setEmailCode(e.target.value)}
                       placeholder="e.g. 123456"
                       required
-                      style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "1.1rem", letterSpacing: "3px", textAlign: "center", marginBottom: "14px" }}
+                      style={{ width: "100%", padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "1.1rem", letterSpacing: "3px", textAlign: "center", marginBottom: "14px" }}
                     />
                     <button
                       type="submit"
@@ -285,7 +285,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+1 555-0199 or +91 9876543210"
                       disabled={phoneSent}
-                      style={{ flex: 1, padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "0.95rem" }}
+                      style={{ flex: 1, padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "0.95rem" }}
                     />
                     <button
                       type="button"
@@ -300,7 +300,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                 </div>
 
                 {phoneDebugCode && (
-                  <div style={{ fontSize: "0.8rem", color: "#277c50", background: "#e9f3e5", padding: "6px 10px", borderRadius: "6px", marginBottom: "12px" }}>
+                  <div style={{ fontSize: "0.8rem", color: "#277c50", background: "#e9f3e5", padding: "6px 10px", borderRadius: 0, marginBottom: "12px" }}>
                     <b>Preview SMS OTP code:</b> {phoneDebugCode} (enter this below)
                   </div>
                 )}
@@ -315,7 +315,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                       onChange={(e) => setPhoneCode(e.target.value)}
                       placeholder="e.g. 654321"
                       required
-                      style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "1.1rem", letterSpacing: "3px", textAlign: "center", marginBottom: "14px" }}
+                      style={{ width: "100%", padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "1.1rem", letterSpacing: "3px", textAlign: "center", marginBottom: "14px" }}
                     />
                     <button
                       type="submit"
@@ -341,15 +341,15 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                   </p>
                 </div>
 
-                <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.35)", borderRadius: "10px", padding: "16px", marginBottom: "18px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#b45309", fontWeight: 700, fontSize: "0.88rem", marginBottom: "6px" }}>
+                <div style={{ background: "rgba(165, 107, 26, 0.08)", border: "1px solid rgba(165, 107, 26, 0.35)", borderRadius: 0, padding: "16px", marginBottom: "18px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#a56b1a", fontWeight: 700, fontSize: "0.88rem", marginBottom: "6px" }}>
                     <KeyRound size={16} /> Emergency Seller Recovery Key
                   </div>
                   <p style={{ fontSize: "0.8rem", color: "#78350f", margin: "0 0 10px", lineHeight: 1.5 }}>
                     Save this key in a secure place. If you ever lose access to your phone or email, this key allows you to safely recover your seller account.
                   </p>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <code style={{ flex: 1, background: "#ffffff", border: "1px solid rgba(245, 158, 11, 0.4)", padding: "8px 12px", borderRadius: "6px", fontSize: "0.95rem", color: "var(--ink, #101112)", fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+                    <code style={{ flex: 1, background: "#ffffff", border: "1px solid rgba(165, 107, 26, 0.4)", padding: "8px 12px", borderRadius: 0, fontSize: "0.95rem", color: "var(--ink, #101112)", fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
                       {recoveryKey}
                     </code>
                     <button
@@ -380,15 +380,15 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
         {mode === "recovery" && (
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-              <KeyRound size={22} color="#b45309" />
+              <KeyRound size={22} color="#a56b1a" />
               <h2 style={{ margin: 0, font: "600 22px 'Space Grotesk', sans-serif" }}>Recover Seller Credentials</h2>
             </div>
             <p style={{ color: "var(--muted, #747570)", fontSize: "0.85rem", marginTop: 4, marginBottom: 16 }}>
               Lost access to your verified mobile number or email? Confirm your identity to safely re-bind your seller credentials.
             </p>
 
-            <div style={{ background: "#fff8ec", border: "1px solid #f0d6a0", padding: "10px 14px", borderRadius: "8px", fontSize: "0.8rem", color: "#7a5312", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
-              <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px", color: "#b45309" }} />
+            <div style={{ background: "#fff8ec", border: "1px solid #f0d6a0", padding: "10px 14px", borderRadius: 0, fontSize: "0.8rem", color: "#7a5312", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+              <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px", color: "#a56b1a" }} />
               <span>
                 <b>Anti-Theft Protection:</b> Changing a verified phone or email triggers an automatic <b>24-hour security hold on balance withdrawals</b> to prevent unauthorized funds diversion.
               </span>
@@ -419,7 +419,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                   <select
                     value={recoveryType}
                     onChange={(e) => setRecoveryType(e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "#101112", fontWeight: 600 }}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "#101112", fontWeight: 600 }}
                   >
                     <option value="recovery_key" style={{ background: "#fff", color: "#101112" }}>Emergency Recovery Key (PROD-...)</option>
                     <option value="password" style={{ background: "#fff", color: "#101112" }}>Account Password</option>
@@ -437,7 +437,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                       onChange={(e) => setRecoveryProof(e.target.value)}
                       placeholder="e.g. PROD-ABC123XYZ..."
                       required
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", letterSpacing: "1px", fontFamily: "'DM Mono', monospace" }}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", letterSpacing: "1px", fontFamily: "'DM Mono', monospace" }}
                     />
                   </div>
                 ) : (
@@ -451,7 +451,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                       onChange={(e) => setRecoveryPassword(e.target.value)}
                       placeholder="Your current password"
                       required
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)" }}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)" }}
                     />
                   </div>
                 )}
@@ -466,7 +466,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                     onChange={(e) => setNewContactValue(e.target.value)}
                     placeholder="+1 555-0199 or name@example.com"
                     required
-                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)" }}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)" }}
                   />
                   <small style={{ color: "var(--muted, #747570)", fontSize: "0.75rem", display: "block", marginTop: "4px" }}>
                     Must not already be bound to another seller account.

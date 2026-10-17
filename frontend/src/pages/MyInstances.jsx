@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api, money, getErrorMessage } from "@/lib/api";
 import SEO from "@/components/SEO";
+import TemplateIcon from "@/components/TemplateIcon";
 import { toast } from "sonner";
 
 export default function MyInstances() {
@@ -78,8 +79,8 @@ export default function MyInstances() {
         {/* Header Hero */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px", marginBottom: "32px" }}>
           <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "6px" }}>
-              <Zap size={14} /> CLOUD COMPUTE FLEET
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "var(--ok)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "6px" }}>
+              <Zap size={14} /> Your instances
             </div>
             <h1 style={{ margin: "2px 0 6px", fontSize: "clamp(2rem, 3.5vw, 2.8rem)", fontWeight: 800, fontFamily: "var(--font-heading, sans-serif)", letterSpacing: "-0.04em" }}>
               Cloud GPU Instances
@@ -137,7 +138,7 @@ export default function MyInstances() {
           <div
             style={{
               background: "#ffffff",
-              borderRadius: "14px",
+              borderRadius: 0,
               border: "1px dashed var(--line, #dedfd9)",
               padding: "64px 20px",
               textAlign: "center",
@@ -157,14 +158,14 @@ export default function MyInstances() {
         ) : (
           <div style={{ display: "grid", gap: "16px" }}>
             {filteredInstances.map((inst) => {
-              const statusColor = inst.status === "running" ? "#16a34a" : inst.status === "paused" ? "#d97706" : "#6b7280";
+              const statusColor = inst.status === "running" ? "var(--ok)" : inst.status === "paused" ? "#a56b1a" : "var(--muted)";
               return (
                 <div
                   key={inst.id}
                   onClick={() => navigate(`/instances/${inst.id}`)}
                   style={{
                     background: "#ffffff",
-                    borderRadius: "14px",
+                    borderRadius: 0,
                     border: "1px solid var(--line, #e2e2dc)",
                     padding: "20px 24px",
                     display: "grid",
@@ -183,14 +184,14 @@ export default function MyInstances() {
                       style={{
                         width: "44px",
                         height: "44px",
-                        borderRadius: "10px",
+                        borderRadius: 0,
                         background: "#f3f4f0",
                         display: "grid",
                         placeItems: "center",
                         fontSize: "1.3rem",
                       }}
                     >
-                      {inst.template_id === "jupyter-pytorch" ? "⚡" : inst.template_id === "comfyui-sdxl" ? "🎨" : inst.template_id === "ollama-llm" ? "🦙" : "💻"}
+                      <TemplateIcon id={inst.template_id} />
                     </div>
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -227,7 +228,7 @@ export default function MyInstances() {
                       Runtime & Cost
                     </div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--ink, #101112)", marginTop: "2px" }}>
-                      {formatRuntime(inst.live_runtime_seconds || 0)} · <span style={{ color: "#16a34a" }}>${(inst.live_cost || 0).toFixed(4)}</span>
+                      {formatRuntime(inst.live_runtime_seconds || 0)} · <span style={{ color: "var(--ok)" }}>${(inst.live_cost || 0).toFixed(4)}</span>
                     </div>
                     <div style={{ fontSize: "0.75rem", color: "#888" }}>
                       {money(inst.hourly_price)}/hr · {inst.disk_size_gb}GB NVMe
@@ -254,7 +255,7 @@ export default function MyInstances() {
                         type="button"
                         onClick={(e) => handleAction(e, inst.id, "pause")}
                         title="Pause compute"
-                        style={{ background: "#f4f4f0", border: "1px solid var(--line, #e2e2dc)", borderRadius: "8px", padding: "8px", cursor: "pointer", display: "grid", placeItems: "center" }}
+                        style={{ background: "#f4f4f0", border: "1px solid var(--line, #e2e2dc)", borderRadius: 0, padding: "8px", cursor: "pointer", display: "grid", placeItems: "center" }}
                       >
                         <Square size={14} fill="currentColor" />
                       </button>
@@ -264,7 +265,7 @@ export default function MyInstances() {
                         type="button"
                         onClick={(e) => handleAction(e, inst.id, "resume")}
                         title="Resume compute"
-                        style={{ background: "#f4f4f0", border: "1px solid var(--line, #e2e2dc)", borderRadius: "8px", padding: "8px", cursor: "pointer", display: "grid", placeItems: "center" }}
+                        style={{ background: "#f4f4f0", border: "1px solid var(--line, #e2e2dc)", borderRadius: 0, padding: "8px", cursor: "pointer", display: "grid", placeItems: "center" }}
                       >
                         <Play size={14} fill="currentColor" />
                       </button>
@@ -274,7 +275,7 @@ export default function MyInstances() {
                         type="button"
                         onClick={(e) => handleAction(e, inst.id, "terminate")}
                         title="Terminate container"
-                        style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", borderRadius: "8px", padding: "8px", cursor: "pointer", display: "grid", placeItems: "center" }}
+                        style={{ background: "#fdeaea", border: "1px solid #fecaca", color: "var(--danger)", borderRadius: 0, padding: "8px", cursor: "pointer", display: "grid", placeItems: "center" }}
                       >
                         <RotateCcw size={14} />
                       </button>

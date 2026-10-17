@@ -4,6 +4,7 @@ import { HardDrive, ShieldCheck, Zap, X, CheckCircle2, Loader2, Key } from "luci
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import TemplateIcon from "@/components/TemplateIcon";
 
 const DEFAULT_TEMPLATES = [
   {
@@ -11,7 +12,6 @@ const DEFAULT_TEMPLATES = [
     name: "PyTorch 2.4 + JupyterLab",
     category: "Deep Learning & AI",
     description: "CUDA 12.4, PyTorch 2.4, TorchVision, Torchaudio, FlashAttention-2, JupyterLab in-browser.",
-    icon: "⚡",
     port: 8888,
     service_name: "JupyterLab",
   },
@@ -20,7 +20,6 @@ const DEFAULT_TEMPLATES = [
     name: "ComfyUI + SDXL & Flux",
     category: "Generative Art",
     description: "Pre-loaded with SDXL Turbo, Flux weights, and ControlNet for visual generation.",
-    icon: "🎨",
     port: 8188,
     service_name: "ComfyUI Web",
   },
@@ -29,7 +28,6 @@ const DEFAULT_TEMPLATES = [
     name: "Ollama + Open WebUI",
     category: "LLMs & Chat",
     description: "Host DeepSeek-R1, Llama 3.3, and Mistral with lightning-fast inference and UI.",
-    icon: "🦙",
     port: 11434,
     service_name: "Ollama API & WebUI",
   },
@@ -38,7 +36,6 @@ const DEFAULT_TEMPLATES = [
     name: "Ubuntu 22.04 LTS (CUDA Base)",
     category: "Custom Compute",
     description: "Pure Linux root shell with NVIDIA Drivers 550, Docker, Git, and full SSH access.",
-    icon: "💻",
     port: 22,
     service_name: "SSH Shell",
   },
@@ -105,13 +102,13 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "min(720px, 96%)", padding: "28px", borderRadius: "16px" }}
+        style={{ width: "min(720px, 96%)", padding: "28px", borderRadius: 0 }}
       >
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
           <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "4px" }}>
-              <Zap size={14} /> ON-DEMAND CONTAINER DEPLOYMENT
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "var(--ok)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "4px" }}>
+              <Zap size={14} /> Launch a container
             </div>
             <h2 style={{ margin: "2px 0 6px", fontSize: "1.45rem", fontFamily: "var(--font-heading, sans-serif)", letterSpacing: "-0.03em" }}>
               Launch Cloud Instance
@@ -149,7 +146,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
                   onClick={() => setSelectedTemplate(tpl.id)}
                   style={{
                     padding: "14px",
-                    borderRadius: "10px",
+                    borderRadius: 0,
                     border: active ? "2px solid var(--ink, #101112)" : "1px solid var(--line, #e2e2dc)",
                     background: active ? "#fafaf7" : "#ffffff",
                     cursor: "pointer",
@@ -158,7 +155,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                    <span style={{ fontSize: "1.1rem" }}>{tpl.icon}</span>
+                    <TemplateIcon id={tpl.id} />
                     <span style={{ fontSize: "0.72rem", background: "#f1f3ed", color: "#4f5348", padding: "2px 7px", borderRadius: "100px", fontFamily: "var(--font-mono, monospace)" }}>
                       Port {tpl.port}
                     </span>
@@ -179,7 +176,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
         </div>
 
         {/* Step 2: Storage Slider */}
-        <div style={{ marginBottom: "22px", background: "#f8f9f5", padding: "16px", borderRadius: "12px", border: "1px solid #ebece4" }}>
+        <div style={{ marginBottom: "22px", background: "#f8f9f5", padding: "16px", borderRadius: 0, border: "1px solid #ebece4" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700 }}>
               <HardDrive size={16} /> Fast NVMe Scratch Disk
@@ -220,7 +217,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
                 onChange={(e) => setSshKey(e.target.value)}
                 placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... or ssh-rsa AAAAB3NzaC1yc2E..."
                 rows={3}
-                style={{ width: "100%", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)", padding: "10px", borderRadius: "8px", border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
+                style={{ width: "100%", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)", padding: "10px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
               />
               <span style={{ fontSize: "0.72rem", color: "#777" }}>
                 Leave blank to use web-based in-browser Jupyter / Terminal.
@@ -240,7 +237,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
                 {money(totalPerHour)}
               </span>
               <span style={{ fontSize: "0.85rem", color: "#666" }}>/ hour</span>
-              <span style={{ fontSize: "0.78rem", color: "#16a34a", fontFamily: "var(--font-mono, monospace)", marginLeft: "4px" }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--ok)", fontFamily: "var(--font-mono, monospace)", marginLeft: "4px" }}>
                 (~${perMinute.toFixed(4)}/min)
               </span>
             </div>

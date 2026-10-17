@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
+  LayoutDashboard,
   ShieldCheck,
   Users,
   Package,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import SEO from "@/components/SEO";
+import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
 import { toast } from "sonner";
 
 export default function AdminDashboard() {
@@ -444,204 +445,59 @@ export default function AdminDashboard() {
 
   const filteredReviews = reviewFilter === "all" ? pendingReviews : pendingReviews.filter((r) => r.kind === reviewFilter);
 
+  const nav = [
+    { key: "overview", label: "Overview", icon: LayoutDashboard },
+    { key: "reviews", label: "Review queue", icon: Package, count: stats.pending_reviews_count },
+    { key: "payouts", label: "Payouts", icon: CreditCard, count: stats.pending_payouts_count },
+    { key: "reports", label: "Reports", icon: Flag, count: stats.open_reports_count },
+    { key: "users", label: "Users", icon: Users },
+    { key: "catalog", label: "Catalog", icon: Search },
+    { key: "gamezone", label: "Gamezone", icon: Gamepad2 },
+  ];
+  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone" };
+  const attention = [
+    stats.pending_reviews_count > 0 && { text: `${stats.pending_reviews_count} listing${stats.pending_reviews_count === 1 ? "" : "s"} waiting for review (${stats.pending_products_count} products, ${stats.pending_rentals_count} GPUs).`, action: { label: "Review", onClick: () => setTab("reviews") } },
+    stats.pending_payouts_count > 0 && { text: `${stats.pending_payouts_count} withdrawal request${stats.pending_payouts_count === 1 ? "" : "s"} totalling ${money(stats.pending_payouts_amount)}.`, action: { label: "Decide", onClick: () => setTab("payouts") } },
+    stats.open_reports_count > 0 && { text: `${stats.open_reports_count} open report${stats.open_reports_count === 1 ? "" : "s"} from buyers.`, action: { label: "Inspect", onClick: () => setTab("reports") } },
+  ].filter(Boolean);
+
   return (
-    <>
-      <SEO title="Operations Console — Productify Admin" path="/admin" />
-
-      <section className="dashboard-page admin-wide" style={{ padding: "32px 5% 80px", maxWidth: 1200, margin: "0 auto" }}>
-        
-        {/* Header Ribbon */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 16, marginBottom: 28 }}>
-          <div>
-            <div className="eyebrow" style={{ color: "var(--violet, #6556e8)" }}>
-              <ShieldCheck size={14} /> OPERATIONS CONSOLE · {user?.role?.toUpperCase()}
-            </div>
-            <h1 style={{ font: "600 clamp(26px, 3.5vw, 36px) 'Space Grotesk', sans-serif", margin: "6px 0 6px", letterSpacing: "-0.04em" }}>
-              Platform governance<em>.</em>
-            </h1>
-            <p style={{ color: "var(--muted, #747570)", margin: 0, fontSize: "0.92rem" }}>
-              Control user roles, moderate digital software & GPU nodes, approve seller payouts, and audit reports.
-            </p>
-          </div>
-
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              onClick={() => { fetchStats(); toast.info("Platform stats refreshed"); }}
-              className="secondary-button"
-              style={{ padding: "8px 14px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 6 }}
-            >
-              <RefreshCw size={13} /> Refresh Data
-            </button>
-          </div>
-        </div>
-
-        {/* Top Quick Stats Ribbon */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 28 }}>
-          
-          <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: "16px 20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--muted, #747570)", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-              <span>Total Users</span>
-              <Users size={16} color="var(--violet, #6556e8)" />
-            </div>
-            <div style={{ font: "800 28px 'Space Grotesk'", margin: "6px 0 2px" }}>{stats.total_users}</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted, #747570)" }}>
-              <b>{stats.sellers_count}</b> sellers · <b>{stats.buyers_count}</b> buyers
-            </div>
-          </div>
-
-          <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: "16px 20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--muted, #747570)", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-              <span>Pending Reviews</span>
-              <Package size={16} color="#F59E0B" />
-            </div>
-            <div style={{ font: "800 28px 'Space Grotesk'", margin: "6px 0 2px", color: stats.pending_reviews_count > 0 ? "#D97706" : "inherit" }}>
-              {stats.pending_reviews_count}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted, #747570)" }}>
-              {stats.pending_reviews_count > 0 ? "Awaiting moderation" : "All clear ✓"}
-            </div>
-          </div>
-
-          <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: "16px 20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--muted, #747570)", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-              <span>Pending Payouts</span>
-              <CreditCard size={16} color="var(--green, #277c50)" />
-            </div>
-            <div style={{ font: "800 28px 'Space Grotesk'", margin: "6px 0 2px" }}>
-              {money(stats.pending_payouts_amount)}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted, #747570)" }}>
-              <b>{stats.pending_payouts_count}</b> withdrawal requests
-            </div>
-          </div>
-
-          <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: "16px 20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--muted, #747570)", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-              <span>Platform GMV</span>
-              <Sparkles size={16} color="var(--lime, #84cc16)" />
-            </div>
-            <div style={{ font: "800 28px 'Space Grotesk'", margin: "6px 0 2px" }}>
-              {money(stats.total_gmv)}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted, #747570)" }}>
-              <b>{stats.total_orders_count}</b> completed orders
-            </div>
-          </div>
-
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="dashboard-tabs" style={{ display: "flex", flexWrap: "wrap", gap: 8, borderBottom: "1px solid var(--line, #dedfd9)", paddingBottom: 12, marginBottom: 24 }}>
-          <button className={tab === "overview" ? "selected" : ""} onClick={() => setTab("overview")}>
-            <Sparkles size={14} /> Overview
-          </button>
-          <button className={tab === "users" ? "selected" : ""} onClick={() => setTab("users")}>
-            <Users size={14} /> Users & Roles <b className="tab-count">{stats.total_users}</b>
-          </button>
-          <button className={tab === "reviews" ? "selected" : ""} onClick={() => setTab("reviews")}>
-            <Package size={14} /> Review Queue <b className="tab-count" style={{ background: stats.pending_reviews_count > 0 ? "var(--lime)" : "inherit" }}>{stats.pending_reviews_count}</b>
-          </button>
-          <button className={tab === "payouts" ? "selected" : ""} onClick={() => setTab("payouts")}>
-            <CreditCard size={14} /> Payout Approvals <b className="tab-count">{stats.pending_payouts_count}</b>
-          </button>
-          <button className={tab === "catalog" ? "selected" : ""} onClick={() => setTab("catalog")}>
-            <Search size={14} /> Catalog ({stats.active_products + stats.active_rentals})
-          </button>
-          <button className={tab === "reports" ? "selected" : ""} onClick={() => setTab("reports")}>
-            <Flag size={14} /> Abuse Reports <b className="tab-count">{stats.open_reports_count}</b>
-          </button>
-          <button className={tab === "gamezone" ? "selected" : ""} onClick={() => setTab("gamezone")}>
-            <Gamepad2 size={14} /> Gamezone Hub
-          </button>
-        </div>
-
-        {/* ===================== TAB: OVERVIEW ===================== */}
+    <DashboardShell
+      seoTitle="Admin console — Productify"
+      path="/dashboard"
+      eyebrow={user?.role === "sub-admin" ? "Admin console · staff" : "Admin console"}
+      title={sectionTitle[tab]}
+      subtitle={tab === "overview" ? "What needs a decision today, and how the marketplace is doing." : null}
+      actions={tab === "overview" && (
+        <button onClick={() => { fetchStats(); toast.success("Refreshed"); }} className="secondary-button"><RefreshCw size={14} /> Refresh</button>
+      )}
+      nav={nav}
+      active={tab}
+      onNav={(k) => { setTab(k); window.scrollTo(0, 0); }}
+    >
         {tab === "overview" && (
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
-              
-              {/* Quick Actions Card */}
-              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: 24 }}>
-                <h3 style={{ font: "600 18px 'Space Grotesk'", margin: "0 0 12px" }}>Operational Status</h3>
-                <p style={{ color: "var(--muted, #747570)", fontSize: "0.88rem", marginBottom: 16 }}>
-                  Summary of items requiring administrative review or settlement.
-                </p>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: "#fafaf8", borderRadius: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Package size={18} color="#F59E0B" />
-                      <div>
-                        <b>{stats.pending_reviews_count} Listings</b>
-                        <small style={{ display: "block", color: "var(--muted)" }}>{stats.pending_products_count} software · {stats.pending_rentals_count} GPU nodes</small>
-                      </div>
-                    </div>
-                    <button onClick={() => setTab("reviews")} className="secondary-button" style={{ padding: "6px 12px", fontSize: "0.8rem" }}>
-                      Review Queue →
-                    </button>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: "#fafaf8", borderRadius: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <CreditCard size={18} color="#10B981" />
-                      <div>
-                        <b>{stats.pending_payouts_count} Payouts Awaiting</b>
-                        <small style={{ display: "block", color: "var(--muted)" }}>Totaling {money(stats.pending_payouts_amount)}</small>
-                      </div>
-                    </div>
-                    <button onClick={() => setTab("payouts")} className="secondary-button" style={{ padding: "6px 12px", fontSize: "0.8rem" }}>
-                      Approve Payouts →
-                    </button>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: "#fafaf8", borderRadius: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Flag size={18} color="#EF4444" />
-                      <div>
-                        <b>{stats.open_reports_count} Open Reports</b>
-                        <small style={{ display: "block", color: "var(--muted)" }}>Community flagged content</small>
-                      </div>
-                    </div>
-                    <button onClick={() => setTab("reports")} className="secondary-button" style={{ padding: "6px 12px", fontSize: "0.8rem" }}>
-                      Inspect Reports →
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Roles Breakdown Card */}
-              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: 24 }}>
-                <h3 style={{ font: "600 18px 'Space Grotesk'", margin: "0 0 12px" }}>Platform Membership</h3>
-                <p style={{ color: "var(--muted, #747570)", fontSize: "0.88rem", marginBottom: 16 }}>
-                  Total accounts registered across Productify.
-                </p>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--line, #dedfd9)" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--violet, #6556e8)" }} /> Sellers / Vendors</span>
-                    <b>{stats.sellers_count}</b>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--line, #dedfd9)" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#6B7280" }} /> Buyers / Customers</span>
-                    <b>{stats.buyers_count}</b>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--line, #dedfd9)" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--ink, #101112)" }} /> Administrators & Staff</span>
-                    <b>{stats.staff_count}</b>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--line, #dedfd9)" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green, #277c50)" }} /> Live Catalog Items</span>
-                    <b>{stats.active_products + stats.active_rentals}</b>
-                  </div>
-                </div>
-
-                <button onClick={() => setTab("users")} className="primary-button" style={{ width: "100%", marginTop: 20, padding: 10 }}>
-                  Manage All Users & Roles →
-                </button>
-              </div>
-
+          <>
+            <dl className="dash-stats">
+              <Stat label="Needs review" value={stats.pending_reviews_count} tone={stats.pending_reviews_count ? "warn" : undefined} note={`${stats.pending_products_count} products · ${stats.pending_rentals_count} GPUs`} />
+              <Stat label="Payouts waiting" value={money(stats.pending_payouts_amount)} note={`${stats.pending_payouts_count} request${stats.pending_payouts_count === 1 ? "" : "s"}`} />
+              <Stat label="Open reports" value={stats.open_reports_count} tone={stats.open_reports_count ? "warn" : undefined} />
+              <Stat label="Sales to date" value={money(stats.total_gmv)} note={`${stats.total_orders_count} completed orders`} />
+              <Stat label="Live listings" value={stats.active_products + stats.active_rentals} note={`${stats.active_products} products · ${stats.active_rentals} GPUs`} />
+            </dl>
+            <div className="dash-grid">
+              <Panel title="Needs attention">
+                <Attention items={attention} />
+              </Panel>
+              <Panel title="Accounts" actions={<button className="link-button" onClick={() => setTab("users")}>Manage users</button>}>
+                <dl className="dash-kv">
+                  <div><dt>All accounts</dt><dd>{stats.total_users}</dd></div>
+                  <div><dt>Sellers</dt><dd>{stats.sellers_count}</dd></div>
+                  <div><dt>Buyers</dt><dd>{stats.buyers_count}</dd></div>
+                  <div><dt>Admins and staff</dt><dd>{stats.staff_count}</dd></div>
+                </dl>
+              </Panel>
             </div>
-          </div>
+          </>
         )}
 
         {/* ===================== TAB: USERS & ROLES ===================== */}
@@ -655,7 +511,7 @@ export default function AdminDashboard() {
                   placeholder="Search user by name, email, or handle…"
                   value={userQuery}
                   onChange={(e) => setUserQuery(e.target.value)}
-                  style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
+                  style={{ flex: 1, padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
                 />
                 <button type="button" onClick={fetchUsers} className="primary-button" style={{ padding: "10px 18px", fontSize: "0.85rem" }}>
                   Search
@@ -690,7 +546,7 @@ export default function AdminDashboard() {
                 <p>No users found matching your criteria.</p>
               </div>
             ) : (
-              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, overflow: "hidden" }}>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
                     <thead>
@@ -747,7 +603,7 @@ export default function AdminDashboard() {
                                   </span>
                                 )}
                                 {u.banned && (
-                                  <span style={{ background: "#fee2e2", color: "#b91c1c", fontSize: "11px", fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>
+                                  <span style={{ background: "#fdeaea", color: "var(--danger)", fontSize: "11px", fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>
                                     SUSPENDED
                                   </span>
                                 )}
@@ -769,14 +625,14 @@ export default function AdminDashboard() {
                                       : u.role === "sub-admin"
                                       ? "var(--violet, #6556e8)"
                                       : u.role === "seller"
-                                      ? "#dcfce7"
+                                      ? "#e9f3e5"
                                       : "#f3f4f6",
                                   color:
                                     u.role === "admin" || u.role === "sub-admin"
                                       ? "#ffffff"
                                       : u.role === "seller"
                                       ? "#166534"
-                                      : "#374151"
+                                      : "#3a3a35"
                                 }}
                               >
                                 {u.role}
@@ -791,7 +647,7 @@ export default function AdminDashboard() {
                                 onChange={(e) => handleRoleChange(u, e.target.value)}
                                 style={{
                                   padding: "6px 10px",
-                                  borderRadius: 6,
+                                  borderRadius: 0,
                                   border: "1px solid var(--line, #dedfd9)",
                                   background: "#ffffff",
                                   color: "#101112",
@@ -817,7 +673,7 @@ export default function AdminDashboard() {
                                   style={{
                                     padding: "6px 12px",
                                     fontSize: "0.78rem",
-                                    color: u.banned ? "#166534" : "#b91c1c",
+                                    color: u.banned ? "#166534" : "var(--danger)",
                                     borderColor: u.banned ? "#86efac" : "#fca5a5"
                                   }}
                                 >
@@ -874,7 +730,7 @@ export default function AdminDashboard() {
             {reviewsLoading ? (
               <div className="loading-block">Loading review queue…</div>
             ) : filteredReviews.length === 0 ? (
-              <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: 48, textAlign: "center" }}>
+              <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, padding: 48, textAlign: "center" }}>
                 <CheckCircle2 size={36} color="#277c50" style={{ margin: "0 auto 10px" }} />
                 <h3 style={{ margin: 0, font: "600 20px 'Space Grotesk'" }}>All Clear!</h3>
                 <p style={{ color: "var(--muted, #747570)", margin: "6px 0 0" }}>There are no listings awaiting administrative moderation.</p>
@@ -887,9 +743,8 @@ export default function AdminDashboard() {
                     style={{
                       background: "#ffffff",
                       border: "1px solid var(--line, #dedfd9)",
-                      borderRadius: 12,
+                      borderRadius: 0,
                       overflow: "hidden",
-                      boxShadow: "0 2px 10px rgba(0,0,0,0.02)",
                       display: "flex",
                       flexDirection: "column"
                     }}
@@ -953,7 +808,7 @@ export default function AdminDashboard() {
                           type="button"
                           onClick={() => handleDecideReview(item, "rejected")}
                           className="secondary-button"
-                          style={{ flex: 1, padding: "10px", fontSize: "0.82rem", color: "#b91c1c", borderColor: "#fca5a5" }}
+                          style={{ flex: 1, padding: "10px", fontSize: "0.82rem", color: "var(--danger)", borderColor: "#fca5a5" }}
                         >
                           <XCircle size={14} /> Reject
                         </button>
@@ -1002,12 +857,12 @@ export default function AdminDashboard() {
             {payoutsLoading ? (
               <div className="loading-block">Loading payouts…</div>
             ) : payouts.length === 0 ? (
-              <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: 40, textAlign: "center" }}>
+              <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, padding: 40, textAlign: "center" }}>
                 <CreditCard size={32} />
                 <p>No payout requests found.</p>
               </div>
             ) : (
-              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, overflow: "hidden" }}>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
                     <thead>
@@ -1047,8 +902,8 @@ export default function AdminDashboard() {
                                 borderRadius: 4,
                                 font: "700 11px 'DM Mono'",
                                 textTransform: "uppercase",
-                                background: p.status === "completed" ? "#dcfce7" : p.status === "rejected" ? "#fee2e2" : "#fef3c7",
-                                color: p.status === "completed" ? "#166534" : p.status === "rejected" ? "#b91c1c" : "#92400e"
+                                background: p.status === "completed" ? "#e9f3e5" : p.status === "rejected" ? "#fdeaea" : "#fff4e0",
+                                color: p.status === "completed" ? "#166534" : p.status === "rejected" ? "var(--danger)" : "#92400e"
                               }}
                             >
                               {p.status}
@@ -1088,7 +943,7 @@ export default function AdminDashboard() {
                   placeholder="Search catalog title, seller, or tags…"
                   value={catalogQuery}
                   onChange={(e) => setCatalogQuery(e.target.value)}
-                  style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
+                  style={{ flex: 1, padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
                 />
                 <button type="button" onClick={fetchCatalog} className="primary-button" style={{ padding: "10px 16px", fontSize: "0.85rem" }}>
                   Filter
@@ -1121,7 +976,7 @@ export default function AdminDashboard() {
                 <p>No listings match your search.</p>
               </div>
             ) : (
-              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, overflow: "hidden" }}>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
                     <thead>
@@ -1139,7 +994,7 @@ export default function AdminDashboard() {
                         <tr key={item.id} style={{ borderBottom: "1px solid var(--line, #dedfd9)" }}>
                           <td style={{ padding: "14px 18px" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <img src={item.image} alt="" style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover" }} />
+                              <img src={item.image} alt="" style={{ width: 44, height: 44, borderRadius: 0, objectFit: "cover" }} />
                               <div>
                                 <b style={{ display: "block" }}>{item.title}</b>
                                 <small style={{ color: "var(--muted)" }}>{item.category || item.gpu}</small>
@@ -1177,7 +1032,7 @@ export default function AdminDashboard() {
                                 type="button"
                                 onClick={() => handleDeleteListing(item)}
                                 className="secondary-button"
-                                style={{ padding: "6px 10px", fontSize: "0.78rem", color: "#b91c1c", borderColor: "#fca5a5" }}
+                                style={{ padding: "6px 10px", fontSize: "0.78rem", color: "var(--danger)", borderColor: "#fca5a5" }}
                               >
                                 <Trash2 size={12} /> Delist
                               </button>
@@ -1208,7 +1063,7 @@ export default function AdminDashboard() {
             {reportsLoading ? (
               <div className="loading-block">Loading reports…</div>
             ) : reports.length === 0 ? (
-              <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, padding: 40, textAlign: "center" }}>
+              <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, padding: 40, textAlign: "center" }}>
                 <Flag size={32} color="#277c50" style={{ margin: "0 auto 8px" }} />
                 <h3 style={{ margin: 0, font: "600 20px 'Space Grotesk'" }}>Zero Abuse Reports</h3>
                 <p style={{ color: "var(--muted, #747570)", margin: "4px 0 0" }}>No community reports currently pending review.</p>
@@ -1221,7 +1076,7 @@ export default function AdminDashboard() {
                     style={{
                       background: "#ffffff",
                       border: "1px solid var(--line, #dedfd9)",
-                      borderRadius: 12,
+                      borderRadius: 0,
                       padding: "20px 24px",
                       display: "flex",
                       justifyContent: "space-between",
@@ -1232,7 +1087,7 @@ export default function AdminDashboard() {
                   >
                     <div style={{ flex: 1, minWidth: 280 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                        <span style={{ background: "#fee2e2", color: "#b91c1c", font: "800 10px 'DM Mono'", padding: "3px 8px", borderRadius: 4, textTransform: "uppercase" }}>
+                        <span style={{ background: "#fdeaea", color: "var(--danger)", font: "800 10px 'DM Mono'", padding: "3px 8px", borderRadius: 4, textTransform: "uppercase" }}>
                           {r.reason}
                         </span>
                         <small style={{ color: "var(--muted)", font: "11px 'DM Mono'" }}>
@@ -1247,7 +1102,7 @@ export default function AdminDashboard() {
                         Reported by: <b>{r.reporter_email || "Anonymous user"}</b> · Type: {r.listing_kind}
                       </div>
 
-                      <p style={{ margin: "0 0 12px", fontSize: "0.85rem", color: "var(--ink)", background: "#fafaf8", padding: "10px 14px", borderRadius: 6, border: "1px solid var(--line)" }}>
+                      <p style={{ margin: "0 0 12px", fontSize: "0.85rem", color: "var(--ink)", background: "#fafaf8", padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line)" }}>
                         {r.details || <i>No additional comment provided by reporter.</i>}
                       </p>
 
@@ -1274,7 +1129,7 @@ export default function AdminDashboard() {
                         type="button"
                         onClick={() => handleResolveReport(r.id, "remove_listing")}
                         className="secondary-button"
-                        style={{ padding: "10px 16px", fontSize: "0.82rem", color: "#b91c1c", borderColor: "#fca5a5", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                        style={{ padding: "10px 16px", fontSize: "0.82rem", color: "var(--danger)", borderColor: "#fca5a5", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                       >
                         <XCircle size={14} /> Remove Listing
                       </button>
@@ -1291,7 +1146,7 @@ export default function AdminDashboard() {
           <div>
             {/* Gamezone Subtab Navigation */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
-              <div style={{ display: "flex", gap: 8, background: "#f1f2ec", padding: 4, borderRadius: 10 }}>
+              <div style={{ display: "flex", gap: 8, background: "#f1f2ec", padding: 4, borderRadius: 0 }}>
                 <button
                   type="button"
                   onClick={() => setGamezoneTab("catalog")}
@@ -1372,11 +1227,11 @@ export default function AdminDashboard() {
                 {adminGamesLoading ? (
                   <div style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Loading games catalog...</div>
                 ) : adminGames.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 12, border: "1px solid var(--line)" }}>
+                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 0, border: "1px solid var(--line)" }}>
                     <p style={{ color: "var(--muted)" }}>No games in library yet.</p>
                   </div>
                 ) : (
-                  <div style={{ background: "#fff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+                  <div style={{ background: "#fff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, overflow: "hidden" }}>
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.86rem" }}>
                         <thead>
@@ -1400,7 +1255,7 @@ export default function AdminDashboard() {
                                     <img
                                       src={g.cover_image || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=200"}
                                       alt={g.title}
-                                      style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover" }}
+                                      style={{ width: 44, height: 44, borderRadius: 0, objectFit: "cover" }}
                                     />
                                     <div>
                                       <div style={{ fontWeight: 700, color: "var(--ink)" }}>{g.title}</div>
@@ -1409,13 +1264,13 @@ export default function AdminDashboard() {
                                   </div>
                                 </td>
                                 <td style={{ padding: "12px 16px" }}>
-                                  <span style={{ background: "#ede9fe", color: "#6d28d9", padding: "3px 8px", borderRadius: 4, fontSize: "0.74rem", fontWeight: 700 }}>
+                                  <span style={{ background: "#efedfb", color: "#6d28d9", padding: "3px 8px", borderRadius: 4, fontSize: "0.74rem", fontWeight: 700 }}>
                                     {g.genre}
                                   </span>
                                 </td>
                                 <td style={{ padding: "12px 16px", fontSize: "0.8rem", color: "var(--muted)" }}>
                                   <div>{g.min_gpu_vram || "8 GB"} VRAM</div>
-                                  <small style={{ color: "#64748b" }}>{g.docker_image}</small>
+                                  <small style={{ color: "var(--muted)" }}>{g.docker_image}</small>
                                 </td>
                                 <td style={{ padding: "12px 16px" }}>
                                   {isEditing ? (
@@ -1426,12 +1281,12 @@ export default function AdminDashboard() {
                                         min="0.10"
                                         value={editPrice}
                                         onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0.1)}
-                                        style={{ width: 80, padding: "4px 8px", borderRadius: 6, border: "1px solid var(--line)", fontSize: "0.85rem" }}
+                                        style={{ width: 80, padding: "4px 8px", borderRadius: 0, border: "1px solid var(--line)", fontSize: "0.85rem" }}
                                       />
                                       <button
                                         type="button"
                                         onClick={() => handleUpdateGame(g.id, { hourly_rate_credits: editPrice })}
-                                        style={{ background: "#10b981", color: "#fff", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
+                                        style={{ background: "var(--ok)", color: "#fff", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
                                         title="Save price"
                                       >
                                         <Check size={13} />
@@ -1439,7 +1294,7 @@ export default function AdminDashboard() {
                                       <button
                                         type="button"
                                         onClick={() => setEditingGameId(null)}
-                                        style={{ background: "#e2e8f0", color: "#475569", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
+                                        style={{ background: "#e2e8f0", color: "#4a4a45", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
                                         title="Cancel"
                                       >
                                         ✕
@@ -1472,8 +1327,8 @@ export default function AdminDashboard() {
                                       status: g.status === "published" ? "draft" : "published"
                                     })}
                                     style={{
-                                      background: g.status === "published" ? "#dcfce7" : "#f1f5f9",
-                                      color: g.status === "published" ? "#15803d" : "#64748b",
+                                      background: g.status === "published" ? "#e9f3e5" : "#f1f5f9",
+                                      color: g.status === "published" ? "var(--ok)" : "var(--muted)",
                                       border: "none",
                                       borderRadius: 4,
                                       padding: "3px 8px",
@@ -1501,7 +1356,7 @@ export default function AdminDashboard() {
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteGame(g.id, g.title)}
-                                    style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", padding: 4 }}
+                                    style={{ background: "transparent", border: "none", color: "var(--danger)", cursor: "pointer", padding: 4 }}
                                     title="Delete game"
                                   >
                                     <Trash2 size={15} />
@@ -1531,7 +1386,7 @@ export default function AdminDashboard() {
                       style={{
                         padding: "6px 12px",
                         fontSize: "0.78rem",
-                        borderRadius: 6,
+                        borderRadius: 0,
                         border: "1px solid var(--line)",
                         background: submissionFilter === sf ? "var(--ink, #1c1c1c)" : "#fff",
                         color: submissionFilter === sf ? "#fff" : "var(--muted)",
@@ -1548,7 +1403,7 @@ export default function AdminDashboard() {
                 {submissionsLoading ? (
                   <div style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Loading submissions queue...</div>
                 ) : submissions.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 12, border: "1px solid var(--line)" }}>
+                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 0, border: "1px solid var(--line)" }}>
                     <ShieldCheck size={36} color="var(--muted)" style={{ margin: "0 auto 12px" }} />
                     <p style={{ color: "var(--muted)", margin: 0 }}>No submissions matching this filter.</p>
                   </div>
@@ -1560,7 +1415,7 @@ export default function AdminDashboard() {
                         style={{
                           background: "#fff",
                           border: "1px solid var(--line, #dedfd9)",
-                          borderRadius: 12,
+                          borderRadius: 0,
                           padding: 20,
                           display: "flex",
                           justifyContent: "space-between",
@@ -1573,8 +1428,8 @@ export default function AdminDashboard() {
                           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                             <span
                               style={{
-                                background: sub.status === "approved" ? "#dcfce7" : sub.status === "rejected" ? "#fee2e2" : "#fef3c7",
-                                color: sub.status === "approved" ? "#15803d" : sub.status === "rejected" ? "#b91c1c" : "#b45309",
+                                background: sub.status === "approved" ? "#e9f3e5" : sub.status === "rejected" ? "#fdeaea" : "#fff4e0",
+                                color: sub.status === "approved" ? "var(--ok)" : sub.status === "rejected" ? "var(--danger)" : "#a56b1a",
                                 fontSize: "0.74rem",
                                 fontWeight: 800,
                                 padding: "2px 8px",
@@ -1619,7 +1474,7 @@ export default function AdminDashboard() {
                               Download Game Package <ExternalLink size={13} />
                             </a>
                             {sub.approved_game_id && (
-                              <span style={{ fontSize: "0.8rem", color: "#16a34a" }}>
+                              <span style={{ fontSize: "0.8rem", color: "var(--ok)" }}>
                                 Live in Library: ID <code>{sub.approved_game_id}</code>
                               </span>
                             )}
@@ -1660,12 +1515,12 @@ export default function AdminDashboard() {
                 {sessionsLoading ? (
                   <div style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Loading active sessions...</div>
                 ) : activeGameSessions.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 12, border: "1px solid var(--line)" }}>
+                  <div style={{ textAlign: "center", padding: 48, background: "#fff", borderRadius: 0, border: "1px solid var(--line)" }}>
                     <Server size={36} color="var(--muted)" style={{ margin: "0 auto 12px" }} />
                     <p style={{ color: "var(--muted)", margin: 0 }}>No game containers currently running.</p>
                   </div>
                 ) : (
-                  <div style={{ background: "#fff", border: "1px solid var(--line, #dedfd9)", borderRadius: 12, overflow: "hidden" }}>
+                  <div style={{ background: "#fff", border: "1px solid var(--line, #dedfd9)", borderRadius: 0, overflow: "hidden" }}>
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.86rem" }}>
                         <thead>
@@ -1688,7 +1543,7 @@ export default function AdminDashboard() {
                               <td style={{ padding: "12px 16px" }}>
                                 <div style={{ fontWeight: 600 }}>{sess.game_title}</div>
                                 {sess.is_private && (
-                                  <span style={{ background: "#ede9fe", color: "#6d28d9", fontSize: "0.7rem", padding: "1px 5px", borderRadius: 4 }}>
+                                  <span style={{ background: "#efedfb", color: "#6d28d9", fontSize: "0.7rem", padding: "1px 5px", borderRadius: 4 }}>
                                     Private Vault
                                   </span>
                                 )}
@@ -1710,11 +1565,11 @@ export default function AdminDashboard() {
                                   type="button"
                                   onClick={() => handleForceStopSession(sess.id)}
                                   style={{
-                                    background: "#fee2e2",
-                                    color: "#b91c1c",
+                                    background: "#fdeaea",
+                                    color: "var(--danger)",
                                     border: "1px solid #fca5a5",
                                     padding: "4px 10px",
-                                    borderRadius: 6,
+                                    borderRadius: 0,
                                     fontSize: "0.76rem",
                                     fontWeight: 700,
                                     cursor: "pointer"
@@ -1751,13 +1606,12 @@ export default function AdminDashboard() {
                 <div
                   style={{
                     background: "#fff",
-                    borderRadius: 16,
+                    borderRadius: 0,
                     padding: 28,
                     maxWidth: 580,
                     width: "100%",
                     maxHeight: "90vh",
-                    overflowY: "auto",
-                    boxShadow: "0 20px 40px rgba(0,0,0,0.2)"
+                    overflowY: "auto"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
@@ -1780,7 +1634,7 @@ export default function AdminDashboard() {
                         value={newGameForm.title}
                         onChange={(e) => setNewGameForm({ ...newGameForm, title: e.target.value })}
                         placeholder="e.g. Doom Eternal"
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                       />
                     </div>
 
@@ -1793,7 +1647,7 @@ export default function AdminDashboard() {
                           value={newGameForm.genre}
                           onChange={(e) => setNewGameForm({ ...newGameForm, genre: e.target.value })}
                           placeholder="Action / FPS"
-                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                         />
                       </div>
                       <div>
@@ -1805,7 +1659,7 @@ export default function AdminDashboard() {
                           required
                           value={newGameForm.hourly_rate_credits}
                           onChange={(e) => setNewGameForm({ ...newGameForm, hourly_rate_credits: e.target.value })}
-                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                         />
                       </div>
                     </div>
@@ -1818,7 +1672,7 @@ export default function AdminDashboard() {
                         value={newGameForm.description}
                         onChange={(e) => setNewGameForm({ ...newGameForm, description: e.target.value })}
                         placeholder="Game storyline and cloud gaming performance specs..."
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                       />
                     </div>
 
@@ -1830,7 +1684,7 @@ export default function AdminDashboard() {
                           value={newGameForm.min_gpu_vram}
                           onChange={(e) => setNewGameForm({ ...newGameForm, min_gpu_vram: e.target.value })}
                           placeholder="8 GB"
-                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                         />
                       </div>
                       <div>
@@ -1840,7 +1694,7 @@ export default function AdminDashboard() {
                           value={newGameForm.recommended_gpu}
                           onChange={(e) => setNewGameForm({ ...newGameForm, recommended_gpu: e.target.value })}
                           placeholder="NVIDIA RTX 3070"
-                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                          style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                         />
                       </div>
                     </div>
@@ -1852,7 +1706,7 @@ export default function AdminDashboard() {
                         value={newGameForm.docker_image}
                         onChange={(e) => setNewGameForm({ ...newGameForm, docker_image: e.target.value })}
                         placeholder="productify/game-runner:doom"
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                       />
                     </div>
 
@@ -1863,7 +1717,7 @@ export default function AdminDashboard() {
                         value={newGameForm.cover_image}
                         onChange={(e) => setNewGameForm({ ...newGameForm, cover_image: e.target.value })}
                         placeholder="https://images.unsplash.com/..."
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                       />
                     </div>
 
@@ -1919,11 +1773,10 @@ export default function AdminDashboard() {
                 <div
                   style={{
                     background: "#fff",
-                    borderRadius: 16,
+                    borderRadius: 0,
                     padding: 28,
                     maxWidth: 560,
-                    width: "100%",
-                    boxShadow: "0 20px 40px rgba(0,0,0,0.2)"
+                    width: "100%"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -1943,7 +1796,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <form onSubmit={handleSubmitReview} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    <div style={{ background: "#f8fafc", padding: 14, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: "0.84rem" }}>
+                    <div style={{ background: "#f8fafc", padding: 14, borderRadius: 0, border: "1px solid #e2e8f0", fontSize: "0.84rem" }}>
                       <div>Package URL: <a href={reviewModal.package_url} target="_blank" rel="noreferrer" style={{ color: "#0284c7" }}>{reviewModal.package_url}</a></div>
                       <div>Submitter: <b>{reviewModal.user_name || reviewModal.user_id}</b></div>
                       <div>Suggested Rate: <b>{reviewModal.suggested_hourly_rate} credits/hr</b></div>
@@ -2000,7 +1853,7 @@ export default function AdminDashboard() {
                         min="0.10"
                         value={reviewForm.assigned_hourly_rate}
                         onChange={(e) => setReviewForm({ ...reviewForm, assigned_hourly_rate: e.target.value })}
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                       />
                     </div>
 
@@ -2013,7 +1866,7 @@ export default function AdminDashboard() {
                         value={reviewForm.admin_notes}
                         onChange={(e) => setReviewForm({ ...reviewForm, admin_notes: e.target.value })}
                         placeholder="Internal safety verification notes..."
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 0, border: "1px solid var(--line)" }}
                       />
                     </div>
 
@@ -2026,11 +1879,11 @@ export default function AdminDashboard() {
                         }}
                         disabled={submittingReview}
                         style={{
-                          background: "#fee2e2",
-                          color: "#b91c1c",
+                          background: "#fdeaea",
+                          color: "var(--danger)",
                           border: "1px solid #fca5a5",
                           padding: "9px 18px",
-                          borderRadius: 8,
+                          borderRadius: 0,
                           cursor: "pointer",
                           fontWeight: 700,
                           fontSize: "0.86rem"
@@ -2055,7 +1908,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-      </section>
-    </>
+    </DashboardShell>
   );
 }
