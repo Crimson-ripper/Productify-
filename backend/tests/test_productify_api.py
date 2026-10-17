@@ -13,8 +13,8 @@ from PIL import Image
 
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
-ADMIN_EMAIL = "admin@productify.now"
-ADMIN_PASSWORD = "ProductifyAdmin123!"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@productify.now")
+ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 
 
 @pytest.fixture(scope="session")
