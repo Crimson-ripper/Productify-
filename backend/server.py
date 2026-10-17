@@ -1099,7 +1099,7 @@ async def create_product(data: ProductInput, user=Depends(current_user)):
 
 @api.get("/rentals")
 async def rentals(q: str = "", sort: str = "recent"):
-    rows = await db.rentals.find({"status": "approved"}, {"_id": 0}).to_list(200)
+    rows = await db.rentals.find({"status": "approved"}, {"_id": 0, "pairing_token": 0}).to_list(200)
     for r in rows:
         r["is_online"] = host_tunnel_manager.is_connected(r.get("id"))
     if q:
@@ -1114,7 +1114,7 @@ async def rentals(q: str = "", sort: str = "recent"):
 
 @api.get("/rentals/{rid}")
 async def rental_detail(rid: str):
-    r = await db.rentals.find_one({"id": rid}, {"_id": 0})
+    r = await db.rentals.find_one({"id": rid}, {"_id": 0, "pairing_token": 0})
     if not r:
         raise HTTPException(404, "Rental not found")
     r["is_online"] = host_tunnel_manager.is_connected(rid)
@@ -2014,6 +2014,7 @@ class HostTunnelManager:
         }
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
+        fut.rental_id = rental_id
         self.pending_rpcs[msg_id] = fut
 
         ws = self.active_tunnels.get(rental_id)
@@ -2038,18 +2039,40 @@ class HostTunnelManager:
             self.pending_rpcs.pop(msg_id, None)
             raise HTTPException(504, f"Host node execution timed out ({timeout}s)")
 
-    def resolve_rpc(self, msg_id: str, result: dict):
-        fut = self.pending_rpcs.pop(msg_id, None)
-        if fut and not fut.done():
+    def resolve_rpc(self, msg_id: str, result: dict, rental_id: str):
+        fut = self.pending_rpcs.get(msg_id)
+        if not fut or getattr(fut, "rental_id", None) != rental_id:
+            return  # reply for an RPC sent to a different node
+        self.pending_rpcs.pop(msg_id, None)
+        if not fut.done():
             fut.set_result(result)
 
 
 host_tunnel_manager = HostTunnelManager()
 
 
+async def is_valid_node_token(rental_id: str, token: Optional[str]) -> bool:
+    """True if `token` matches the pairing token issued for this rental."""
+    if not token:
+        return False
+    rental = await db.rentals.find_one({"id": rental_id}, {"_id": 0, "pairing_token": 1})
+    expected = (rental or {}).get("pairing_token")
+    return bool(expected) and secrets.compare_digest(token, expected)
+
+
+async def require_node_token(rental_id: str, x_node_token: Optional[str] = Header(None)):
+    """Dependency for host-agent tunnel endpoints: requires the rental's pairing token in X-Node-Token."""
+    if not await is_valid_node_token(rental_id, x_node_token):
+        raise HTTPException(401, "Invalid or missing node pairing token")
+
+
 @app.websocket("/ws/tunnel/host/{rental_id}")
 async def host_tunnel_websocket(websocket: WebSocket, rental_id: str):
     """Persistent bidirectional WebSocket reverse tunnel connecting host physical GPU nodes."""
+    token = websocket.headers.get("x-node-token") or websocket.query_params.get("token")
+    if not await is_valid_node_token(rental_id, token):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     host_tunnel_manager.register_ws(rental_id, websocket)
     try:
@@ -2067,7 +2090,7 @@ async def host_tunnel_websocket(websocket: WebSocket, rental_id: str):
             elif msg_type == "rpc_reply":
                 msg_id = data.get("msg_id")
                 if msg_id:
-                    host_tunnel_manager.resolve_rpc(msg_id, data)
+                    host_tunnel_manager.resolve_rpc(msg_id, data, rental_id)
             elif msg_type == "ping":
                 if rental_id in host_tunnel_manager.node_meta:
                     host_tunnel_manager.node_meta[rental_id]["last_seen"] = time.time()
@@ -2080,7 +2103,7 @@ async def host_tunnel_websocket(websocket: WebSocket, rental_id: str):
         host_tunnel_manager.unregister_ws(rental_id)
 
 
-@api.get("/tunnel/host/{rental_id}/status")
+@api.get("/tunnel/host/{rental_id}/status", dependencies=[Depends(require_node_token)])
 async def host_tunnel_status(rental_id: str):
     """Live connectivity status of the physical host reverse tunnel."""
     connected = host_tunnel_manager.is_connected(rental_id)
@@ -2098,7 +2121,7 @@ async def host_tunnel_status(rental_id: str):
     }
 
 
-@api.post("/tunnel/host/{rental_id}/poll")
+@api.post("/tunnel/host/{rental_id}/poll", dependencies=[Depends(require_node_token)])
 async def host_tunnel_poll(rental_id: str, payload: dict):
     """Long-poll fallback for host agents operating in environments where WebSockets are blocked."""
     host_tunnel_manager.node_meta[rental_id] = {
@@ -2113,19 +2136,19 @@ async def host_tunnel_poll(rental_id: str, payload: dict):
     return {"ok": True, "messages": messages}
 
 
-@api.post("/tunnel/host/{rental_id}/reply")
+@api.post("/tunnel/host/{rental_id}/reply", dependencies=[Depends(require_node_token)])
 async def host_tunnel_reply(rental_id: str, data: dict):
     """Submit RPC execution results from host agent."""
     msg_id = data.get("msg_id") or data.get("id")
     if msg_id:
-        host_tunnel_manager.resolve_rpc(msg_id, data)
+        host_tunnel_manager.resolve_rpc(msg_id, data, rental_id)
 
     # Persist streaming parameters to active game session in DB if reported
     session_id = data.get("session_id") or (data.get("payload") or {}).get("session_id")
     streaming = data.get("streaming")
     if streaming and isinstance(streaming, dict) and streaming.get("ok"):
         try:
-            query = {"id": session_id} if session_id else {"rental_id": rental_id, "status": "running"}
+            query = {"id": session_id, "rental_id": rental_id} if session_id else {"rental_id": rental_id, "status": "running"}
             await db.game_sessions.update_one(
                 query,
                 {"$set": {"streaming": streaming, "status": "running"}}
