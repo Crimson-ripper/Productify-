@@ -26,7 +26,7 @@
     "/app/test_reports/pytest/pytest_results_iteration4.xml"
   ],
   "success_rate": {"backend": "100% (19/19)", "frontend": "100% on critical flows tested"},
-  "test_credentials": "admin@productify.now / ProductifyAdmin123! (JWT). Buyer/seller test accounts created dynamically with test_*@example.com.",
+  "test_credentials": "admin from ADMIN_EMAIL / ADMIN_PASSWORD env (JWT). Buyer/seller test accounts created dynamically with test_*@example.com.",
   "seed_data_creation": "Created transient TEST_ users, one seller rental (approved via admin), one seller product (pending), and two buyer orders (mocked stripe) during automated test runs.",
   "retest_needed": false,
   "should_main_agent_self_test": false,
