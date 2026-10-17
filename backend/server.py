@@ -1655,6 +1655,70 @@ async def admin_delete_listing(
     return {"ok": True, "deleted_id": id, "kind": kind}
 
 
+TEST_TITLE_RE = re.compile(r"\b(test|testing|demo|sample|dummy|asdf)\b", re.I)
+
+
+async def demo_cleanup_candidates() -> dict:
+    """Listings that look like demo or test data, each with the reason it was picked."""
+    staff = await db.users.find({"role": {"$in": ["admin", "sub-admin"]}}, {"_id": 0, "id": 1}).to_list(100)
+    staff_ids = {u["id"] for u in staff}
+
+    def reason(owner_id: str, title: str) -> Optional[str]:
+        if str(owner_id or "").startswith("seed-"):
+            return "Built-in demo item"
+        if owner_id in staff_ids:
+            return "Created from an admin/staff account"
+        if TEST_TITLE_RE.search(title or ""):
+            return "Title looks like a test"
+        return None
+
+    out = {"products": [], "rentals": []}
+    for p in await db.products.find({}, {"_id": 0}).to_list(2000):
+        why = reason(p.get("seller_id"), p.get("title"))
+        if why:
+            out["products"].append({"id": p["id"], "title": p.get("title"), "seller": p.get("seller"), "price": p.get("price"), "reason": why})
+    for r in await db.rentals.find({}, {"_id": 0}).to_list(2000):
+        why = reason(r.get("owner_id"), r.get("title"))
+        if why:
+            out["rentals"].append({"id": r["id"], "title": r.get("title") or "(unnamed machine)", "seller": r.get("owner"), "gpu": r.get("gpu"), "status": r.get("status"), "reason": why})
+    return out
+
+
+@api.get("/admin/cleanup/demo")
+async def admin_cleanup_preview(user=Depends(current_user)):
+    """Preview: what the demo/test cleanup would delete. Deletes nothing."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Only the main admin can clean up listings")
+    return await demo_cleanup_candidates()
+
+
+class CleanupInput(BaseModel):
+    product_ids: List[str] = []
+    rental_ids: List[str] = []
+
+
+@api.post("/admin/cleanup/demo")
+async def admin_cleanup_delete(data: CleanupInput, user=Depends(current_user)):
+    """Delete the chosen listings. Only ids that the preview would list are accepted."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Only the main admin can clean up listings")
+    cand = await demo_cleanup_candidates()
+    ok_products = {p["id"] for p in cand["products"]}
+    ok_rentals = {r["id"] for r in cand["rentals"]}
+    bad = [i for i in data.product_ids if i not in ok_products] + [i for i in data.rental_ids if i not in ok_rentals]
+    if bad:
+        raise HTTPException(400, f"These aren't demo/test listings, so they weren't deleted: {', '.join(bad[:10])}")
+    p_res = await db.products.delete_many({"id": {"$in": data.product_ids}}) if data.product_ids else None
+    r_res = await db.rentals.delete_many({"id": {"$in": data.rental_ids}}) if data.rental_ids else None
+    if data.rental_ids:
+        await db.nodes.delete_many({"rental_id": {"$in": data.rental_ids}})
+        for rid in data.rental_ids:
+            node_hub.meta.pop(rid, None)
+    deleted = {"products": p_res.deleted_count if p_res else 0, "rentals": r_res.deleted_count if r_res else 0}
+    logger.warning(f"Admin {user.get('email')} removed demo/test listings: {deleted}")
+    return {"ok": True, "deleted": deleted}
+
+
 # ============== UPLOADS ==============
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_UPLOAD = 10 * 1024 * 1024  # 10 MB
@@ -3113,21 +3177,7 @@ async def seed():
             "versions": {"terms": "2026-02-20", "privacy": "2026-02-20", "refunds": "2026-02-20", "acceptable_use": "2026-02-20", "cookies": "2026-02-20"},
             "updated_at": datetime.now(timezone.utc).isoformat(),
         })
-    if await db.products.count_documents({}) == 0:
-        await db.products.insert_many([
-            {"id":"p1","title":"Figma Pro UI Kit","category":"Design","description":"A polished component library for product teams with 500+ components, dark and light themes, auto-layout tokens.","price":29,"tags":["figma","ui-kit","design-system"],"image":"https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=900&auto=format&fit=crop","seller":"Northstar Studio","seller_id":"seed-northstar","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"p2","title":"LaunchPad Analytics","category":"Software","description":"Understand your product metrics in one clear workspace. Real-time dashboards, cohort analysis, funnel visualization.","price":49,"tags":["analytics","dashboards","saas"],"image":"https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=900&auto=format&fit=crop","seller":"Metric Labs","seller_id":"seed-metric","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"p3","title":"Creator Video Presets","category":"Creative","description":"Cinematic color presets for your next story. 40 LUTs for DaVinci, Premiere and Final Cut.","price":18,"tags":["video","luts","presets"],"image":"https://images.unsplash.com/photo-1492724441997-5dc865305da7?q=80&w=900&auto=format&fit=crop","seller":"Framehouse","seller_id":"seed-frame","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"p4","title":"DevOps Command Center","category":"Development","description":"Ship with confidence using battle-tested dashboards. Prometheus, Grafana, Loki templates.","price":79,"tags":["devops","monitoring","grafana"],"image":"https://images.unsplash.com/photo-1461749280684-dccba630e2f6?q=80&w=900&auto=format&fit=crop","seller":"Stacksmith","seller_id":"seed-stack","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"p5","title":"Notion Startup OS","category":"Software","description":"A complete Notion workspace for early-stage teams — OKRs, hiring, roadmap, sprint boards.","price":39,"tags":["notion","templates","startup"],"image":"https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=900&auto=format&fit=crop","seller":"Northstar Studio","seller_id":"seed-northstar","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"p6","title":"3D Icon Library","category":"Design","description":"180 hand-crafted 3D icons in Blender + PNG + SVG. Perfect for landing pages and pitches.","price":24,"tags":["3d","icons","blender"],"image":"https://images.unsplash.com/photo-1618788372246-79faff0c3742?q=80&w=900&auto=format&fit=crop","seller":"Framehouse","seller_id":"seed-frame","type":"digital","approved":True,"created_at":datetime.now(timezone.utc).isoformat()},
-        ])
-    if await db.rentals.count_documents({}) == 0:
-        await db.rentals.insert_many([
-            {"id":"r1","title":"RTX 4090 Creator Node","gpu":"RTX 4090","vram":"24 GB","price":0.62,"location":"Frankfurt, DE","description":"High-throughput node for Stable Diffusion, ComfyUI, Blender Cycles rendering. NVMe scratch drive + 128 GB RAM.","specs":{"cpu":"AMD 7950X","ram":"128 GB","storage":"2 TB NVMe","bandwidth":"1 Gbps"},"image":"https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Cloudline","owner_id":"seed-cloudline","created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"r2","title":"A100 Training Rig","gpu":"NVIDIA A100","vram":"80 GB","price":2.40,"location":"Ashburn, US","description":"Enterprise-grade LLM fine-tuning and diffusion training. Reserved slots available for multi-hour workloads.","specs":{"cpu":"AMD EPYC 7513","ram":"512 GB","storage":"4 TB NVMe RAID","bandwidth":"10 Gbps"},"image":"https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Tensor Yard","owner_id":"seed-tensor","created_at":datetime.now(timezone.utc).isoformat()},
-            {"id":"r3","title":"RTX 3090 Studio","gpu":"RTX 3090","vram":"24 GB","price":0.38,"location":"Bengaluru, IN","description":"Great for solo creators — Unreal Engine, DaVinci Resolve, Substance renders at a friendly price.","specs":{"cpu":"Intel 13700K","ram":"64 GB","storage":"1 TB NVMe","bandwidth":"500 Mbps"},"image":"https://images.unsplash.com/photo-1587202372775-e229f172b9d7?q=80&w=900&auto=format&fit=crop","status":"approved","owner":"Silicon Loft","owner_id":"seed-silicon","created_at":datetime.now(timezone.utc).isoformat()},
-        ])
+    # Demo products and GPU listings are no longer seeded: the shop shows real listings only.
     if await db.games.count_documents({}) == 0:
         await db.games.insert_many([dict(g) for g in CURATED_GAMES])
         logger.info(f"Seeded {len(CURATED_GAMES)} games into db.games")
