@@ -1051,6 +1051,9 @@ async def get_seller_subscription(user=Depends(current_user)):
 @api.post("/seller/subscription/upgrade")
 async def upgrade_seller_subscription(data: SubscriptionInput, user=Depends(current_user)):
     tier = data.tier if data.tier in ["free", "plus", "pro"] else "free"
+    # Paid plans need a real subscription charge, which doesn't exist yet. Only allow moving to Free.
+    if tier != "free":
+        raise HTTPException(503, "Paid plans aren't available yet: payments aren't live.")
     await db.users.update_one({"id": user["id"]}, {"$set": {"seller_tier": tier}})
     user["seller_tier"] = tier
     return {"ok": True, "tier": tier, "user": public_user(user)}
@@ -1131,8 +1134,10 @@ async def create_rental(data: RentalInput, user=Depends(current_user)):
     pairing_token = f"ptok_{uuid.uuid4().hex[:16]}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    # hardware_signature only shows the seller's browser sent specs from the local agent; it can be
+    # forged, so it is a hint for the reviewer, never a reason to skip review.
     is_verified = bool(data.hardware_signature)
-    status = "approved" if (user.get("role") in ["admin", "sub-admin"] or is_verified) else "pending"
+    status = "approved" if user.get("role") in ["admin", "sub-admin"] else "pending"
 
     item = data.model_dump() | {
         "id": rental_id,
@@ -2694,31 +2699,9 @@ async def seller_nodes_telemetry(user=Depends(current_user)):
 
 @api.post("/credits/topup")
 async def topup_credits(data: CreditTopupInput, user=Depends(current_user)):
-    if data.amount <= 0:
-        raise HTTPException(400, "Topup amount must be greater than zero")
-    amount = round(float(data.amount), 2)
-    now_iso = datetime.now(timezone.utc).isoformat()
-    tx_id = f"ctx_{uuid.uuid4().hex[:10]}"
-
-    tx_doc = {
-        "id": tx_id,
-        "user_id": user["id"],
-        "amount": amount,
-        "provider": data.provider,
-        "status": "completed",
-        "type": "deposit",
-        "created_at": now_iso,
-    }
-    await db.credit_transactions.insert_one(tx_doc)
-
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$inc": {"compute_credits": amount}}
-    )
-
-    updated = await db.users.find_one({"id": user["id"]})
-    new_balance = float(updated.get("compute_credits", 0.0))
-    return {"ok": True, "amount": amount, "compute_credits": new_balance, "tx_id": tx_id}
+    # No payment provider is connected yet, so credits can't be bought. Refuse rather than
+    # adding unpaid credits (this used to credit any amount for free).
+    raise HTTPException(503, "Buying credits isn't available yet: payments aren't live.")
 
 
 @api.get("/credits/balance")
@@ -2810,65 +2793,16 @@ async def auto_detect_hardware(data: Optional[HostHardwareDetectionInput] = None
             "wan_ip": wan_ip_val,
         }
 
-    # Fallback catalog when agent is not running
-    gpu_catalog = [
-        {
-            "gpu": "NVIDIA GeForce RTX 4090",
-            "vram": "24 GB GDDR6X",
-            "cuda_cores": 16384,
-            "driver_version": "550.54.14",
-            "cuda_version": "12.4",
-            "cpu": "AMD Ryzen 9 7950X (16 cores, 32 threads)",
-            "ram": "64 GB DDR5-6000",
-            "storage": "2 TB Samsung 990 PRO NVMe PCIe 4.0",
-            "bandwidth": "980 Mbps Symmetrical",
-            "suggested_price": 0.65,
-            "description": "High-throughput RTX 4090 node verified with PCIe 4.0 x16 lanes and low-latency fiber. Optimized for PyTorch 2.4, ComfyUI XL, and LLM fine-tuning."
-        },
-        {
-            "gpu": "NVIDIA A100-SXM4-80GB",
-            "vram": "80 GB HBM2e",
-            "cuda_cores": 6912,
-            "driver_version": "535.129.03",
-            "cuda_version": "12.2",
-            "cpu": "AMD EPYC 7763 (64 cores, 128 threads)",
-            "ram": "256 GB DDR4 ECC",
-            "storage": "3.84 TB Enterprise NVMe U.2",
-            "bandwidth": "10 Gbps Data Center Uplink",
-            "suggested_price": 2.20,
-            "description": "Enterprise SXM4 node with 80GB high-bandwidth memory for multi-billion parameter LLMs (DeepSeek, Llama 70B) and distributed training."
-        },
-        {
-            "gpu": "NVIDIA GeForce RTX 3090",
-            "vram": "24 GB GDDR6X",
-            "cuda_cores": 10496,
-            "driver_version": "550.54.14",
-            "cuda_version": "12.4",
-            "cpu": "Intel Core i9-13900K (24 cores)",
-            "ram": "64 GB DDR5",
-            "storage": "1 TB NVMe SSD",
-            "bandwidth": "500 Mbps",
-            "suggested_price": 0.38,
-            "description": "Reliable 24GB VRAM studio workstation node for Blender rendering, Stable Diffusion, and local AI agent inference."
-        }
-    ]
-
-    idx = (hash(user["id"]) % len(gpu_catalog))
-    detected = gpu_catalog[idx]
-    sig_token = f"hw_sig_{uuid.uuid4().hex[:12]}_{idx}"
-
+    # Productify Node isn't running on the seller's machine, so there is nothing to detect.
+    # Say so instead of inventing a GPU (this used to return a random RTX 4090 / A100 as "verified").
     return {
-        "status": "verified",
+        "status": "not_detected",
         "real_hardware": False,
-        "hardware_signature": sig_token,
+        "hardware_signature": None,
         "probed_at": now_iso,
-        "specs": detected,
+        "specs": None,
         "daemon_status": "offline",
-        "pci_bus": "0000:01:00.0",
-        "pcie_link": "PCIe 4.0 x16 (31.5 GB/s)",
-        "temperature_c": 42,
-        "power_limit_w": 450,
-        "note": "Run `python scripts/productify_agent.py` on your machine to auto-detect your physical GPU."
+        "note": "Productify Node isn't running on this computer. Start it, then try again, or enter the specs yourself.",
     }
 
 
