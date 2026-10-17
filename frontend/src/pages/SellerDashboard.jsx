@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { LayoutDashboard, Package, Cpu, Wallet, Flag, Award, Plus, RefreshCw, Download } from "lucide-react";
+import { LayoutDashboard, Package, Cpu, Wallet, Flag, Award, Plus, Download, Trash2 } from "lucide-react";
 import { api, money, getErrorMessage } from "@/lib/api";
 import { PLACEHOLDER_IMG, imgFallback } from "@/lib/image";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,8 +10,8 @@ import { toast } from "sonner";
 
 const CATS = ["Software", "Design", "Development", "Creative"];
 const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
-const NODE_EXE_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/download/v1.0.0/ProductifyNode.exe";
-const LOCAL_NODE = "http://127.0.0.1:48123";
+// Point this at the signed v2 installer once it is published.
+const NODE_DOWNLOAD_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/latest";
 const PLANS = [
   { tier: "free", name: "Free", fee: "10%" },
   { tier: "plus", name: "Plus", fee: "5%" },
@@ -19,11 +19,11 @@ const PLANS = [
 ];
 
 const EMPTY_PRODUCT = { title: "", description: "", price: "", category: "Software", tags: "", image: "" };
-const EMPTY_RENTAL = { title: "", gpu: "", vram: "", price: "", location: "", description: "", image: "", gaming_ready: false, thermal_ceiling: 82 };
-
 const statusPill = (s) => {
   if (s === "approved" || s === true) return <span className="dash-pill ok">Live</span>;
   if (s === "rejected") return <span className="dash-pill bad">Rejected</span>;
+  if (s === "awaiting_pairing") return <span className="dash-pill muted">Waiting to pair</span>;
+  if (s === "paired") return <span className="dash-pill wait">Needs a price</span>;
   return <span className="dash-pill wait">In review</span>;
 };
 
@@ -51,19 +51,14 @@ export default function SellerDashboard() {
   const [busy, setBusy] = useState(false);
 
   // Forms
-  const [newListing, setNewListing] = useState(null); // null | "product" | "rental"
+  const [newListing, setNewListing] = useState(null); // null | "product"
   const [product, setProduct] = useState(EMPTY_PRODUCT);
-  const [rental, setRental] = useState(EMPTY_RENTAL);
-  const [hwSignature, setHwSignature] = useState(null);
+  const [prices, setPrices] = useState({}); // machine id -> { price, title, location }
   const [payoutMethod, setPayoutMethod] = useState("bank");
   const [bank, setBank] = useState({ bank_name: "", holder_name: "", account_number: "", routing_number: "" });
   const [paypalEmail, setPaypalEmail] = useState("");
   const [upiId, setUpiId] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
-
-  // Productify Node running on this computer, if any
-  const [localNode, setLocalNode] = useState(null);
-  const [probing, setProbing] = useState(false);
 
   const loadListings = useCallback(() => {
     api.get("/seller/listings")
@@ -89,31 +84,20 @@ export default function SellerDashboard() {
     api.get("/seller/analytics").then((r) => setAnalytics(r.data)).catch(() => setAnalytics(null));
   }, []);
 
-  const probeLocalNode = useCallback(async () => {
-    setProbing(true);
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 2500);
-      const res = await fetch(`${LOCAL_NODE}/probe`, { signal: ctrl.signal, headers: { Accept: "application/json" } });
-      clearTimeout(t);
-      const data = res.ok ? await res.json() : null;
-      setLocalNode(data);
-      return data;
-    } catch {
-      setLocalNode(null);
-      return null;
-    } finally {
-      setProbing(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadAnalytics();
     loadListings();
     loadWallet();
     api.get("/seller/reports").then((r) => setReports(r.data)).catch(() => setReports(null));
-    probeLocalNode();
-  }, [loadAnalytics, loadListings, loadWallet, probeLocalNode]);
+  }, [loadAnalytics, loadListings, loadWallet]);
+
+  // While a machine is waiting to pair, check every few seconds so its hardware appears by itself.
+  const waitingToPair = listings.rentals.some((r) => r.status === "awaiting_pairing");
+  useEffect(() => {
+    if (!waitingToPair) return;
+    const t = setInterval(loadListings, 5000);
+    return () => clearInterval(t);
+  }, [waitingToPair, loadListings]);
 
   useEffect(() => {
     if (section !== "machines") return;
@@ -150,81 +134,47 @@ export default function SellerDashboard() {
     }
   };
 
-  const autoDetect = async () => {
-    const specs = localNode || (await probeLocalNode());
-    try {
-      const res = await api.post("/host/auto-detect", specs ? { real_specs: specs } : {});
-      if (!res.data?.specs) {
-        toast.info("Productify Node isn't running on this computer. Start it, or fill in the specs yourself.");
-        return;
-      }
-      const s = res.data.specs;
-      setRental((r) => ({
-        ...r,
-        gpu: s.gpu || r.gpu,
-        vram: s.vram || r.vram,
-        title: r.title || `${s.gpu} ${s.vram ? `(${s.vram})` : ""}`.trim(),
-        description: r.description || s.description || "",
-        price: r.price || s.suggested_price || "",
-        gaming_ready: Boolean(s.gaming_ready),
-      }));
-      setHwSignature(res.data);
-      toast.success(`Found ${s.gpu}${s.vram ? ` (${s.vram})` : ""}`);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Couldn't read the hardware"));
-    }
-  };
-
-  const connectThisComputer = async (r) => {
-    try {
-      const res = await fetch(`${LOCAL_NODE}/tunnel/connect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rental_id: r.id, node_id: r.node_id, token: r.pairing_token }),
-      });
-      const data = res.ok ? await res.json() : null;
-      if (data?.ok) {
-        toast.success("Productify Node on this computer is now paired with this listing");
-        setTimeout(loadListings, 4000);
-      } else {
-        toast.error("Productify Node didn't accept the pairing. Paste the token into the app instead.");
-      }
-    } catch {
-      toast.error("Couldn't reach Productify Node on this computer.");
-    }
-  };
-
-  const submitRental = async (e) => {
-    e.preventDefault();
+  // Start a GPU listing: the backend returns a pairing code; hardware arrives once the machine connects.
+  const createMachine = async () => {
     setBusy(true);
     try {
-      const s = hwSignature?.specs || {};
-      const res = await api.post("/rentals", {
-        title: rental.title,
-        gpu: rental.gpu,
-        vram: rental.vram,
-        price: Number(rental.price),
-        location: rental.location,
-        description: rental.description,
-        image: rental.image,
-        gaming_ready: Boolean(rental.gaming_ready),
-        thermal_ceiling: Number(rental.thermal_ceiling) || 82,
-        node_id: localNode?.node_id || null,
-        host_wan_ip: localNode?.wan_ip || null,
-        hardware_signature: hwSignature?.hardware_signature || null,
-        specs: { cpu: s.cpu, ram: s.ram, storage: s.storage, bandwidth: s.bandwidth },
-      });
-      toast.success("GPU listing submitted — an admin reviews it before it goes live");
-      if (localNode && res.data?.id) connectThisComputer(res.data);
-      setRental(EMPTY_RENTAL);
-      setHwSignature(null);
-      setNewListing(null);
+      await api.post("/seller/machines");
       loadListings();
       setSection("machines");
+      window.scrollTo(0, 0);
     } catch (err) {
-      toast.error(getErrorMessage(err, "Couldn't submit the GPU listing"));
+      toast.error(getErrorMessage(err, "Couldn't create a pairing code"));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const publishMachine = async (e, r) => {
+    e.preventDefault();
+    const p = prices[r.id] || {};
+    setBusy(true);
+    try {
+      const res = await api.post(`/seller/machines/${r.id}/publish`, {
+        price: Number(p.price ?? r.price),
+        title: p.title ?? r.title,
+        location: p.location ?? r.location,
+      });
+      toast.success(res.data.status === "approved" ? "Saved" : "Sent for review — it goes live once an admin approves it");
+      loadListings();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't save"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteMachine = async (r) => {
+    if (!window.confirm("Delete this machine? Its pairing code will stop working.")) return;
+    try {
+      await api.delete(`/seller/machines/${r.id}`);
+      loadListings();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't delete it"));
     }
   };
 
@@ -341,74 +291,80 @@ export default function SellerDashboard() {
     </Panel>
   );
 
-  const rentalForm = (
-    <Panel title="New GPU listing" actions={<button className="link-button" onClick={() => setNewListing(null)}>Cancel</button>}>
-      <p className={localNode ? "dash-note info" : "dash-note"}>
-        {localNode
-          ? <>Productify Node is running on this computer ({localNode.gpu || "GPU"}). <button type="button" className="link-button" onClick={autoDetect}>Fill in specs from it</button></>
-          : <>To rent out this computer, install and start <a className="link-button" href={NODE_EXE_URL}>Productify Node</a>, then <button type="button" className="link-button" onClick={probeLocalNode}>{probing ? "checking…" : "check again"}</button>. You can also list a machine from another computer and pair it later.</>}
-      </p>
-      <form className="dash-form" onSubmit={submitRental}>
-        <label>Title<input required value={rental.title} onChange={(e) => setRental({ ...rental, title: e.target.value })} /></label>
-        <div className="three-col">
-          <label>GPU<input required placeholder="RTX 4090" value={rental.gpu} onChange={(e) => setRental({ ...rental, gpu: e.target.value })} /></label>
-          <label>VRAM<input required placeholder="24 GB" value={rental.vram} onChange={(e) => setRental({ ...rental, vram: e.target.value })} /></label>
-          <label>Price per hour (USD)<input required type="number" min="0" step="0.01" value={rental.price} onChange={(e) => setRental({ ...rental, price: e.target.value })} /></label>
+  const hardware = (r) => [
+    ["GPU", r.gpu || "—"],
+    ["VRAM", r.vram || "—"],
+    ["CPU", [r.specs?.cpu_model, r.specs?.cpu].filter(Boolean).join(" · ") || "—"],
+    ["RAM", r.specs?.ram || "—"],
+  ];
+
+  const pairingSteps = (r) => (
+    <ol className="pair-steps">
+      <li><span>1</span><div><b>Install Productify Node</b> on the computer you want to rent out. <a className="link-button" href={NODE_DOWNLOAD_URL} target="_blank" rel="noreferrer">Download for Windows</a></div></li>
+      <li><span>2</span><div><b>Paste this pairing code</b> into the app:<CopyCode text={r.pairing_code} /></div></li>
+      <li><span>3</span><div><b>That's it.</b> The GPU, memory and CPU appear here by themselves once the app connects. <span className="pair-wait"><span className="spinner small" /> Waiting for your machine…</span></div></li>
+    </ol>
+  );
+
+  const gpuPanel = (
+    <Panel
+      title="GPUs"
+      actions={listings.rentals.length > 0 && (
+        <button className="secondary-button" onClick={createMachine} disabled={busy}><Plus size={14} /> Add another GPU</button>
+      )}
+    >
+      {!listingsLoaded ? <p className="dash-clear">Loading…</p> : listings.rentals.length === 0 ? (
+        <div className="gpu-empty">
+          <Cpu size={26} />
+          <h3>Rent out your GPU</h3>
+          <p>Create a pairing code, paste it into Productify Node on your computer, and your hardware fills in automatically. No photos or specs to type.</p>
+          <div className="dash-form-actions">
+            <button className="primary-button" onClick={createMachine} disabled={busy}>Create pairing code</button>
+            <a className="text-button text-button-dark" href={NODE_DOWNLOAD_URL} target="_blank" rel="noreferrer"><Download size={14} /> Download Productify Node</a>
+          </div>
         </div>
-        <div className="two-col">
-          <label>Location<input required placeholder="City, country" value={rental.location} onChange={(e) => setRental({ ...rental, location: e.target.value })} /></label>
-          <label>Max GPU temperature (°C)<input type="number" min="60" max="95" value={rental.thermal_ceiling} onChange={(e) => setRental({ ...rental, thermal_ceiling: e.target.value })} /></label>
+      ) : (
+        <div className="dash-table-wrap">
+          <table className="dash-table">
+            <thead><tr><th>Machine</th><th>Status</th><th className="num">Price</th><th /></tr></thead>
+            <tbody>
+              {listings.rentals.map((r) => (
+                <tr key={r.id}>
+                  <td><div className="cell-title"><div><b>{r.title || "New machine"}</b><small>{r.gpu ? `${r.gpu}${r.vram ? ` · ${r.vram}` : ""}` : "Not paired yet"}</small></div></div></td>
+                  <td>{statusPill(r.status)}</td>
+                  <td className="num">{r.price ? `${money(r.price)}/hr` : "—"}</td>
+                  <td className="num"><button className="link-button" onClick={() => setSection("machines")}>{["awaiting_pairing", "paired"].includes(r.status) ? "Finish setup" : "Manage"}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <label>Description<textarea value={rental.description} onChange={(e) => setRental({ ...rental, description: e.target.value })} /></label>
-        <label className="check"><input type="checkbox" checked={rental.gaming_ready} onChange={(e) => setRental({ ...rental, gaming_ready: e.target.checked })} /> Offer this machine for Gamezone (needs Sunshine and ViGEm, installed from Productify Node)</label>
-        <div>
-          <label>Photo</label>
-          <ImageUpload value={rental.image} onChange={(url) => setRental({ ...rental, image: url })} label="Upload a photo of the machine" testid="rental-image" />
-        </div>
-        <div className="dash-form-actions">
-          <button className="primary-button" disabled={busy}>{busy ? "Submitting…" : "Submit for review"}</button>
-        </div>
-      </form>
+      )}
     </Panel>
   );
 
   const listingsSection = (
     <>
       {newListing === "product" && productForm}
-      {newListing === "rental" && rentalForm}
+      {gpuPanel}
       <Panel
-        title="Your listings"
+        title="Products"
         flush
-        actions={!newListing && (
-          <>
-            <button className="secondary-button" onClick={() => setNewListing("product")}><Plus size={14} /> Product</button>
-            <button className="secondary-button" onClick={() => setNewListing("rental")}><Plus size={14} /> GPU</button>
-          </>
-        )}
+        actions={!newListing && <button className="secondary-button" onClick={() => setNewListing("product")}><Plus size={14} /> Add a product</button>}
       >
-        {!listingsLoaded ? <p className="dash-empty">Loading…</p> : !listings.products.length && !listings.rentals.length ? (
-          <p className="dash-empty">Nothing listed yet. Add a product or a GPU to get started.</p>
+        {!listingsLoaded ? <p className="dash-empty">Loading…</p> : !listings.products.length ? (
+          <p className="dash-empty">No products yet.</p>
         ) : (
           <div className="dash-table-wrap">
             <table className="dash-table">
-              <thead><tr><th>Listing</th><th>Type</th><th>Status</th><th className="num">Price</th><th /></tr></thead>
+              <thead><tr><th>Product</th><th>Status</th><th className="num">Price</th><th /></tr></thead>
               <tbody>
                 {listings.products.map((p) => (
                   <tr key={p.id}>
                     <td><div className="cell-title"><img src={p.image || PLACEHOLDER_IMG} alt="" onError={imgFallback} /><div><b>{p.title}</b><small>{p.category} · added {shortDate(p.created_at)}</small></div></div></td>
-                    <td>Product</td>
                     <td>{statusPill(p.approved)}</td>
                     <td className="num">{money(p.price)}</td>
                     <td className="num">{p.approved && <Link className="link-button" to={`/product/${p.id}`}>View</Link>}</td>
-                  </tr>
-                ))}
-                {listings.rentals.map((r) => (
-                  <tr key={r.id}>
-                    <td><div className="cell-title"><img src={r.image || PLACEHOLDER_IMG} alt="" onError={imgFallback} /><div><b>{r.title}</b><small>{r.gpu} · {r.vram} · {r.location}</small></div></div></td>
-                    <td>GPU</td>
-                    <td>{statusPill(r.status)}</td>
-                    <td className="num">{money(r.price)}/hr</td>
-                    <td className="num">{r.status === "approved" && <Link className="link-button" to={`/rental/${r.id}`}>View</Link>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -418,6 +374,58 @@ export default function SellerDashboard() {
       </Panel>
     </>
   );
+
+  const machineCard = (r) => {
+    const draft = prices[r.id] || {};
+    const set = (k, v) => setPrices((all) => ({ ...all, [r.id]: { ...draft, [k]: v } }));
+    return (
+      <div className="dash-machine" key={r.id}>
+        <div className="dash-machine-head">
+          <div><b>{r.title || "New machine"}</b><small>Listing {r.id}{r.agent_version ? ` · Productify Node ${r.agent_version}` : ""}</small></div>
+          <div className="dash-row-actions">
+            {statusPill(r.status)}
+            {r.status !== "awaiting_pairing" && (
+              <span className={r.is_online ? "node-status online" : "node-status"}><span className={r.is_online ? "live-dot" : "live-dot off"} />{r.is_online ? (r.live === false ? "Online · paused" : "Online") : "Offline"}</span>
+            )}
+          </div>
+        </div>
+
+        {r.status === "awaiting_pairing" ? pairingSteps(r) : (
+          <>
+            <dl className="hw-grid">
+              {hardware(r).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+            </dl>
+            {r.gpu?.startsWith("CPU only") && (
+              <p className="dash-note">Productify Node couldn't find an NVIDIA GPU. Install or update the NVIDIA driver on that computer (it includes <code>nvidia-smi</code>), then restart Productify Node. Without it, renters only get the CPU.</p>
+            )}
+            {r.specs && r.specs.docker === false && (
+              <p className="dash-note">Docker Desktop wasn't running when this machine last connected. Renters can't start jobs until it is.</p>
+            )}
+            <form className="dash-form price-form" onSubmit={(e) => publishMachine(e, r)}>
+              <div className="three-col">
+                <label>Price per hour (USD)<input required type="number" min="0.01" max="100" step="0.01" value={draft.price ?? (r.price || "")} onChange={(e) => set("price", e.target.value)} placeholder="0.40" /></label>
+                <label>Name shown to renters<input value={draft.title ?? r.title ?? ""} onChange={(e) => set("title", e.target.value)} maxLength={120} /></label>
+                <label>City (optional)<input value={draft.location ?? r.location ?? ""} onChange={(e) => set("location", e.target.value)} maxLength={80} placeholder="Delhi, IN" /></label>
+              </div>
+              <div className="dash-form-actions">
+                <button className="primary-button" disabled={busy}>{r.status === "paired" || r.status === "rejected" ? "Submit for review" : "Save"}</button>
+                {r.status === "approved" && <Link className="link-button" to={`/rental/${r.id}`}>View listing</Link>}
+              </div>
+            </form>
+            {r.pairing_code && (
+              <details className="pair-again">
+                <summary>Pairing code (to set up this machine again)</summary>
+                <CopyCode text={r.pairing_code} />
+              </details>
+            )}
+          </>
+        )}
+        {["awaiting_pairing", "paired", "rejected"].includes(r.status) && (
+          <button className="link-button danger-link" onClick={() => deleteMachine(r)}><Trash2 size={13} /> Delete</button>
+        )}
+      </div>
+    );
+  };
 
   const machinesSection = (
     <>
@@ -430,51 +438,13 @@ export default function SellerDashboard() {
       </dl>
 
       <Panel
-        title="Productify Node on this computer"
-        actions={<button className="secondary-button" onClick={probeLocalNode} disabled={probing}><RefreshCw size={14} className={probing ? "spin" : ""} /> Check</button>}
+        title="Your machines"
+        actions={<button className="secondary-button" onClick={createMachine} disabled={busy}><Plus size={14} /> {listings.rentals.length ? "Add another GPU" : "Create pairing code"}</button>}
       >
-        {localNode ? (
-          <p className="dash-clear">Running · {localNode.gpu || "GPU"}{localNode.vram ? ` (${localNode.vram})` : ""}{localNode.gaming_ready ? " · ready for Gamezone" : ""}. Use "Pair this computer" on a listing below.</p>
-        ) : (
-          <div className="dash-form-actions">
-            <p className="dash-clear" style={{ flex: 1 }}>Not running here. Install it on the machine you want to rent out, sign in with the pairing token from its listing below, and switch it to Live.</p>
-            <a className="primary-button" href={NODE_EXE_URL}><Download size={15} /> Download for Windows</a>
-          </div>
-        )}
-      </Panel>
-
-      <Panel title="Your machines">
         {!listings.rentals.length ? (
-          <p className="dash-clear">No GPU listings yet. <button className="link-button" onClick={() => { setSection("listings"); setNewListing("rental"); }}>List a machine</button></p>
+          <p className="dash-clear">No machines yet. Create a pairing code to add one.</p>
         ) : (
-          <div className="dash-machines">
-            {listings.rentals.map((r) => (
-              <div className="dash-machine" key={r.id}>
-                <div className="dash-machine-head">
-                  <div><b>{r.title}</b><small>{r.gpu} · {r.vram} · {money(r.price)}/hr · listing {r.id}</small></div>
-                  <div className="dash-row-actions">
-                    {statusPill(r.status)}
-                    <span className={r.is_online ? "node-status online" : "node-status"}><span className={r.is_online ? "live-dot" : "live-dot off"} />{r.is_online ? "Online" : "Offline"}</span>
-                  </div>
-                </div>
-                {r.pairing_token ? (
-                  <>
-                    <label className="dash-side-label" style={{ padding: 0 }}>Pairing token</label>
-                    <CopyCode text={r.pairing_token} />
-                    <label className="dash-side-label" style={{ padding: "12px 0 0" }}>Headless (Linux / servers)</label>
-                    <CopyCode text={`python main.py --headless --token=${r.pairing_token} --rental-id=${r.id} --live`} />
-                    {localNode && !r.is_online && (
-                      <div className="dash-form-actions" style={{ marginTop: 12 }}>
-                        <button className="secondary-button" onClick={() => connectThisComputer(r)}>Pair this computer</button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="dash-note">This listing was created before pairing tokens existed, so no machine can connect to it. Create a new GPU listing for this machine.</p>
-                )}
-              </div>
-            ))}
-          </div>
+          <div className="dash-machines">{listings.rentals.map(machineCard)}</div>
         )}
       </Panel>
 

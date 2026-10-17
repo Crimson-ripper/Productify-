@@ -308,6 +308,26 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .dash-pill.wait{background:#fff8ec;color:#a56b1a}
 .dash-pill.bad{background:#fdeaea;color:#963f3f}
 .dash-pill.muted{background:#f2f2ec;color:#6a6a63}
+.gpu-empty{text-align:center;padding:22px 10px 10px;max-width:520px;margin:0 auto}
+.gpu-empty svg{color:#6a6a63}
+.gpu-empty h3{font:600 20px 'Space Grotesk';letter-spacing:-.03em;margin:10px 0 8px}
+.gpu-empty p{font-size:13px;line-height:1.6;color:#5a5a55;margin:0 0 18px}
+.gpu-empty .dash-form-actions{justify-content:center}
+.pair-steps{list-style:none;margin:6px 0 4px;padding:0;display:grid;gap:14px}
+.pair-steps li{display:flex;gap:12px;align-items:flex-start;font-size:13px;line-height:1.55}
+.pair-steps li>span{flex-shrink:0;width:22px;height:22px;display:grid;place-items:center;border:1px solid var(--ink);font:600 11px 'DM Mono'}
+.pair-steps li>div{flex:1;min-width:0}
+.pair-steps .dash-code{margin-top:8px}
+.pair-wait{display:inline-flex;align-items:center;gap:7px;margin-left:6px;color:#a56b1a;font-weight:600}
+.pair-wait .spinner{margin:0;border-color:#ead7b6;border-top-color:#a56b1a}
+.hw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:0 0 14px}
+.hw-grid div{background:#fafaf8;padding:10px 12px;margin:0}
+.hw-grid dt{font:10px 'DM Mono';text-transform:uppercase;letter-spacing:.06em;color:#7a7c76}
+.hw-grid dd{margin:4px 0 0;font-size:13px;font-weight:700}
+.price-form{gap:12px}
+.pair-again{margin-top:14px;font-size:12px;color:#6a6a63}
+.pair-again summary{cursor:pointer;font-weight:700}
+.danger-link{display:inline-flex;align-items:center;gap:5px;margin-top:14px;color:var(--danger);font-size:12px}
 .dash-plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .dash-plan{border:1px solid var(--line);background:#fff;padding:20px}
 .dash-plan.current{border-color:var(--ink)}
@@ -333,6 +353,7 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
   .dash-nav span{flex:none}
   .dash-main{padding:24px 5% 70px}
   .dash-grid,.dash-split,.dash-plans{grid-template-columns:1fr}
+  .hw-grid{grid-template-columns:1fr 1fr}
   .dash-table th,.dash-table td{padding:11px 14px}
 }
 
