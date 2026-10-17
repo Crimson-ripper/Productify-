@@ -2594,149 +2594,29 @@ async def instance_exec(inst_id: str, data: InstanceExecInput, user=Depends(curr
     now_iso = datetime.now(timezone.utc).isoformat()
 
     rental_id = inst.get("rental_id")
-    is_tunnel_live = host_tunnel_manager.is_connected(rental_id)
-    executed_on_gpu = False
-    stdout = ""
-    stderr = ""
-    exit_code = 0
-
-    # 1. Attempt execution over live reverse tunnel directly on physical host GPU & Docker container
-    if is_tunnel_live:
-        try:
-            rpc_res = await host_tunnel_manager.send_rpc(
-                rental_id,
-                action="exec",
-                payload={
-                    "instance_id": inst_id,
-                    "command": command,
-                    "code": code,
-                },
-                timeout=18.0
-            )
-            stdout = rpc_res.get("stdout", "")
-            stderr = rpc_res.get("stderr", "")
-            exit_code = rpc_res.get("exit_code", 0)
-            executed_on_gpu = True
-        except Exception as e:
-            logger.warning(f"Tunnel exec fallback for node {rental_id}: {e}")
-            is_tunnel_live = False
-
-    # 2. If physical host tunnel is offline, execute on secure cloud fallback
-    if not executed_on_gpu:
-        if code or command.startswith("python"):
-            script_code = code if code else command[6:].strip()
-            if script_code.startswith("-c"):
-                script_code = script_code[2:].strip().strip('"').strip("'")
-
-            # Execute in isolated Python process
-            try:
-                res = subprocess.run(
-                    [sys.executable, "-c", script_code],
-                    capture_output=True,
-                    text=True,
-                    timeout=12,
-                )
-                stdout = res.stdout
-                stderr = res.stderr
-                exit_code = res.returncode
-            except subprocess.TimeoutExpired:
-                stdout = ""
-                stderr = "Execution timed out (12-second safety limit reached)"
-                exit_code = 124
-            except Exception as e:
-                stdout = ""
-                stderr = f"Execution error: {str(e)}"
-                exit_code = 1
-
-    # 2. NVIDIA-SMI Command
-    elif command.startswith("nvidia-smi"):
-        gpu_name = inst.get("gpu", "NVIDIA RTX 4090")
-        vram = inst.get("vram", "24 GB")
-        vram_num = "24576" if "24" in str(vram) else "81920" if "80" in str(vram) else "12288"
-        driver = "550.54.14"
-        temp = 42 + (hash(inst_id) % 15)
-        power = 220 + (hash(inst_id) % 80)
-        pci_bus = inst.get("specs", {}).get("pci_bus", "0000:01:00.0")
-
-        if "--query-gpu" in command:
-            stdout = f"{gpu_name}, {driver}, {temp} C, 74 %\n"
-            stderr = ""
-            exit_code = 0
-        else:
-            stdout = f"""+-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI {driver}              Driver Version: {driver}       CUDA Version: 12.4     |
-|-----------------------------------------+------------------------+----------------------+
-| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
-| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
-|=========================================+========================+======================|
-|   0  {gpu_name:<26} WDDM | {pci_bus:<14}    N/A |                  N/A |
-| 52%   {temp}C    P2           {power}W / 450W |    4210MiB / {vram_num}MiB |      78%      Default |
-+-----------------------------------------+------------------------+----------------------+
-
-+-----------------------------------------------------------------------------------------+
-| Processes:                                                                              |
-|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
-|        ID   ID                                                               Usage      |
-|=========================================================================================|
-|    0   N/A  N/A      1420      C   /usr/bin/python3                             4180MiB |
-+-----------------------------------------------------------------------------------------+
-"""
-            stderr = ""
-            exit_code = 0
-
-    # 3. Environment inspection commands
-    elif command in ["ls", "dir"]:
-        stdout = "workspace  models  checkpoints  notebooks  requirements.txt  run.sh\n"
-        stderr = ""
-        exit_code = 0
-    elif command in ["pwd"]:
-        stdout = "/workspace\n"
-        stderr = ""
-        exit_code = 0
-    elif command.startswith("uname"):
-        stdout = "Linux productify-node-x86_64 5.15.0-105-generic #115-Ubuntu SMP x86_64 x86_64 x86_64 GNU/Linux\n"
-        stderr = ""
-        exit_code = 0
-    elif command.startswith("df"):
-        disk_sz = inst.get('disk_size_gb', 50)
-        stdout = f"""Filesystem     1K-blocks     Used Available Use% Mounted on
-/dev/nvme0n1p1 {disk_sz*1024*1024}  4194304  {int((disk_sz-4)*1024*1024)}   9% /workspace
-overlay        104857600  12582912  92274688  12% /
-"""
-        stderr = ""
-        exit_code = 0
-    elif command.startswith("pip list"):
-        stdout = """Package         Version
---------------- -------
-torch           2.4.0+cu124
-torchvision     0.19.0+cu124
-torchaudio      2.4.0+cu124
-flash-attn      2.6.3
-transformers    4.44.2
-accelerate      0.34.0
-safetensors     0.4.4
-numpy           1.26.4
-jupyterlab      4.2.4
-pip             24.2
-"""
-        stderr = ""
-        exit_code = 0
-    elif command.startswith("help"):
-        stdout = """Available container commands:
-  nvidia-smi             - Inspect GPU utilization, VRAM allocation, and temperatures
-  python -c "<code>"     - Execute Python code with real GPU acceleration
-  pip list               - View pre-installed AI/ML packages (torch 2.4, transformers, etc.)
-  df -h                  - Check attached NVMe scratch disk capacity
-  uname -a               - Inspect Linux kernel and system architecture
-  ls / pwd               - Browse container root & /workspace mount
-  clear                  - Clear terminal screen
-"""
-        stderr = ""
-        exit_code = 0
-    else:
-        stdout = f"root@node: {command}: command executed successfully.\n"
-        stderr = ""
-        exit_code = 0
+    # Commands only ever run inside the renter's container on the host machine, over its tunnel.
+    # If the machine is offline there is nowhere safe to run them, so refuse.
+    if not host_tunnel_manager.is_connected(rental_id):
+        raise HTTPException(503, "The machine for this instance is offline, so commands can't run right now. Try again once it reconnects.")
+    try:
+        rpc_res = await host_tunnel_manager.send_rpc(
+            rental_id,
+            action="exec",
+            payload={
+                "instance_id": inst_id,
+                "command": command,
+                "code": code,
+            },
+            timeout=18.0
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Tunnel exec failed for node {rental_id}: {e}")
+        raise HTTPException(502, "The machine didn't respond to the command. Try again.")
+    stdout = rpc_res.get("stdout", "")
+    stderr = rpc_res.get("stderr", "")
+    exit_code = rpc_res.get("exit_code", 0)
 
     duration = round(time.time() - start_time, 3)
 
