@@ -29,8 +29,8 @@ export default function PaymentProcessing() {
       <SEO title="Processing payment — Productify" path="/payment/processing" />
       <div className="processing" data-testid="processing-screen">
         <div className="spinner" />
-        <h2>Processing your {provider} payment…</h2>
-        <p>Please stay on this page. This usually takes just a moment.</p>
+        <h2>Confirming your {provider ? `${provider} ` : ""}payment…</h2>
+        <p>Keep this page open — it only takes a few seconds.</p>
       </div>
     </>
   );

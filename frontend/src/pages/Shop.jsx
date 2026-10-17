@@ -20,6 +20,7 @@ export default function Shop() {
     setLoading(true);
     api.get(`/products?q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}&sort=${sort}`)
       .then((r) => setRows(r.data))
+      .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }, [q, category, sort]);
 
@@ -34,13 +35,16 @@ export default function Shop() {
     <>
       <SEO
         title={`${category === "all" ? "All products" : category} — Productify`}
-        description={`Shop verified digital products in ${category === "all" ? "every category" : category}. Software, design assets, dev tools and more on Productify.`}
+        description={`Digital products in ${category === "all" ? "every category" : category} from independent sellers on Productify.`}
         path="/shop"
       />
       <section className="page-hero">
-        <div className="eyebrow"><span className="eyebrow-line" /> MARKETPLACE</div>
-        <h1>{category === "all" ? "Every product" : category}<em>.</em></h1>
-        <p>Curated software, design and creative assets from verified sellers.</p>
+        <div className="eyebrow">Shop</div>
+        <h1>{category === "all" ? "All products" : category}</h1>
+        <p>
+          {loading ? "Software, templates and design files from independent sellers."
+            : `${rows.length} product${rows.length === 1 ? "" : "s"}${q ? ` matching “${q}”` : ""}.`}
+        </p>
       </section>
 
       <section className="shop-toolbar">
@@ -72,7 +76,10 @@ export default function Shop() {
         {loading ? (
           <div className="loading-block">Loading products…</div>
         ) : rows.length === 0 ? (
-          <div className="empty-block">No products match your filters.</div>
+          <div className="empty-block">
+            Nothing here yet{q ? ` for “${q}”` : ""}.{" "}
+            {(q || category !== "all") && <button className="link-button" onClick={() => { setLocalQ(""); setSp({}, { replace: true }); }}>Clear filters</button>}
+          </div>
         ) : (
           <div className="product-grid" data-testid="product-grid">
             {rows.map((p) => <ProductCard key={p.id} p={p} />)}

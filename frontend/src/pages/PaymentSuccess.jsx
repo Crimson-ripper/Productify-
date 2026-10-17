@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle2, ArrowRight, Zap } from "lucide-react";
+import { CheckCircle2, ArrowRight } from "lucide-react";
 import { api, money } from "@/lib/api";
 import SEO from "@/components/SEO";
 
@@ -14,35 +14,20 @@ export default function PaymentSuccess() {
 
   return (
     <>
-      <SEO title="Payment successful — Productify" path="/payment/success" />
+      <SEO title="Order confirmed — Productify" path="/payment/success" />
       <section className="status-page success" data-testid="payment-success">
-        <CheckCircle2 size={54} />
-        <h1>Payment successful.</h1>
-        <p>Thank you — your transaction is confirmed and ready in your account.</p>
-        {tx && <div className="status-line">Paid {money(tx.amount, tx.currency)} via {tx.provider}</div>}
-
-        {hasRentals && (
-          <div style={{ margin: "24px 0", padding: "18px 22px", background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.35)", borderRadius: 12, textAlign: "center", maxWidth: 500 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#10b981", fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
-              <Zap size={18} /> GPU Node Reserved & Ready!
-            </div>
-            <p style={{ margin: "0 0 14px 0", fontSize: 13, color: "#cbd5e1" }}>
-              Your rental instance is active. Head to your GPU Workspaces to configure templates, copy SSH keys, or 1-click launch your web terminal.
-            </p>
-            <Link to="/instances" className="primary-button" style={{ display: "inline-flex", alignItems: "center", gap: 6, margin: "0 auto" }}>
-              <Zap size={16} /> Open GPU Instances Workspace
-            </Link>
-          </div>
-        )}
-
+        <CheckCircle2 size={48} />
+        <h1>Order confirmed</h1>
+        <p>{hasRentals ? "Your GPU time is booked. Start it from My instances." : "Your order is saved in your account."}</p>
+        {tx && <div className="status-line">{money(tx.amount, tx.currency)} · {tx.provider}</div>}
         <div className="status-actions">
           {hasRentals ? (
-            <Link to="/instances" className="primary-button"><Zap size={17} /> Go to Instances</Link>
+            <Link to="/instances" className="primary-button" data-testid="success-instances-button">Go to My instances <ArrowRight size={17} /></Link>
           ) : (
             <Link to="/orders" className="primary-button" data-testid="success-view-orders-button">View orders <ArrowRight size={17} /></Link>
           )}
-          <Link to="/orders" className="text-button text-button-dark">View all orders <ArrowRight size={14} /></Link>
-          <Link to="/rentals" className="text-button text-button-dark">Explore more GPUs <ArrowRight size={14} /></Link>
+          {hasRentals && <Link to="/orders" className="text-button text-button-dark">View orders <ArrowRight size={14} /></Link>}
+          <Link to="/shop" className="text-button text-button-dark">Back to the shop <ArrowRight size={14} /></Link>
         </div>
       </section>
     </>

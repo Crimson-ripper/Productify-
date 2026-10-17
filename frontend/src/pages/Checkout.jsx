@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, CreditCard, Wallet, Landmark } from "lucide-react";
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useCart } from "@/contexts/CartContext";
@@ -22,7 +22,7 @@ const providersFor = (region) => {
 };
 
 const providerCopy = {
-  stripe: { name: "Card (Stripe)", desc: "Visa, MC, Amex · Encrypted", icon: CreditCard },
+  stripe: { name: "Card (Stripe)", desc: "Visa, Mastercard, Amex", icon: CreditCard },
   razorpay: { name: "UPI / Cards (Razorpay)", desc: "UPI · Netbanking · Cards", icon: Landmark },
   paypal: { name: "PayPal", desc: "Pay with your PayPal balance", icon: Wallet },
 };
@@ -58,7 +58,7 @@ export default function Checkout() {
   };
 
   if (cart.length === 0) {
-    return <div className="empty-block">Your bag is empty. <a href="/shop">Browse products</a></div>;
+    return <div className="empty-block">Your bag is empty. <Link to="/shop">Browse the shop</Link></div>;
   }
 
   return (
@@ -66,8 +66,11 @@ export default function Checkout() {
       <SEO title="Checkout — Productify" description="Complete your purchase securely." path="/checkout" />
       <section className="checkout-page">
         <div className="checkout-main">
-          <div className="eyebrow"><span className="eyebrow-line" /> CHECKOUT</div>
-          <h1>Payment method<em>.</em></h1>
+          <div className="eyebrow">Checkout</div>
+          <h1>How would you like to pay?</h1>
+          <div className="test-mode-note" data-testid="checkout-test-mode">
+            <b>Test mode</b> — payments aren't live yet, so no card or account will be charged.
+          </div>
 
           <div className="ck-block">
             <h3>Billing region</h3>
@@ -81,7 +84,7 @@ export default function Checkout() {
                 >{r.label}</button>
               ))}
             </div>
-            <small className="ck-hint">Region determines available payment methods.</small>
+            <small className="ck-hint">Available payment methods depend on your region.</small>
           </div>
 
           <div className="ck-block">
@@ -99,12 +102,10 @@ export default function Checkout() {
                   >
                     <Icon size={20} />
                     <div><b>{P.name}</b><small>{P.desc}</small></div>
-                    {pid !== "stripe" && <span className="mock-tag">MOCK</span>}
                   </button>
                 );
               })}
             </div>
-            <small className="ck-hint">Stripe uses a claimable sandbox. Razorpay & PayPal are mocked until keys are provided.</small>
           </div>
         </div>
 
@@ -121,7 +122,6 @@ export default function Checkout() {
           <button className="primary-button full" onClick={submit} disabled={busy} data-testid="checkout-submit-button">
             {busy ? "Redirecting…" : `Pay ${money(subtotal * 1.05)}`} <ArrowRight size={17} />
           </button>
-          <small className="mock-note">You'll return here after payment confirmation.</small>
         </aside>
       </section>
     </>

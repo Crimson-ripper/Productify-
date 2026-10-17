@@ -7,10 +7,13 @@ export default function NotFound() {
     <>
       <SEO title="Page not found — Productify" path="/404" />
       <section className="not-found">
-        <div className="eyebrow"><span className="eyebrow-line" /> 404</div>
-        <h1>This page has moved.<em>.</em></h1>
-        <p>The link may be broken, or the page may have been removed.</p>
-        <Link to="/" className="primary-button"><ArrowLeft size={16} /> Back to Productify</Link>
+        <div className="eyebrow">Error 404</div>
+        <h1>There's nothing at this address</h1>
+        <p>The link may be old, or the listing may have been taken down.</p>
+        <div className="status-actions">
+          <Link to="/" className="primary-button"><ArrowLeft size={16} /> Home</Link>
+          <Link to="/shop" className="text-button text-button-dark">Browse the shop</Link>
+        </div>
       </section>
     </>
   );

@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowRight, Cpu, ShieldCheck, Zap } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { api, money } from "@/lib/api";
+import { PLACEHOLDER_IMG, imgFallback } from "@/lib/image";
 import SEO from "@/components/SEO";
 import ReportButton from "@/components/ReportButton";
 import GpuDeployModal from "@/components/GpuDeployModal";
+
+const SPEC_FIELDS = [
+  ["cpu", "CPU"],
+  ["ram", "RAM"],
+  ["storage", "Storage"],
+  ["bandwidth", "Bandwidth"],
+];
 
 export default function RentalDetail() {
   const { id } = useParams();
@@ -18,56 +26,46 @@ export default function RentalDetail() {
   }, [id]);
 
   if (loading) return <div className="loading-block">Loading…</div>;
-  if (!r) return <div className="empty-block">Rental not found. <Link to="/rentals">Back</Link></div>;
+  if (!r) return <div className="empty-block">We couldn't find that machine. <Link to="/rentals">Back to GPU rentals</Link></div>;
 
   return (
     <>
       <SEO title={`${r.title} — GPU rental · Productify`} description={r.description || `Rent ${r.gpu} with ${r.vram} VRAM at ${money(r.price)}/hour.`} path={`/rental/${r.id}`} image={r.image} />
       <section className="detail-page" data-testid={`rental-detail-${r.id}`}>
-        <div className="detail-image"><img src={r.image} alt={r.title} /></div>
+        <div className="detail-image"><img src={r.image || PLACEHOLDER_IMG} alt={r.title} onError={imgFallback} /></div>
         <div className="detail-info">
           <div className="crumb"><Link to="/rentals">GPU rentals</Link></div>
           <h1>{r.title}</h1>
-          <div className="detail-seller">by <b>{r.owner}</b> · <span className="verified-pill"><ShieldCheck size={13} /> Verified node</span></div>
+          <div className="detail-seller">
+            Listed by <b>{r.owner}</b>
+            <span className={r.is_online ? "node-status online" : "node-status"}>
+              <span className={r.is_online ? "live-dot" : "live-dot off"} />{r.is_online ? "Online now" : "Offline"}
+            </span>
+          </div>
           <div className="detail-price">{money(r.price)} <small>/ hour</small></div>
-          <p className="detail-desc">{r.description}</p>
-          <div className="specs-grid">
-            <div><Cpu size={14} /><b>GPU</b><span>{r.gpu}</span></div>
-            <div><Cpu size={14} /><b>VRAM</b><span>{r.vram}</span></div>
-            {r.specs?.cpu && <div><Cpu size={14} /><b>CPU</b><span>{r.specs.cpu}</span></div>}
-            {r.specs?.ram && <div><Cpu size={14} /><b>RAM</b><span>{r.specs.ram}</span></div>}
-            {r.specs?.storage && <div><Cpu size={14} /><b>Storage</b><span>{r.specs.storage}</span></div>}
-            {r.specs?.bandwidth && <div><Cpu size={14} /><b>Bandwidth</b><span>{r.specs.bandwidth}</span></div>}
-            <div><Cpu size={14} /><b>Location</b><span>{r.location}</span></div>
-          </div>
-          <div className="detail-actions" style={{ flexWrap: "wrap", gap: "10px" }}>
-            <Link
-              to={`/rentals/reserve/${r.id}`}
-              className="primary-button"
-              data-testid="rental-detail-reserve-button"
-              style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "var(--lime, #c8f04c)", color: "var(--ink, #101112)", border: "none", fontWeight: 800, textDecoration: "none", padding: "12px 24px" }}
-            >
-              <Zap size={16} /> Reserve Now (Go to Dedicated Rental Space) <ArrowRight size={16} />
+          {r.description && <p className="detail-desc">{r.description}</p>}
+          <dl className="specs-grid">
+            <div><dt>GPU</dt><dd>{r.gpu}</dd></div>
+            <div><dt>VRAM</dt><dd>{r.vram}</dd></div>
+            {SPEC_FIELDS.filter(([k]) => r.specs?.[k]).map(([k, label]) => (
+              <div key={k}><dt>{label}</dt><dd>{r.specs[k]}</dd></div>
+            ))}
+            {r.location && <div><dt>Location</dt><dd>{r.location}</dd></div>}
+          </dl>
+          <div className="detail-actions">
+            <Link to={`/rentals/reserve/${r.id}`} className="primary-button" data-testid="rental-detail-reserve-button">
+              Reserve this GPU <ArrowRight size={16} />
             </Link>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setDeployModalOpen(true)}
-              data-testid="rental-detail-deploy-button"
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-            >
-              Quick Launch Modal
+            <button type="button" className="text-button text-button-dark" onClick={() => setDeployModalOpen(true)} data-testid="rental-detail-deploy-button">
+              Launch from a template
             </button>
-            <ReportButton listingId={r.id} listingKind="rental" />
           </div>
+          {!r.is_online && <p className="detail-note">This machine is offline right now, so nothing can run on it until its owner reconnects it.</p>}
+          <div className="detail-report"><ReportButton listingId={r.id} listingKind="rental" /></div>
         </div>
       </section>
 
-      <GpuDeployModal
-        rental={r}
-        isOpen={deployModalOpen}
-        onClose={() => setDeployModalOpen(false)}
-      />
+      <GpuDeployModal rental={r} isOpen={deployModalOpen} onClose={() => setDeployModalOpen(false)} />
     </>
   );
 }
