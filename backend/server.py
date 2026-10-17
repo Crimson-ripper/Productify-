@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
-import os, sys, time, subprocess, uuid, jwt, bcrypt, httpx, requests, logging, secrets, random, asyncio
+import os, re, sys, time, subprocess, uuid, jwt, bcrypt, httpx, requests, logging, secrets, random, asyncio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("productify")
@@ -2014,7 +2014,7 @@ class HostTunnelManager:
     def is_connected(self, rental_id: str) -> bool:
         if not rental_id:
             return False
-        if rental_id in self.active_tunnels:
+        if node_hub.is_connected(rental_id) or rental_id in self.active_tunnels:
             return True
         meta = self.node_meta.get(rental_id)
         if meta and (time.time() - meta.get("last_seen", 0) < 35):
@@ -2022,6 +2022,8 @@ class HostTunnelManager:
         return False
 
     async def send_rpc(self, rental_id: str, action: str, payload: dict, timeout: float = 25.0) -> dict:
+        if node_hub.is_connected(rental_id):
+            return await node_hub.legacy_rpc(rental_id, action, payload, timeout)
         msg_id = uuid.uuid4().hex
         rpc_msg = {
             "msg_id": msg_id,
@@ -2082,6 +2084,118 @@ async def require_node_token(rental_id: str, x_node_token: Optional[str] = Heade
     """Dependency for host-agent tunnel endpoints: requires the rental's pairing token in X-Node-Token."""
     if not await is_valid_node_token(rental_id, x_node_token):
         raise HTTPException(401, "Invalid or missing node pairing token")
+
+
+# ============== NODE v2 TUNNEL (/ws/node/v1, see Productify-Node v2/DESIGN.md) ==============
+# Instance template -> agent template. Only these run on v2 machines; the agent
+# keeps its own pinned-image allowlist and never accepts an image name.
+V2_TEMPLATES = {"jupyter-pytorch": "pytorch", "ubuntu-base": "python"}
+V2_EXEC_TIMEOUT_S = 60
+
+
+class NodeHub:
+    """Connections from Productify Node v2 agents, one per rental."""
+
+    def __init__(self):
+        self.conns: dict[str, WebSocket] = {}
+        self.meta: dict[str, dict] = {}
+        self.pending: dict[str, asyncio.Future] = {}
+
+    def is_connected(self, rental_id: Optional[str]) -> bool:
+        return bool(rental_id) and rental_id in self.conns
+
+    async def request(self, rental_id: str, frame: dict, timeout: float) -> dict:
+        ws = self.conns.get(rental_id)
+        if not ws:
+            raise HTTPException(503, "The machine for this listing is offline.")
+        req_id = uuid.uuid4().hex
+        fut = asyncio.get_running_loop().create_future()
+        fut.rental_id = rental_id
+        self.pending[req_id] = fut
+        try:
+            await ws.send_json({**frame, "id": req_id})
+            res = await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise HTTPException(504, "The machine didn't answer in time.")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(502, "Lost the connection to the machine.")
+        finally:
+            self.pending.pop(req_id, None)
+        if not res.get("ok"):
+            raise HTTPException(502, f"The machine refused: {res.get('error', 'unknown error')}")
+        return res
+
+    def resolve(self, rental_id: str, frame: dict):
+        fut = self.pending.get(frame.get("re") or "")
+        if fut and getattr(fut, "rental_id", None) == rental_id and not fut.done():
+            fut.set_result(frame)
+
+    async def legacy_rpc(self, rental_id: str, action: str, payload: dict, timeout: float) -> dict:
+        """Serve the old send_rpc actions with the v2 protocol."""
+        if action == "deploy_pod":
+            template = V2_TEMPLATES.get(payload.get("template_id") or "")
+            if not template:
+                raise HTTPException(400, "This machine runs Productify Node v2, which supports the PyTorch and Ubuntu templates only.")
+            res = await self.request(rental_id, {"type": "job.start", "job_id": payload["instance_id"], "template": template}, max(timeout, 300))
+            return {"ok": True, "container_id": res.get("container")}
+        if action == "exec":
+            frame = {"type": "job.exec", "job_id": payload["instance_id"], "timeout_s": V2_EXEC_TIMEOUT_S}
+            if payload.get("code"):
+                frame["python"] = payload["code"]
+            else:
+                frame["argv"] = ["sh", "-c", payload.get("command") or ""]
+            res = await self.request(rental_id, frame, V2_EXEC_TIMEOUT_S + 15)
+            return {"stdout": res.get("stdout", ""), "stderr": res.get("stderr", ""), "exit_code": res.get("exit_code", 0)}
+        if action == "destroy_pod":
+            await self.request(rental_id, {"type": "job.stop", "job_id": payload["instance_id"]}, 90)
+            return {"ok": True}
+        raise HTTPException(400, f"'{action}' isn't supported on Productify Node v2 machines.")
+
+
+node_hub = NodeHub()
+
+
+@app.websocket("/ws/node/v1")
+async def node_v1_websocket(websocket: WebSocket):
+    auth = websocket.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    rental_id = websocket.headers.get("x-rental-id", "")
+    if not re.fullmatch(r"r-[a-z0-9]{6,32}", rental_id or "") or not await is_valid_node_token(rental_id, token):
+        await websocket.close(code=4401)  # before accept -> HTTP 403; the agent stops retrying
+        return
+    await websocket.accept()
+    old = node_hub.conns.get(rental_id)
+    node_hub.conns[rental_id] = websocket
+    if old is not None:
+        try:
+            await old.close(code=4000)  # a newer connection for the same listing replaces it
+        except Exception:
+            pass
+    try:
+        while True:
+            frame = await websocket.receive_json()
+            kind = frame.get("type")
+            if kind == "hello":
+                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live")
+                node_hub.meta[rental_id] = {**{k: frame.get(k) for k in allowed}, "last_seen": time.time(), "transport": "node-v1"}
+                await node_manager.record_heartbeat(rental_id, node_hub.meta[rental_id], transport="node-v1")
+            elif kind == "heartbeat":
+                m = node_hub.meta.setdefault(rental_id, {"transport": "node-v1"})
+                m.update({k: frame.get(k) for k in ("live", "jobs", "gpu_temp_c", "paused_reason")}, last_seen=time.time())
+                await node_manager.record_heartbeat(rental_id, m, transport="node-v1")
+            elif kind == "result":
+                node_hub.resolve(rental_id, frame)
+            elif kind == "event":
+                logger.warning(f"Node {rental_id} event: {frame.get('kind')} job={frame.get('job_id')}")
+    except (WebSocketDisconnect, ValueError):
+        pass
+    except Exception as e:
+        logger.warning(f"Node v1 tunnel error for {rental_id}: {e}")
+    finally:
+        if node_hub.conns.get(rental_id) is websocket:
+            node_hub.conns.pop(rental_id, None)
 
 
 @app.websocket("/ws/tunnel/host/{rental_id}")
@@ -2353,6 +2467,7 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
                 action="deploy_pod",
                 payload={
                     "instance_id": instance_id,
+                    "template_id": template["id"],
                     "docker_image": template["docker_image"],
                     "disk_size_gb": data.disk_size_gb,
                     "ssh_public_key": data.ssh_public_key or "",
