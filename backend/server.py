@@ -3146,6 +3146,9 @@ async def get_private_game_pricing_quote(data: PrivateGameQuoteInput, user=Depen
 @api.post("/games/play")
 async def launch_game_session(data: GamePlayLaunchInput, user=Depends(current_user)):
     """Spin up remote gaming container on an isolated host GPU node."""
+    # Disabled: the current Node app streams the seller's real desktop (with input control) rather
+    # than an isolated session. Off until game hosting runs in a per-session VM.
+    raise HTTPException(503, "Gamezone is paused while we rebuild game hosting to keep sellers' computers safe.")
     is_private = bool(data.private_game_id)
     game_title = "Cloud Game"
     hourly_rate = 1.0
