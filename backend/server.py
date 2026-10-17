@@ -926,6 +926,10 @@ async def seller_listings(user=Depends(current_user)):
     rentals = await db.rentals.find({"owner_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(200)
     for r in rentals:
         r["is_online"] = host_tunnel_manager.is_connected(r.get("id"))
+        r["pairing_code"] = pairing_code(r)
+        meta = node_hub.meta.get(r["id"]) or {}
+        r["live"] = meta.get("live")
+        r["gpu_temp_c"] = meta.get("gpu_temp_c")
     return {"products": products, "rentals": rentals}
 
 
@@ -1188,6 +1192,142 @@ async def create_rental(data: RentalInput, user=Depends(current_user)):
     )
 
     return {k: v for k, v in item.items() if k != "_id"}
+
+
+# ============== SELLER MACHINES (pair first, hardware fills itself in) ==============
+# Lifecycle: awaiting_pairing -> (agent connects, hardware recorded) -> paired
+#            -> seller sets price -> pending (admin review) -> approved
+MACHINE_EDITABLE = ("awaiting_pairing", "paired", "rejected")
+
+
+def pairing_code(rental: dict) -> Optional[str]:
+    """What the seller pastes into Productify Node: listing id and token in one string."""
+    if rental.get("pairing_token"):
+        return f"{rental['id']}.{rental['pairing_token']}"
+    return None
+
+
+def require_seller(user: dict):
+    if user.get("role") not in ["seller", "admin", "sub-admin"]:
+        raise HTTPException(403, "Seller access required")
+
+
+@api.post("/seller/machines")
+async def create_machine(user=Depends(current_user)):
+    """Start a GPU listing with nothing but a pairing code. Hardware comes from the machine itself."""
+    require_seller(user)
+    waiting = await db.rentals.count_documents({"owner_id": user["id"], "status": "awaiting_pairing"})
+    if waiting >= 5:
+        raise HTTPException(400, "You already have 5 machines waiting to be paired. Pair or delete one first.")
+    rental_id = f"r-{uuid.uuid4().hex[:10]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    item = {
+        "id": rental_id,
+        "node_id": "",
+        "title": "",
+        "gpu": "",
+        "vram": "",
+        "price": 0.0,
+        "location": "",
+        "image": "",
+        "description": "",
+        "specs": {},
+        "status": "awaiting_pairing",
+        "is_verified": False,
+        "owner": user["name"],
+        "owner_id": user["id"],
+        "pairing_token": f"ptok_{uuid.uuid4().hex[:16]}",
+        "gaming_ready": False,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    await db.rentals.insert_one(item)
+    out = {k: v for k, v in item.items() if k != "_id"}
+    out["pairing_code"] = pairing_code(item)
+    return out
+
+
+class MachinePublishInput(BaseModel):
+    price: float = Field(gt=0, le=100)
+    title: Optional[str] = Field(default=None, max_length=120)
+    location: Optional[str] = Field(default=None, max_length=80)
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+
+@api.post("/seller/machines/{rid}/publish")
+async def publish_machine(rid: str, data: MachinePublishInput, user=Depends(current_user)):
+    """Set the price (and optional title/city) on a paired machine and send it for review."""
+    require_seller(user)
+    r = await db.rentals.find_one({"id": rid, "owner_id": user["id"]}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Machine not found")
+    if r.get("status") not in MACHINE_EDITABLE and r.get("status") not in ("pending", "approved"):
+        raise HTTPException(400, "This machine can't be changed right now")
+    if not r.get("gpu"):
+        raise HTTPException(400, "Pair the machine with Productify Node first so its hardware is known.")
+    update = {
+        "price": round(float(data.price), 2),
+        "title": (data.title or "").strip() or r.get("title") or r["gpu"],
+        "location": (data.location or "").strip() or r.get("location", ""),
+        "description": (data.description or "").strip() if data.description is not None else r.get("description", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    # A price change on a live listing stays live; anything else goes to review.
+    update["status"] = "approved" if user.get("role") in ["admin", "sub-admin"] or r.get("status") == "approved" else "pending"
+    await db.rentals.update_one({"id": rid}, {"$set": update})
+    return {**r, **update, "pairing_code": pairing_code(r)}
+
+
+@api.delete("/seller/machines/{rid}")
+async def delete_machine(rid: str, user=Depends(current_user)):
+    """Remove a machine that was never published (or was rejected)."""
+    require_seller(user)
+    r = await db.rentals.find_one({"id": rid, "owner_id": user["id"]}, {"_id": 0, "status": 1})
+    if not r:
+        raise HTTPException(404, "Machine not found")
+    if r.get("status") not in MACHINE_EDITABLE:
+        raise HTTPException(400, "Live or in-review listings can't be deleted here; contact support.")
+    await db.rentals.delete_one({"id": rid, "owner_id": user["id"]})
+    node_hub.meta.pop(rid, None)
+    return {"ok": True}
+
+
+def vram_label(mb) -> str:
+    try:
+        mb = int(mb)
+    except (TypeError, ValueError):
+        return ""
+    return f"{round(mb / 1024)} GB" if mb >= 1024 else (f"{mb} MB" if mb > 0 else "")
+
+
+async def record_machine_hardware(rental_id: str, hello: dict):
+    """Called when a Productify Node v2 agent says hello: store what the machine reported."""
+    r = await db.rentals.find_one({"id": rental_id}, {"_id": 0, "status": 1, "title": 1})
+    if not r:
+        return
+    gpu = str(hello.get("gpu") or "").strip()[:80]
+    specs = {
+        "cpu": f"{int(hello['cpu_cores'])} cores" if isinstance(hello.get("cpu_cores"), (int, float)) else None,
+        "cpu_model": str(hello.get("cpu") or "").strip()[:80] or None,
+        "ram": f"{round(int(hello['ram_mb']) / 1024)} GB" if isinstance(hello.get("ram_mb"), (int, float)) and hello["ram_mb"] > 0 else None,
+        "os": str(hello.get("os") or "")[:20] or None,
+        "docker": bool(hello.get("docker")),
+        "gpu_in_docker": bool(hello.get("gpu_in_docker")),
+    }
+    update = {
+        "gpu": gpu or "CPU only (no NVIDIA GPU found)",
+        "vram": vram_label(hello.get("vram_mb")),
+        "specs": {k: v for k, v in specs.items() if v is not None},
+        "node_id": str(hello.get("node_id") or "")[:64],
+        "agent_version": str(hello.get("agent_version") or "")[:32],
+        "hardware_reported_at": datetime.now(timezone.utc).isoformat(),
+        "is_verified": True,  # reported by the paired agent, not typed by the seller
+    }
+    if r.get("status") == "awaiting_pairing":
+        update["status"] = "paired"
+    if not r.get("title"):
+        update["title"] = update["gpu"]
+    await db.rentals.update_one({"id": rental_id}, {"$set": update})
 
 
 # ============== ADMIN ==============
@@ -2178,9 +2318,10 @@ async def node_v1_websocket(websocket: WebSocket):
             frame = await websocket.receive_json()
             kind = frame.get("type")
             if kind == "hello":
-                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live")
+                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live")
                 node_hub.meta[rental_id] = {**{k: frame.get(k) for k in allowed}, "last_seen": time.time(), "transport": "node-v1"}
                 await node_manager.record_heartbeat(rental_id, node_hub.meta[rental_id], transport="node-v1")
+                await record_machine_hardware(rental_id, node_hub.meta[rental_id])
             elif kind == "heartbeat":
                 m = node_hub.meta.setdefault(rental_id, {"transport": "node-v1"})
                 m.update({k: frame.get(k) for k in ("live", "jobs", "gpu_temp_c", "paused_reason")}, last_seen=time.time())
