@@ -42,7 +42,7 @@ E-commerce website for productifynow.com to sell/buy digital products & software
 - workspace_files: id, rental_id, user_id, storage_path, url, filename, note, direction, created_at
 
 ## Test credentials
-See /app/memory/test_credentials.md. Admin: admin@productify.now / ProductifyAdmin123!.
+See /app/memory/test_credentials.md. Admin credentials come from ADMIN_EMAIL / ADMIN_PASSWORD in backend/.env.
 
 ## Backlog
 ### P0 (blocked on external creds)
