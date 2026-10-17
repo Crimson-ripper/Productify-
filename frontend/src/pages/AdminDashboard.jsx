@@ -26,6 +26,7 @@ import {
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
+import AdminCleanup from "@/components/AdminCleanup";
 import { toast } from "sonner";
 
 export default function AdminDashboard() {
@@ -936,6 +937,7 @@ export default function AdminDashboard() {
         {/* ===================== TAB: GLOBAL CATALOG ===================== */}
         {tab === "catalog" && (
           <div>
+            {user?.role === "admin" && <AdminCleanup onDone={() => { fetchCatalog(); fetchStats(); }} />}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
               <div style={{ display: "flex", gap: 8, flex: 1, minWidth: 260, maxWidth: 400 }}>
                 <input
