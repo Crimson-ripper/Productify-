@@ -24,10 +24,13 @@ the digital-products marketplace (keep, separate, or hide). — *Done 2026-10-19
 
 ## Task 1 — Brand foundations
 
-- [ ] Centralise colours, typography, spacing, button and card styles as reusable tokens/components (use the existing styling system).
-- [ ] Apply them consistently; remove generic AI imagery and excessive effects.
+- [x] Centralise colours, typography, spacing, button and card styles as reusable tokens/components (use the existing styling system).
+- [x] Apply them consistently; remove generic AI imagery and excessive effects.
 
 Done when: pages share one consistent set of tokens and components; no visual regressions on mobile.
+— *Done 2026-10-19 (commit 0b1cfa5). Open: inline styles in `GpuRentalSpace`, `GpuDeployModal`,
+`SellerOnboarding` and `SellerVerificationModal` are restyled together with their copy fixes in
+Tasks 3/8.*
 
 ## Task 2 — Homepage restructure
 
