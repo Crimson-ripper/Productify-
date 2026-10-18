@@ -34,33 +34,33 @@ Tasks 3/8.*
 
 ## Task 2 — Homepage restructure
 
-- [ ] Rebuild the homepage with the six sections from `CLAUDE.md` §4, in order.
-- [ ] Hero: two CTAs (Join renter waitlist / Apply as a provider), each firing `cta_click`.
-- [ ] Machine cards labelled "Preview" unless backed by live verified inventory.
-- [ ] 3D rendering shown only as a future pilot.
+- [x] Rebuild the homepage with the six sections from `CLAUDE.md` §4, in order.
+- [x] Hero: two CTAs (Join renter waitlist / Apply as a provider), each firing `cta_click`.
+- [x] Machine cards labelled "Preview" unless backed by live verified inventory. _(cards come from live, reviewed inventory with Online/Offline status and a "Closed beta" label)_
+- [x] 3D rendering shown only as a future pilot.
 
 Done when: homepage matches the structure, copy passes the honesty rules, works at phone width.
 
 ## Task 3 — Two landing pages
 
-- [ ] `Rent Compute` page for AI developers: problem, supported workloads, how it works, pricing logic, FAQ, waitlist CTA.
-- [ ] `Earn with Hardware` page: eligibility, verification, provider control (pause/de-list), security approach, how payouts will work, "earnings depend on utilisation" disclaimer, application CTA.
+- [x] `Rent Compute` page for AI developers: problem, supported workloads, how it works, pricing logic, FAQ, waitlist CTA.
+- [x] `Earn with Hardware` page: eligibility, verification, provider control (pause/de-list), security approach, how payouts will work, "earnings depend on utilisation" disclaimer, application CTA.
 
 Done when: both pages are live in the dev build, linked from nav and homepage, with unique meta tags.
 
 ## Task 4 — Forms
 
-- [ ] Renter waitlist form and provider application form with the fields in `CLAUDE.md` §4.
-- [ ] Validation, success state, error state, confirmation page/message.
-- [ ] Submissions delivered to the existing backend/service (ASK if none exists).
-- [ ] Draft waitlist confirmation email text: what happens next and what is available now.
+- [x] Renter waitlist form and provider application form with the fields in `CLAUDE.md` §4.
+- [x] Validation, success state, error state, confirmation page/message.
+- [x] Submissions delivered to the existing backend/service (ASK if none exists).
+- [ ] Draft waitlist confirmation email text: what happens next and what is available now. _(open: not drafted yet; no email sending exists)_
 
 Done when: a test submission of each form arrives at its destination, tested on desktop and a phone-sized viewport.
 
 ## Task 5 — Trust pages
 
-- [ ] Pricing (explain billing interval, when billing starts/stops, storage/bandwidth treatment; use `[TODO]` placeholders for real rates), Security, FAQ, Contact, Privacy.
-- [ ] Footer links to all of them.
+- [x] Pricing (explain billing interval, when billing starts/stops, storage/bandwidth treatment; use `[TODO]` placeholders for real rates), Security, FAQ, Contact, Privacy.
+- [x] Footer links to all of them.
 
 Done when: every page exists, is linked, and contains no invented facts.
 
