@@ -30,10 +30,10 @@ export default function Home() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Productify",
-    "url": "https://productifynow.com",
+    "url": "https://www.productifynow.com",
     "potentialAction": {
       "@type": "SearchAction",
-      "target": "https://productifynow.com/shop?q={search_term_string}",
+      "target": "https://www.productifynow.com/shop?q={search_term_string}",
       "query-input": "required name=search_term_string",
     },
   };

@@ -8,7 +8,7 @@ export default function PrivacyPolicy() {
       path="/legal/privacy"
     >
       <h2>1. Who we are</h2>
-      <p>Productify ("Productify", "we", "us", "our") operates the marketplace at <a href="https://productifynow.com">productifynow.com</a> for digital goods and GPU/system rentals. If you have questions about this policy, contact us at <a href="mailto:privacy@productifynow.com">privacy@productifynow.com</a>.</p>
+      <p>Productify ("Productify", "we", "us", "our") operates the marketplace at <a href="https://www.productifynow.com">productifynow.com</a> for digital goods and GPU/system rentals. If you have questions about this policy, contact us at <a href="mailto:privacy@productifynow.com">privacy@productifynow.com</a>.</p>
 
       <h2>2. Information we collect</h2>
       <ul>

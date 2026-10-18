@@ -1,14 +1,14 @@
 import { Helmet } from "react-helmet-async";
 
 export default function SEO({
-  title = "Productify — Digital Marketplace & GPU Rental",
-  description = "Buy digital products, sell your software and templates, and rent verified GPU nodes by the hour. Productify is the marketplace for people building tomorrow.",
+  title = "Productify — Digital products and GPU rentals",
+  description = "Productify is a marketplace for digital products and hourly GPU rentals. Buy software and templates from independent sellers, or rent a GPU by the hour.",
   path = "/",
   image,
   type = "website",
   jsonLd,
 }) {
-  const site = "https://productifynow.com";
+  const site = "https://www.productifynow.com";
   const url = site + path;
   const img = image || `${site}/og-cover.png`;
   return (

@@ -44,7 +44,7 @@ export default function Contact() {
       <p>Valid legal process (subpoenas, court orders, MLAT requests) should be sent to <a href="mailto:legal@productifynow.com">legal@productifynow.com</a>. Emergency requests: mark the subject line "EMERGENCY DISCLOSURE REQUEST" and expect a response within 12 hours.</p>
 
       <h2>Registered address</h2>
-      <p>To be added at company registration — <a href="https://productifynow.com">productifynow.com</a>.</p>
+      <p>To be added at company registration — <a href="https://www.productifynow.com">productifynow.com</a>.</p>
     </PolicyLayout>
   );
 }

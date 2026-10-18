@@ -1,9 +1,12 @@
 User-agent: *
 Allow: /
 Disallow: /dashboard
-Disallow: /admin
+Disallow: /seller-studio
+Disallow: /instances
 Disallow: /checkout
 Disallow: /payment/
 Disallow: /profile
 Disallow: /orders
-Sitemap: https://productifynow.com/sitemap.xml
+Disallow: /cart
+
+Sitemap: https://www.productifynow.com/sitemap.xml
