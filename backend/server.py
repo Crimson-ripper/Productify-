@@ -1646,6 +1646,94 @@ async def user_lookup(ids) -> dict:
     return {u["id"]: u for u in docs}
 
 
+# ---------- Leads: renter waitlist + provider applications (ROADMAP Task 4) ----------
+# Public, no login. Stored in db.leads with kind "waitlist" or "provider".
+# No ID documents, bank details or other sensitive data are collected (CLAUDE.md §4).
+
+LEAD_EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
+LEAD_ROLES = {"independent_dev", "startup", "research", "3d_artist", "other"}
+LEAD_RATE: dict = {}  # ip -> [timestamps]; per-process, good enough for a small form
+
+
+class WaitlistInput(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(max_length=254)
+    role: str
+    workload: str = Field(min_length=1, max_length=500)
+    gpu_needed: str = Field(default="", max_length=200)
+    frequency: str = Field(default="", max_length=100)
+    region: str = Field(default="", max_length=120)
+    current_provider: str = Field(default="", max_length=200)
+    monthly_spend: str = Field(default="", max_length=100)
+    consent: bool
+    website: str = Field(default="", max_length=200)  # honeypot: humans leave it empty
+
+
+class ProviderApplicationInput(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    contact: str = Field(min_length=3, max_length=254)  # email or phone, as the provider prefers
+    region: str = Field(min_length=1, max_length=120)
+    gpu_model: str = Field(min_length=1, max_length=120)
+    vram: str = Field(default="", max_length=50)
+    cpu: str = Field(default="", max_length=120)
+    ram: str = Field(default="", max_length=50)
+    storage: str = Field(default="", max_length=100)
+    os: str = Field(default="", max_length=100)
+    available_hours: str = Field(default="", max_length=200)
+    power_notes: str = Field(default="", max_length=1000)
+    entity: str = Field(default="individual", max_length=20)
+    security_concerns: str = Field(default="", max_length=1000)
+    expected_compensation: str = Field(default="", max_length=200)
+    consent: bool
+    website: str = Field(default="", max_length=200)
+
+
+def lead_rate_check(request: Request):
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    now = time.time()
+    hits = [t for t in LEAD_RATE.get(ip, []) if now - t < 3600]
+    if len(hits) >= 5:
+        raise HTTPException(status_code=429, detail="Too many submissions. Please try again later.")
+    hits.append(now)
+    LEAD_RATE[ip] = hits
+
+
+async def save_lead(kind: str, data: dict, request: Request):
+    if data.pop("website", ""):
+        return {"ok": True}  # bot filled the honeypot: pretend success, store nothing
+    if not data.get("consent"):
+        raise HTTPException(status_code=422, detail="Please tick the consent box.")
+    lead_rate_check(request)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "kind": kind,
+        "status": "new",
+        **{k: v.strip() if isinstance(v, str) else v for k, v in data.items()},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.leads.insert_one(doc)
+    return {"ok": True, "id": doc["id"]}
+
+
+@api.post("/leads/waitlist")
+async def leads_waitlist(body: WaitlistInput, request: Request):
+    if not LEAD_EMAIL_RE.match(body.email.strip()):
+        raise HTTPException(status_code=422, detail="Please enter a valid email address.")
+    if body.role not in LEAD_ROLES:
+        raise HTTPException(status_code=422, detail="Please choose your role.")
+    data = body.model_dump() if hasattr(body, "model_dump") else body.dict()
+    data["email"] = data["email"].strip().lower()
+    return await save_lead("waitlist", data, request)
+
+
+@api.post("/leads/provider")
+async def leads_provider(body: ProviderApplicationInput, request: Request):
+    if body.entity not in {"individual", "business"}:
+        raise HTTPException(status_code=422, detail="Please choose individual or business.")
+    data = body.model_dump() if hasattr(body, "model_dump") else body.dict()
+    return await save_lead("provider", data, request)
+
+
 @api.get("/admin/orders")
 async def admin_orders(status: str = "all", q: str = "", limit: int = 200, user=Depends(current_user)):
     """Every order on the site, newest first, with the buyer's name and email."""
