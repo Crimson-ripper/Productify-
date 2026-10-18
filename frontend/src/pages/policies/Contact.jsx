@@ -7,12 +7,13 @@ export default function Contact() {
       description="Reach the right team quickly — general support, privacy, grievance officer, DPO, DMCA and law enforcement."
       path="/legal/contact"
     >
+      <p>Productify is in closed beta. Questions about renting or providing GPUs go to support; many are answered in the <a href="/faq">FAQ</a>. Response times: [TODO: confirm support hours and response time].</p>
       <h2>General contacts</h2>
       <div className="contact-grid">
         <div className="contact-card">
           <b>Support</b>
           <a href="mailto:support@productifynow.com">support@productifynow.com</a>
-          <small>Order help, refunds, seller onboarding</small>
+          <small>Renting, provider applications, orders, refunds</small>
         </div>
         <div className="contact-card">
           <b>Privacy</b>

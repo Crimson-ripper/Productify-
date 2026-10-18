@@ -1,157 +1,202 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Cpu, Layers3, LayoutDashboard, Code2, Clapperboard } from "lucide-react";
+import { ArrowRight, Code2, SlidersHorizontal, FlaskConical, Box, ShieldCheck, Gauge, LifeBuoy } from "lucide-react";
 import { api, money } from "@/lib/api";
+import { ctaProps } from "@/lib/analytics";
+import { ROUTES } from "@/lib/routes";
 import SEO from "@/components/SEO";
-import ProductCard from "@/components/ProductCard";
-import RentalCard from "@/components/RentalCard";
+import GpuVisual from "@/components/GpuVisual";
 
-const categories = [
-  { name: "Software", icon: Layers3 },
-  { name: "Design", icon: LayoutDashboard },
-  { name: "Development", icon: Code2 },
-  { name: "Creative", icon: Clapperboard },
+const USE_CASES = [
+  { icon: Code2, title: "AI development", text: "Run Python and PyTorch code on an NVIDIA GPU when your laptop isn't enough. JupyterLab is on the way." },
+  { icon: SlidersHorizontal, title: "Fine-tuning", text: "Fine-tune models on a machine with the VRAM the job needs, and stop it when the job is done." },
+  { icon: FlaskConical, title: "Model testing", text: "Try a model on real GPU hardware before you commit to buying or reserving your own." },
 ];
 
-export default function Home() {
-  const [products, setProducts] = useState([]);
-  const [rentals, setRentals] = useState([]);
-  useEffect(() => {
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-    api.get("/rentals").then((r) => setRentals(r.data)).catch(() => {});
-  }, []);
+const STEPS = [
+  ["Choose a resource", "Pick a machine by GPU, VRAM and price."],
+  ["Start a rental", "Launch a PyTorch environment on it."],
+  ["Connect securely", "Work in the browser; your job runs in an isolated container."],
+  ["Track usage", "See runtime and cost while it runs."],
+  ["Stop", "Stop when you're done. The container and its files are deleted."],
+];
 
-  // Feature the cheapest node that is online right now, else the cheapest listed one.
-  const byPrice = [...rentals].sort((a, b) => a.price - b.price);
-  const featured = byPrice.find((r) => r.is_online) || byPrice[0];
-  const onlineCount = rentals.filter((r) => r.is_online).length;
+const PROVIDER_POINTS = [
+  ["Apply", "Tell us about your hardware. Productify reviews every application."],
+  ["Hardware verification", "The Productify Node app reports your GPU, memory and CPU directly from the machine."],
+  ["Availability controls", "Pause renting, set limits or stop all jobs from the app at any time."],
+  ["Operating requirements", "An NVIDIA GPU, Windows with Docker Desktop, and a steady internet connection."],
+  ["Payments", "Providers are paid for rented time minus the platform fee. Earnings depend on utilisation, price, power costs and downtime; nothing is guaranteed."],
+];
+
+function MachineCard({ r }) {
+  return (
+    <article className="hm-card">
+      <Link to={`/rental/${r.id}`} className="hm-card-visual" aria-label={r.title}><GpuVisual rental={r} /></Link>
+      <div className="hm-card-body">
+        <div className="hm-card-top">
+          <span className={r.is_online ? "node-status online" : "node-status"}>
+            <span className={r.is_online ? "live-dot" : "live-dot off"} />{r.is_online ? "Online now" : "Offline"}
+          </span>
+          <span className="dash-pill muted">Closed beta</span>
+        </div>
+        <dl className="hm-specs">
+          <div><dt>GPU</dt><dd>{r.gpu}</dd></div>
+          <div><dt>VRAM</dt><dd>{r.vram || "—"}</dd></div>
+          <div><dt>Region</dt><dd>{r.location || "—"}</dd></div>
+          <div><dt>Price</dt><dd>{money(r.price)}/hr</dd></div>
+        </dl>
+        <Link className="text-button text-button-dark" to={`/rental/${r.id}`} {...ctaProps("home_machine_card", { rental_id: r.id })}>View machine <ArrowRight size={14} /></Link>
+      </div>
+    </article>
+  );
+}
+
+export default function Home() {
+  const [machines, setMachines] = useState(null);
+
+  useEffect(() => {
+    api.get("/rentals")
+      .then((res) => setMachines([...res.data].sort((a, b) => Number(b.is_online) - Number(a.is_online) || a.price - b.price)))
+      .catch(() => setMachines([]));
+  }, []);
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Productify",
     "url": "https://www.productifynow.com",
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": "https://www.productifynow.com/shop?q={search_term_string}",
-      "query-input": "required name=search_term_string",
-    },
   };
 
   return (
     <>
       <SEO
-        title="Productify — Digital marketplace & GPU rentals"
-        description="Buy software, design assets and templates from independent sellers, or rent a GPU by the hour from someone who has one spare."
+        title="Productify — Rent GPU compute · Earn with your hardware"
+        description="Productify is a marketplace for renting GPU compute. Rent an NVIDIA GPU for AI development by the hour, or apply to make your idle GPU rentable. Closed beta."
         path="/"
         jsonLd={jsonLd}
       />
-      <section className="hero" data-testid="marketplace-hero">
+
+      {/* 1. Hero */}
+      <section className="hero hm-hero" data-testid="home-hero">
         <div className="hero-copy">
-          <div className="eyebrow">Productify · digital goods &amp; compute</div>
-          <h1>Buy the tools.<br />Rent the <em>GPU.</em></h1>
+          <div className="eyebrow">PRODUCTIFY / Rent Compute · Earn with Hardware</div>
+          <h1>Computing power when you need it.</h1>
           <p>
-            Software, templates and design files from independent sellers — and hourly
-            GPU time on machines people list from home or the studio.
+            Rent an NVIDIA GPU by the hour for AI development, or make your own idle GPU
+            available to others. Productify handles matching, isolation and billing.
+            We're in closed beta.
           </p>
           <div className="hero-actions">
-            <Link to="/shop" className="primary-button" data-testid="hero-shop-button">Browse the shop <ArrowRight size={17} /></Link>
-            <Link to="/rentals" className="text-button" data-testid="hero-rentals-button">See GPU rentals <ArrowRight size={15} /></Link>
-          </div>
-          {(products.length > 0 || rentals.length > 0) && (
-            <dl className="hero-counts">
-              <div><dt>Products</dt><dd>{products.length}</dd></div>
-              <div><dt>GPU listings</dt><dd>{rentals.length}</dd></div>
-              {onlineCount > 0 && <div><dt>Online now</dt><dd>{onlineCount}</dd></div>}
-            </dl>
-          )}
-        </div>
-        {featured && (
-          <div className="hero-art">
-            <div className="hero-grid" />
-            <Link to={`/rental/${featured.id}`} className="hero-card hero-card-main" data-testid="hero-featured-rental">
-              <div className="hero-card-top">
-                <span className={featured.is_online ? "live-dot" : "live-dot off"} />
-                {featured.is_online ? "ONLINE NOW" : "LISTED"} · {featured.location || "Location not set"}
-              </div>
-              <div className="hero-gpu">{featured.gpu}</div>
-              <div className="hero-spec"><span>{featured.vram}</span><span>{featured.owner}</span></div>
-              <div className="hero-price">{money(featured.price)} <small>/ hr</small></div>
-              <div className="hero-card-link">View this machine <ArrowRight size={13} /></div>
+            <Link to={ROUTES.waitlist} className="primary-button" {...ctaProps("hero_join_waitlist")}>
+              Join renter waitlist <ArrowRight size={17} />
+            </Link>
+            <Link to={ROUTES.apply} className="text-button" {...ctaProps("hero_apply_provider")}>
+              Apply as a provider <ArrowRight size={15} />
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* 2. Browse compute */}
+      <section className="hm-section" aria-labelledby="hm-browse">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow">Browse compute</div>
+            <h2 id="hm-browse">Machines in the closed beta</h2>
+          </div>
+          <Link to={ROUTES.rentals} className="text-button text-button-dark" {...ctaProps("home_all_machines")}>All machines <ArrowRight size={15} /></Link>
+        </div>
+        <p className="hm-note">
+          These machines are listed by providers and were checked by the Productify Node app on
+          the machine itself. Renting is in closed beta: availability changes as providers go
+          online and offline, and payments are in test mode.
+        </p>
+        {machines === null ? (
+          <p className="hm-empty">Loading machines…</p>
+        ) : machines.length === 0 ? (
+          <p className="hm-empty">
+            No machines are listed yet. <Link to={ROUTES.waitlist} {...ctaProps("browse_empty_waitlist")}>Join the waitlist</Link> and we'll tell you when there are.
+          </p>
+        ) : (
+          <div className="hm-cards">{machines.slice(0, 3).map((r) => <MachineCard key={r.id} r={r} />)}</div>
         )}
       </section>
 
-      <section className="category-strip" data-testid="category-strip">
-        <div className="section-label">Shop by category</div>
-        <div className="category-list">
-          <Link to="/shop" className="category" data-testid="category-all-button">All products</Link>
-          {categories.map(({ name, icon: Icon }) => (
-            <Link key={name} to={`/shop?category=${encodeURIComponent(name)}`} className="category" data-testid={`category-${name.toLowerCase()}-button`}>
-              <Icon size={16} />{name}
-            </Link>
+      {/* 3. Use cases */}
+      <section className="hm-section hm-tint" aria-labelledby="hm-uses">
+        <div className="eyebrow">Use cases</div>
+        <h2 id="hm-uses">What you can run</h2>
+        <div className="hm-grid3">
+          {USE_CASES.map(({ icon: Icon, title, text }) => (
+            <div className="hm-tile" key={title}>
+              <Icon size={20} aria-hidden="true" />
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </div>
           ))}
-          <Link to="/rentals" className="category" data-testid="category-gpu-link"><Cpu size={16} />GPU rental</Link>
+        </div>
+        <div className="hm-later">
+          <Box size={18} aria-hidden="true" />
+          <p><b>3D rendering — future pilot.</b> Blender rendering isn't supported yet. We plan to pilot it later; the waitlist form lets you tell us you're interested.</p>
         </div>
       </section>
 
-      {products.length > 0 && (
-        <section className="content-section" id="shop">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow">New in the shop</div>
-              <h2>Latest products</h2>
-            </div>
-            <Link to="/shop" className="text-button text-button-dark">All {products.length} products <ArrowRight size={15} /></Link>
-          </div>
-          <div className="product-grid" data-testid="product-grid">
-            {products.slice(0, 4).map((p) => <ProductCard key={p.id} p={p} />)}
-          </div>
-        </section>
-      )}
+      {/* 4. How it works */}
+      <section className="hm-section" aria-labelledby="hm-how">
+        <div className="eyebrow">How it works</div>
+        <h2 id="hm-how">From choosing a machine to stopping it</h2>
+        <ol className="hm-steps">
+          {STEPS.map(([title, text], i) => (
+            <li key={title}><span className="hm-step-n">{i + 1}</span><b>{title}</b><p>{text}</p></li>
+          ))}
+        </ol>
+        <Link to={ROUTES.rentCompute} className="text-button text-button-dark" {...ctaProps("home_how_rent_compute")}>More about renting compute <ArrowRight size={14} /></Link>
+      </section>
 
-      {rentals.length > 0 && (
-        <section className="rental-section" id="rentals">
-          <div className="section-heading rental-heading">
-            <div>
-              <div className="eyebrow green">Compute</div>
-              <h2>GPUs you can rent</h2>
+      {/* 5. For providers */}
+      <section className="hm-section hm-dark" aria-labelledby="hm-providers">
+        <div className="hm-split">
+          <div>
+            <div className="eyebrow">For providers</div>
+            <h2 id="hm-providers">Have an idle NVIDIA GPU?</h2>
+            <p className="hm-lead">
+              Apply to make it rentable. You stay in control of when it's available and what
+              renters can use.
+            </p>
+            <div className="hero-actions">
+              <Link to={ROUTES.apply} className="primary-button" {...ctaProps("providers_apply")}>Apply as a provider <ArrowRight size={17} /></Link>
+              <Link to={ROUTES.earnWithHardware} className="text-button" {...ctaProps("providers_learn_more")}>How it works for providers <ArrowRight size={15} /></Link>
             </div>
-            <p>Priced per hour by the owner. Pick a machine, launch a container, stop when you're done.</p>
-            <Link className="text-button green-text" to="/rentals">All GPU listings <ArrowRight size={15} /></Link>
           </div>
-          <div className="rental-grid">
-            {byPrice.slice(0, 2).map((r) => <RentalCard key={r.id} r={r} />)}
-          </div>
-        </section>
-      )}
-
-      <section className="how-band" aria-label="How Productify works">
-        <div>
-          <span className="how-num">1</span>
-          <b>Buy a product</b>
-          <p>Check out once; the purchase is listed under Orders in your account.</p>
-        </div>
-        <div>
-          <span className="how-num">2</span>
-          <b>Rent a GPU</b>
-          <p>Reserve a machine, run your container on it, and pay for the hours you use.</p>
-        </div>
-        <div>
-          <span className="how-num">3</span>
-          <b>Something wrong?</b>
-          <p>Report a listing from its page, or see the <Link to="/legal/refunds">refund policy</Link>.</p>
+          <dl className="hm-points">
+            {PROVIDER_POINTS.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          </dl>
         </div>
       </section>
 
-      <section className="sell-section" id="sell">
-        <div className="sell-copy">
-          <div className="eyebrow">Selling</div>
-          <h2>Have something to sell, or a GPU sitting idle?</h2>
-          <p>List digital products, or connect your own machine with the Productify Node app and rent it out by the hour. Opening a seller account is free.</p>
-          <Link className="primary-button" to="/sell" data-testid="start-selling-button">How selling works <ArrowRight size={17} /></Link>
+      {/* 6. Trust & support */}
+      <section className="hm-section" aria-labelledby="hm-trust">
+        <div className="eyebrow">Trust &amp; support</div>
+        <h2 id="hm-trust">Status, security and help</h2>
+        <div className="hm-grid3">
+          <Link to={ROUTES.security} className="hm-tile hm-link" {...ctaProps("trust_security")}>
+            <ShieldCheck size={20} aria-hidden="true" /><h3>Security</h3>
+            <p>How renter jobs are isolated from the provider's computer, and what providers can and can't see.</p>
+          </Link>
+          <Link to={ROUTES.pricing} className="hm-tile hm-link" {...ctaProps("trust_pricing")}>
+            <Gauge size={20} aria-hidden="true" /><h3>Pricing</h3>
+            <p>How hourly billing works, when it starts and stops, and the platform fee.</p>
+          </Link>
+          <Link to={ROUTES.faq} className="hm-tile hm-link" {...ctaProps("trust_faq")}>
+            <LifeBuoy size={20} aria-hidden="true" /><h3>FAQ &amp; contact</h3>
+            <p>Answers to common questions, and how to reach us.</p>
+          </Link>
         </div>
+        <p className="hm-status">
+          <b>Product status:</b> closed beta. GPU compute for AI/ML development (JupyterLab, Python,
+          PyTorch on NVIDIA GPUs). Payments are in test mode. Read our <Link to={ROUTES.privacy}>privacy notice</Link> or <Link to={ROUTES.contact}>contact us</Link>.
+        </p>
       </section>
     </>
   );

@@ -8,6 +8,13 @@ import Footer from "@/components/Footer";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AuthCallback from "@/components/AuthCallback";
 import Home from "@/pages/Home";
+import RentCompute from "@/pages/RentCompute";
+import EarnWithHardware from "@/pages/EarnWithHardware";
+import Waitlist from "@/pages/Waitlist";
+import Apply from "@/pages/Apply";
+import Pricing from "@/pages/Pricing";
+import Security from "@/pages/Security";
+import Faq from "@/pages/Faq";
 import Shop from "@/pages/Shop";
 import Rentals from "@/pages/Rentals";
 import ProductDetail from "@/pages/ProductDetail";
@@ -51,6 +58,13 @@ function AppRouter() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/rent-compute" element={<RentCompute />} />
+          <Route path="/earn-with-hardware" element={<EarnWithHardware />} />
+          <Route path="/waitlist" element={<Waitlist />} />
+          <Route path="/apply" element={<Apply />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/security" element={<Security />} />
+          <Route path="/faq" element={<Faq />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/rentals" element={<Rentals />} />
           <Route path="/gamezone" element={<Gamezone />} />

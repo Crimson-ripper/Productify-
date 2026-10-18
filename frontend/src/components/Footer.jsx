@@ -6,8 +6,16 @@ export default function Footer() {
       <div className="footer-grid">
         <div>
           <Link to="/" className="brand"><span className="brand-mark">P</span><span>productify<span className="brand-dot">.</span></span></Link>
-          <p className="footer-tag">A marketplace for digital products and hourly GPU rentals.</p>
+          <p className="footer-tag">Rent GPU compute, or earn with your hardware. Closed beta — payments are in test mode.</p>
           <a className="footer-mail" href="mailto:support@productifynow.com">support@productifynow.com</a>
+        </div>
+        <div className="footer-col">
+          <h5>Productify</h5>
+          <Link to="/rent-compute">Rent compute</Link>
+          <Link to="/earn-with-hardware">Earn with hardware</Link>
+          <Link to="/pricing">Pricing</Link>
+          <Link to="/security">Security</Link>
+          <Link to="/faq">FAQ</Link>
         </div>
         <div className="footer-col">
           <h5>Shop</h5>

@@ -5,6 +5,8 @@ import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
 
 const NAV = [
+  { to: "/rent-compute", label: "Rent compute", testid: "nav-rent-compute-link" },
+  { to: "/earn-with-hardware", label: "Earn with hardware", testid: "nav-earn-link" },
   { to: "/shop", label: "Shop", testid: "nav-shop-link" },
   { to: "/rentals", label: "GPU rentals", testid: "nav-rentals-link" },
   { to: "/gamezone", label: "Gamezone", testid: "nav-gamezone-link" },

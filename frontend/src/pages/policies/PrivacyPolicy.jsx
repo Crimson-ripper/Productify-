@@ -15,8 +15,9 @@ export default function PrivacyPolicy() {
         <li><b>Account data</b> — name, email, password hash, role (buyer/seller/admin), phone number (optional), avatar.</li>
         <li><b>Google sign-in data</b> — if you use Google, we receive your email, name and profile picture from Google via Emergent-managed OAuth.</li>
         <li><b>Listings & content</b> — product descriptions, GPU node specifications, uploaded images, and any files you transfer during a GPU rental session.</li>
+        <li><b>Waitlist and provider applications</b> — what you enter in the renter waitlist or provider application: name, email or preferred contact, role, region, workload or hardware details, availability and any notes. We use it only to run the closed beta and contact you about it. We don't ask for ID documents or bank details in these forms. To have an entry deleted, email <a href="mailto:privacy@productifynow.com">privacy@productifynow.com</a>.</li>
         <li><b>Transactions</b> — cart contents, order totals, payment provider, timestamps, region. Card and bank details are handled by our payment providers (Stripe, PayPal, Razorpay) — we never store your card number.</li>
-        <li><b>Technical data</b> — IP address, device, browser, cookies, log data, approximate location for region-based checkout.</li>
+        <li><b>Technical data</b> — IP address, device, browser, cookies, log data, approximate location for region-based checkout. We don't currently use a third-party analytics or session-recording tool; if we add one, we'll update this notice first.</li>
       </ul>
 
       <h2>3. Why we use it (legal bases)</h2>
