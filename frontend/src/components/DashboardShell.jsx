@@ -10,7 +10,7 @@ export default function DashboardShell({ seoTitle, path, eyebrow, title, subtitl
   return (
     <>
       <SEO title={seoTitle} path={path} />
-      <div className="dash">
+      <div className={nav.length ? "dash" : "dash no-side"}>
         {nav.length > 0 && (
           <aside className="dash-side" aria-label="Dashboard sections">
             <div className="dash-side-label">{eyebrow}</div>

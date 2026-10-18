@@ -268,6 +268,15 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .dash-attention a:hover{color:var(--violet)}
 .dash-main .dash-grid>div>.dash-panel:last-child{margin-bottom:0}
 .dash-clear{margin:0;font-size:13px;color:#6a6a63}
+.dash.no-side{grid-template-columns:1fr}
+.dash-split.three{grid-template-columns:repeat(3,1fr)}
+.dash-feed{list-style:none;margin:0;padding:0}
+.dash-feed li{padding:11px 22px;border-bottom:1px solid var(--line);font-size:13px}
+.dash-feed li:last-child{border-bottom:0}
+.dash-feed b{display:block;font-weight:700}
+.dash-feed small{display:block;margin-top:3px;font-size:11.5px;color:#7a7c76}
+.dash-select{border:1px solid var(--line);background:#fff;padding:9px 10px;font:13px Manrope,sans-serif}
+.dash-table td small{font-size:11px;color:#7a7c76}
 .dash-kv{margin:0}
 .dash-kv div{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;margin:0}
 .dash-kv div:last-child{border-bottom:0}
@@ -354,6 +363,7 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
   .dash-main{padding:24px 5% 70px}
   .dash-grid,.dash-split,.dash-plans{grid-template-columns:1fr}
   .hw-grid{grid-template-columns:1fr 1fr}
+  .dash-split.three{grid-template-columns:1fr}
   .dash-table th,.dash-table td{padding:11px 14px}
 }
 

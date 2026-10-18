@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   LayoutDashboard,
+  ShoppingBag,
   ShieldCheck,
   Users,
   Package,
@@ -27,6 +28,7 @@ import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
 import AdminCleanup from "@/components/AdminCleanup";
+import { AdminActivity, AdminOrders, AdminMachines, AdminInstances } from "@/components/AdminData";
 import { toast } from "sonner";
 
 export default function AdminDashboard() {
@@ -451,11 +453,14 @@ export default function AdminDashboard() {
     { key: "reviews", label: "Review queue", icon: Package, count: stats.pending_reviews_count },
     { key: "payouts", label: "Payouts", icon: CreditCard, count: stats.pending_payouts_count },
     { key: "reports", label: "Reports", icon: Flag, count: stats.open_reports_count },
+    { key: "orders", label: "Orders", icon: ShoppingBag },
+    { key: "machines", label: "Machines", icon: Server },
+    { key: "instances", label: "GPU instances", icon: Layers },
     { key: "users", label: "Users", icon: Users },
     { key: "catalog", label: "Catalog", icon: Search },
     { key: "gamezone", label: "Gamezone", icon: Gamepad2 },
   ];
-  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone" };
+  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone", orders: "Orders", machines: "Machines", instances: "GPU instances" };
   const attention = [
     stats.pending_reviews_count > 0 && { text: `${stats.pending_reviews_count} listing${stats.pending_reviews_count === 1 ? "" : "s"} waiting for review (${stats.pending_products_count} products, ${stats.pending_rentals_count} GPUs).`, action: { label: "Review", onClick: () => setTab("reviews") } },
     stats.pending_payouts_count > 0 && { text: `${stats.pending_payouts_count} withdrawal request${stats.pending_payouts_count === 1 ? "" : "s"} totalling ${money(stats.pending_payouts_amount)}.`, action: { label: "Decide", onClick: () => setTab("payouts") } },
@@ -498,6 +503,7 @@ export default function AdminDashboard() {
                 </dl>
               </Panel>
             </div>
+            <AdminActivity />
           </>
         )}
 
@@ -1910,6 +1916,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {tab === "orders" && <AdminOrders />}
+        {tab === "machines" && <AdminMachines />}
+        {tab === "instances" && <AdminInstances />}
     </DashboardShell>
   );
 }
