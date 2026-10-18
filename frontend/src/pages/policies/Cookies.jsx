@@ -18,10 +18,8 @@ export default function Cookies() {
         <li><b>productify-user</b> / <b>productify-cart</b> — remembers your profile info and cart between visits.</li>
       </ul>
 
-      <h3>Analytics (opt-in in EEA/UK/Brazil; opt-out elsewhere)</h3>
-      <ul>
-        <li>PostHog product analytics — aggregate usage and error tracking. We do not sell this data.</li>
-      </ul>
+      <h3>Analytics</h3>
+      <p>We do not currently use analytics cookies or session recording. If we add analytics later, we will list it here and ask for your consent first where the law requires it.</p>
 
       <h3>Advertising</h3>
       <p>We do not currently use advertising cookies.</p>
