@@ -66,9 +66,9 @@ Done when: every page exists, is linked, and contains no invented facts.
 
 ## Task 6 — SEO and crawlability
 
-- [ ] Implement the approved fix so marketing pages serve real HTML (titles, descriptions, headings, text).
-- [ ] Unique title, meta description and canonical URL per page; sitemap.xml and robots.txt.
-- [ ] Internal links between landing pages, pricing and FAQ.
+- [x] Implement the approved fix so marketing pages serve real HTML (titles, descriptions, headings, text). _(option A: `scripts/prerender.mjs` renders 17 routes at build time; other routes get `shell.html`)_
+- [x] Unique title, meta description and canonical URL per page; sitemap.xml and robots.txt.
+- [x] Internal links between landing pages, pricing and FAQ.
 
 Done when: fetching each marketing page without JavaScript shows its real content. ASK before
 changing build or hosting configuration.
