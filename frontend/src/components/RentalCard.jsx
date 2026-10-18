@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Cpu, MapPin } from "lucide-react";
 import { money } from "@/lib/api";
-import { PLACEHOLDER_IMG, imgFallback } from "@/lib/image";
+import GpuVisual from "@/components/GpuVisual";
 
 export default function RentalCard({ r }) {
   return (
     <article className="rental-card" data-testid={`rental-card-${r.id}`}>
-      <Link to={`/rental/${r.id}`}><img src={r.image || PLACEHOLDER_IMG} alt={r.title} loading="lazy" onError={imgFallback} /></Link>
+      <Link to={`/rental/${r.id}`} className="rental-card-visual" aria-label={r.title}><GpuVisual rental={r} /></Link>
       <div className="rental-info">
         <div className={r.is_online ? "node-status online" : "node-status"}>
           <span className={r.is_online ? "live-dot" : "live-dot off"} />

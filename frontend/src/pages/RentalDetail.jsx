@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { api, money } from "@/lib/api";
-import { PLACEHOLDER_IMG, imgFallback } from "@/lib/image";
+import GpuVisual from "@/components/GpuVisual";
 import SEO from "@/components/SEO";
 import ReportButton from "@/components/ReportButton";
 import GpuDeployModal from "@/components/GpuDeployModal";
@@ -30,9 +30,9 @@ export default function RentalDetail() {
 
   return (
     <>
-      <SEO title={`${r.title} — GPU rental · Productify`} description={r.description || `Rent ${r.gpu} with ${r.vram} VRAM at ${money(r.price)}/hour.`} path={`/rental/${r.id}`} image={r.image} />
+      <SEO title={`${r.title} — GPU rental · Productify`} description={r.description || `Rent ${r.gpu} with ${r.vram} VRAM at ${money(r.price)}/hour.`} path={`/rental/${r.id}`} />
       <section className="detail-page" data-testid={`rental-detail-${r.id}`}>
-        <div className="detail-image"><img src={r.image || PLACEHOLDER_IMG} alt={r.title} onError={imgFallback} /></div>
+        <div className="detail-image"><GpuVisual rental={r} large /></div>
         <div className="detail-info">
           <div className="crumb"><Link to="/rentals">GPU rentals</Link></div>
           <h1>{r.title}</h1>
