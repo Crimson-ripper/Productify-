@@ -3270,6 +3270,26 @@ async def download_productify_node():
 
 
 # ============== SEED ==============
+# One-time cleanup (approved by the site owner on 2026-10-18): the demo products/GPUs from the original
+# template and the prototype test GPUs. Exact ids only; once they're gone this does nothing.
+MOCK_PRODUCT_IDS = ["p1", "p2", "p3", "p4", "p5", "p6"]
+MOCK_RENTAL_IDS = [
+    "r1", "r2", "r3",
+    "a92b72ff-e756-4d35-91ce-521133888641",  # "check test 1"
+    "76247fda-8492-4191-871e-9241ee78e3f0",  # GeForce 920M (admin test)
+    "ea422ef4-c583-40d0-8af3-ddadc570e466",  # GeForce 920M (admin test)
+    "b8c02cf0-eb0c-407c-b575-1f4c6cf73d23",  # GeForce 920M (prototype test, owner's account)
+]
+
+
+async def remove_mock_listings():
+    p = await db.products.delete_many({"id": {"$in": MOCK_PRODUCT_IDS}})
+    r = await db.rentals.delete_many({"id": {"$in": MOCK_RENTAL_IDS}})
+    await db.nodes.delete_many({"rental_id": {"$in": MOCK_RENTAL_IDS}})
+    if p.deleted_count or r.deleted_count:
+        logger.warning(f"Removed mock listings: {p.deleted_count} products, {r.deleted_count} GPUs")
+
+
 async def seed():
     admin_email, admin_password = os.environ["ADMIN_EMAIL"], os.environ["ADMIN_PASSWORD"]
     existing_admin = await db.users.find_one({"email": admin_email})
@@ -4192,6 +4212,7 @@ async def startup():
     except Exception as e:
         logger.warning(f"Storage will retry on first upload: {e}")
     await seed()
+    await remove_mock_listings()
 
     # Initialize Node Lifecycle & Currency Engines with database
     node_manager.set_db(db)
