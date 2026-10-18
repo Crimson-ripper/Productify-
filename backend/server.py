@@ -1633,6 +1633,116 @@ async def admin_all_listings(
     return items
 
 
+def require_staff(user: dict):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+
+async def user_lookup(ids) -> dict:
+    ids = [i for i in set(ids) if i]
+    if not ids:
+        return {}
+    docs = await db.users.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1}).to_list(len(ids))
+    return {u["id"]: u for u in docs}
+
+
+@api.get("/admin/orders")
+async def admin_orders(status: str = "all", q: str = "", limit: int = 200, user=Depends(current_user)):
+    """Every order on the site, newest first, with the buyer's name and email."""
+    require_staff(user)
+    query = {} if status == "all" else {"status": status}
+    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(1000, limit)))
+    buyers = await user_lookup(o.get("user_id") for o in orders)
+    out = []
+    for o in orders:
+        b = buyers.get(o.get("user_id"), {})
+        row = {**o, "buyer_name": b.get("name", "Deleted user"), "buyer_email": b.get("email", "")}
+        if q.strip():
+            hay = " ".join([row["buyer_name"], row["buyer_email"], o.get("id", "")] + [it.get("title", "") for it in o.get("items", [])]).lower()
+            if q.strip().lower() not in hay:
+                continue
+        out.append(row)
+    return out
+
+
+@api.get("/admin/machines")
+async def admin_machines(user=Depends(current_user)):
+    """Every GPU machine in any state, with owner, reported hardware and live connection status."""
+    require_staff(user)
+    rentals = await db.rentals.find({}, {"_id": 0, "pairing_token": 0}).sort("created_at", -1).to_list(1000)
+    owners = await user_lookup(r.get("owner_id") for r in rentals)
+    out = []
+    for r in rentals:
+        meta = node_hub.meta.get(r["id"]) or host_tunnel_manager.node_meta.get(r["id"]) or {}
+        o = owners.get(r.get("owner_id"), {})
+        out.append({
+            **r,
+            "owner_email": o.get("email", ""),
+            "is_online": host_tunnel_manager.is_connected(r["id"]),
+            "live": meta.get("live"),
+            "jobs": meta.get("jobs"),
+            "gpu_temp_c": meta.get("gpu_temp_c"),
+            "last_seen": meta.get("last_seen"),
+            "transport": meta.get("transport"),
+        })
+    return out
+
+
+@api.get("/admin/instances")
+async def admin_instances(status: str = "all", user=Depends(current_user)):
+    """Every GPU instance renters have launched, with renter and machine owner."""
+    require_staff(user)
+    query = {} if status == "all" else {"status": status}
+    rows = await db.instances.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    now = datetime.now(timezone.utc)
+    for inst in rows:
+        total = float(inst.get("total_runtime_seconds", 0) or 0)
+        if inst.get("status") == "running" and inst.get("started_at"):
+            try:
+                started = datetime.fromisoformat(inst["started_at"])
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                total += max(0, (now - started).total_seconds())
+            except Exception:
+                pass
+        inst["live_runtime_seconds"] = int(total)
+        inst["live_cost"] = round(total / 3600.0 * float(inst.get("hourly_price", 0) or 0), 4)
+    return rows
+
+
+@api.get("/admin/activity")
+async def admin_activity(user=Depends(current_user)):
+    """Latest sign-ups, orders and listings for the admin overview."""
+    require_staff(user)
+    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "created_at": 1}).sort("created_at", -1).to_list(8)
+    orders = await db.orders.find({}, {"_id": 0, "id": 1, "user_id": 1, "total": 1, "currency": 1, "status": 1, "created_at": 1, "items": 1}).sort("created_at", -1).to_list(8)
+    buyers = await user_lookup(o.get("user_id") for o in orders)
+    for o in orders:
+        o["buyer_name"] = buyers.get(o.get("user_id"), {}).get("name", "Deleted user")
+        o["titles"] = ", ".join(it.get("title", "") for it in o.pop("items", []) if it.get("title"))
+    prods = await db.products.find({}, {"_id": 0, "id": 1, "title": 1, "seller": 1, "approved": 1, "created_at": 1}).sort("created_at", -1).to_list(8)
+    rents = await db.rentals.find({}, {"_id": 0, "id": 1, "title": 1, "owner": 1, "status": 1, "gpu": 1, "created_at": 1}).sort("created_at", -1).to_list(8)
+    listings = [{**p, "kind": "product", "who": p.get("seller"), "state": "live" if p.get("approved") else "in review"} for p in prods] + \
+               [{**r, "kind": "gpu", "who": r.get("owner"), "state": r.get("status"), "title": r.get("title") or r.get("gpu") or "New machine"} for r in rents]
+    listings.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    recent_orders = await db.orders.find({"status": "completed", "created_at": {"$gte": month_ago}}, {"_id": 0, "total": 1}).to_list(5000)
+    rentals_all = await db.rentals.find({}, {"_id": 0, "id": 1}).to_list(2000)
+    return {
+        "users": users,
+        "orders": orders,
+        "listings": listings[:10],
+        "new_users_7d": await db.users.count_documents({"created_at": {"$gte": week_ago}}),
+        "orders_30d": len(recent_orders),
+        "revenue_30d": round(sum(float(o.get("total", 0) or 0) for o in recent_orders), 2),
+        "machines_online": sum(1 for r in rentals_all if host_tunnel_manager.is_connected(r["id"])),
+        "machines_total": len(rentals_all),
+        "instances_running": await db.instances.count_documents({"status": "running"}),
+    }
+
+
 @api.delete("/admin/listings/{kind}/{id}")
 async def admin_delete_listing(
     kind: str,
@@ -2502,8 +2612,10 @@ async def host_tunnel_reply(rental_id: str, data: dict):
 # ==============================================================================
 
 @api.get("/nodes/fleet")
-async def get_node_fleet():
-    """Return live status of all physical compute nodes connected across the platform."""
+async def get_node_fleet(user=Depends(current_user)):
+    """Return live status of all physical compute nodes connected across the platform (admins only)."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
     all_nodes = node_manager.get_all_nodes()
     online_idle = sum(1 for n in all_nodes if n.get("status") == NodeStatus.ONLINE_IDLE.value)
     in_use = sum(1 for n in all_nodes if n.get("status") == NodeStatus.IN_USE.value)
