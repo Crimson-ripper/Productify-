@@ -10,8 +10,8 @@ import { toast } from "sonner";
 
 const CATS = ["Software", "Design", "Development", "Creative"];
 const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
-// Point this at the signed v2 installer once it is published.
-const NODE_DOWNLOAD_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/latest";
+// Direct link to the installer file, so the browser downloads it instead of opening GitHub.
+const NODE_DOWNLOAD_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/download/v2.0.0/ProductifyNode-Setup.exe";
 const PLANS = [
   { tier: "free", name: "Free", fee: "10%" },
   { tier: "plus", name: "Plus", fee: "5%" },
@@ -300,7 +300,7 @@ export default function SellerDashboard() {
 
   const pairingSteps = (r) => (
     <ol className="pair-steps">
-      <li><span>1</span><div><b>Install Productify Node</b> on the computer you want to rent out. <a className="link-button" href={NODE_DOWNLOAD_URL} target="_blank" rel="noreferrer">Download for Windows</a></div></li>
+      <li><span>1</span><div><b>Install Productify Node</b> on the computer you want to rent out. <a className="link-button" href={NODE_DOWNLOAD_URL} download>Download for Windows</a></div></li>
       <li><span>2</span><div><b>Paste this pairing code</b> into the app:<CopyCode text={r.pairing_code} /></div></li>
       <li><span>3</span><div><b>That's it.</b> The GPU, memory and CPU appear here by themselves once the app connects. <span className="pair-wait"><span className="spinner small" /> Waiting for your machine…</span></div></li>
     </ol>
@@ -320,7 +320,7 @@ export default function SellerDashboard() {
           <p>Create a pairing code, paste it into Productify Node on your computer, and your hardware fills in automatically. No photos or specs to type.</p>
           <div className="dash-form-actions">
             <button className="primary-button" onClick={createMachine} disabled={busy}>Create pairing code</button>
-            <a className="text-button text-button-dark" href={NODE_DOWNLOAD_URL} target="_blank" rel="noreferrer"><Download size={14} /> Download Productify Node</a>
+            <a className="text-button text-button-dark" href={NODE_DOWNLOAD_URL} download><Download size={14} /> Download Productify Node</a>
           </div>
         </div>
       ) : (
