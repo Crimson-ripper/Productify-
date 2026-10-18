@@ -48,7 +48,7 @@ import Contact from "@/pages/policies/Contact";
 import CookieBanner from "@/components/CookieBanner";
 import PolicyBumpModal from "@/components/PolicyBumpModal";
 
-function AppRouter() {
+export function AppRouter() {
   const location = useLocation();
   // Detect Emergent OAuth callback via URL fragment — must happen before other route logic
   if (location.hash?.includes("session_id=")) return <AuthCallback />;
@@ -109,14 +109,21 @@ function AppRouter() {
   );
 }
 
+// Shared by the browser app and the build-time pre-render (scripts/prerender.mjs).
+export function AppProviders({ children }) {
+  return (
+    <AuthProvider>
+      <CartProvider>{children}</CartProvider>
+    </AuthProvider>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <CartProvider>
-          <AppRouter />
-        </CartProvider>
-      </AuthProvider>
+      <AppProviders>
+        <AppRouter />
+      </AppProviders>
     </BrowserRouter>
   );
 }

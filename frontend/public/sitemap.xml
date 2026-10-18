@@ -1,12 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://www.productifynow.com/</loc><lastmod>2026-10-18</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
-  <url><loc>https://www.productifynow.com/rentals</loc><lastmod>2026-10-18</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>
-  <url><loc>https://www.productifynow.com/shop</loc><lastmod>2026-10-18</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>
-  <url><loc>https://www.productifynow.com/sell</loc><lastmod>2026-10-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://www.productifynow.com/gamezone</loc><lastmod>2026-10-18</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
-  <url><loc>https://www.productifynow.com/legal/privacy</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.productifynow.com/</loc><lastmod>2026-10-19</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://www.productifynow.com/rent-compute</loc><lastmod>2026-10-19</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.productifynow.com/earn-with-hardware</loc><lastmod>2026-10-19</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.productifynow.com/rentals</loc><lastmod>2026-10-19</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.productifynow.com/waitlist</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.productifynow.com/apply</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.productifynow.com/pricing</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.productifynow.com/security</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.productifynow.com/faq</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.productifynow.com/shop</loc><lastmod>2026-10-19</lastmod><changefreq>daily</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.productifynow.com/sell</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.productifynow.com/gamezone</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.productifynow.com/legal/privacy</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://www.productifynow.com/legal/terms</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://www.productifynow.com/legal/refunds</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
-  <url><loc>https://www.productifynow.com/legal/contact</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.productifynow.com/legal/cookies</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.productifynow.com/legal/acceptable-use</loc><lastmod>2026-10-18</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.productifynow.com/legal/contact</loc><lastmod>2026-10-19</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
