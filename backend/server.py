@@ -1667,6 +1667,8 @@ class WaitlistInput(BaseModel):
     monthly_spend: str = Field(default="", max_length=100)
     consent: bool
     website: str = Field(default="", max_length=200)  # honeypot: humans leave it empty
+    source: str = Field(default="", max_length=200)  # channel: utm_source or referrer host or "direct"
+    campaign: str = Field(default="", max_length=200)
 
 
 class ProviderApplicationInput(BaseModel):
@@ -1686,6 +1688,24 @@ class ProviderApplicationInput(BaseModel):
     expected_compensation: str = Field(default="", max_length=200)
     consent: bool
     website: str = Field(default="", max_length=200)
+    source: str = Field(default="", max_length=200)
+    campaign: str = Field(default="", max_length=200)
+
+
+# Pipeline fields an admin edits (ROADMAP Task 9). Leads start as stage "new", qualification "unreviewed".
+LEAD_STAGES = ["new", "contacted", "qualified", "onboarding", "active", "closed"]
+LEAD_QUALIFICATION = ["unreviewed", "qualified", "not_a_fit"]
+LEAD_OUTCOMES = ["", "converted", "not_interested", "no_response", "not_a_fit"]
+
+
+class LeadUpdateInput(BaseModel):
+    stage: Optional[str] = None
+    qualification: Optional[str] = None
+    owner: Optional[str] = Field(default=None, max_length=120)
+    last_contact: Optional[str] = Field(default=None, max_length=40)  # ISO date
+    next_action: Optional[str] = Field(default=None, max_length=500)
+    outcome: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 def lead_rate_check(request: Request):
@@ -1707,8 +1727,10 @@ async def save_lead(kind: str, data: dict, request: Request):
     doc = {
         "id": str(uuid.uuid4()),
         "kind": kind,
-        "status": "new",
         **{k: v.strip() if isinstance(v, str) else v for k, v in data.items()},
+        "source": (data.get("source") or "direct").strip().lower()[:200],
+        "stage": "new", "qualification": "unreviewed", "owner": "", "last_contact": None,
+        "next_action": "", "outcome": "", "notes": "",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.leads.insert_one(doc)
@@ -1732,6 +1754,79 @@ async def leads_provider(body: ProviderApplicationInput, request: Request):
         raise HTTPException(status_code=422, detail="Please choose individual or business.")
     data = body.model_dump() if hasattr(body, "model_dump") else body.dict()
     return await save_lead("provider", data, request)
+
+
+LEAD_CSV_COLUMNS = [
+    "created_at", "kind", "source", "campaign", "name", "email", "contact", "region", "role", "workload",
+    "gpu_needed", "frequency", "current_provider", "monthly_spend", "gpu_model", "vram", "cpu", "ram",
+    "storage", "os", "available_hours", "entity", "power_notes", "security_concerns", "expected_compensation",
+    "qualification", "stage", "owner", "last_contact", "next_action", "outcome", "notes", "id",
+]
+
+
+def lead_row(d: dict) -> dict:
+    # Older leads (before Task 9) used "status"; normalise so every row has the pipeline fields.
+    return {**{c: "" for c in LEAD_CSV_COLUMNS}, "stage": d.get("status") or "new", "qualification": "unreviewed",
+            "source": "direct", **{k: v for k, v in d.items() if k != "status"}}
+
+
+async def find_leads(kind: str, stage: str, q: str):
+    query = {}
+    if kind in ("waitlist", "provider"):
+        query["kind"] = kind
+    rows = [lead_row(d) for d in await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)]
+    if stage in LEAD_STAGES:
+        rows = [r for r in rows if r["stage"] == stage]
+    if q.strip():
+        needle = q.strip().lower()
+        rows = [r for r in rows if needle in " ".join(str(r.get(c) or "") for c in LEAD_CSV_COLUMNS).lower()]
+    return rows
+
+
+@api.get("/admin/leads")
+async def admin_leads(kind: str = "all", stage: str = "all", q: str = "", user=Depends(current_user)):
+    """Renter waitlist entries and provider applications, newest first."""
+    require_staff(user)
+    return await find_leads(kind, stage, q)
+
+
+@api.patch("/admin/leads/{lead_id}")
+async def admin_update_lead(lead_id: str, body: LeadUpdateInput, user=Depends(current_user)):
+    require_staff(user)
+    data = body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True)
+    if "stage" in data and data["stage"] not in LEAD_STAGES:
+        raise HTTPException(422, "Unknown stage")
+    if "qualification" in data and data["qualification"] not in LEAD_QUALIFICATION:
+        raise HTTPException(422, "Unknown qualification")
+    if "outcome" in data and data["outcome"] not in LEAD_OUTCOMES:
+        raise HTTPException(422, "Unknown outcome")
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    data["updated_by"] = user.get("email", "")
+    res = await db.leads.update_one({"id": lead_id}, {"$set": data, "$unset": {"status": ""}})
+    if not res.matched_count:
+        raise HTTPException(404, "Lead not found")
+    return lead_row(await db.leads.find_one({"id": lead_id}, {"_id": 0}))
+
+
+@api.get("/admin/leads/export.csv")
+async def admin_leads_csv(kind: str = "all", stage: str = "all", q: str = "", user=Depends(current_user)):
+    require_staff(user)
+    import csv, io
+    rows = await find_leads(kind, stage, q)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(LEAD_CSV_COLUMNS)
+    for r in rows:
+        cells = []
+        for c in LEAD_CSV_COLUMNS:
+            v = "" if r.get(c) is None else str(r.get(c))
+            if v[:1] in ("=", "+", "-", "@"):  # stop spreadsheet formula injection
+                v = "'" + v
+            cells.append(v)
+        w.writerow(cells)
+    name = f"productify-leads-{datetime.now(timezone.utc):%Y-%m-%d}.csv"
+    return Response(content="﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
 
 
 @api.get("/admin/orders")
