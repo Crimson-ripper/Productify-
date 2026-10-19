@@ -70,8 +70,8 @@ export default function MyInstances() {
   return (
     <>
       <SEO
-        title="My Cloud GPU Instances · Productify"
-        description="Manage on-demand cloud GPU instances, containers, JupyterLab, and ComfyUI sessions."
+        title="My GPU instances · Productify"
+        description="See and manage the GPU instances you've started on Productify."
         path="/instances"
       />
 
@@ -83,10 +83,10 @@ export default function MyInstances() {
               <Zap size={14} /> Your instances
             </div>
             <h1 style={{ margin: "2px 0 6px", fontSize: "clamp(2rem, 3.5vw, 2.8rem)", fontWeight: 800, fontFamily: "var(--font-heading, sans-serif)", letterSpacing: "-0.04em" }}>
-              Cloud GPU Instances
+              GPU instances
             </h1>
             <p style={{ margin: 0, color: "var(--muted, #666)", fontSize: "0.92rem", maxWidth: "600px" }}>
-              Vast.ai-grade peer-to-peer compute instances. Launch containerized JupyterLab, ComfyUI, or Ollama with per-second metering.
+              PyTorch and Python containers on providers' GPUs, billed by the second while running. Closed beta: payments are in test mode.
             </p>
           </div>
 
@@ -95,7 +95,7 @@ export default function MyInstances() {
             className="primary-button"
             style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "12px 22px", fontSize: "0.9rem", fontWeight: 700 }}
           >
-            <Plus size={16} /> Deploy New GPU Node
+            <Plus size={16} /> Start a new instance
           </Link>
         </div>
 
@@ -148,7 +148,7 @@ export default function MyInstances() {
             <h3 style={{ margin: "0 0 6px", fontSize: "1.2rem" }}>No instances found</h3>
             <p style={{ color: "var(--muted, #666)", fontSize: "0.88rem", maxWidth: "420px", margin: "0 auto 20px" }}>
               {filter === "all"
-                ? "You haven't deployed any GPU instances yet. Choose from RTX 4090, A100, and more with instant setup."
+                ? "You haven't started any instances yet. Pick a machine on the GPU rentals page."
                 : `No instances currently in "${filter}" status.`}
             </p>
             <Link to="/rentals" className="primary-button" style={{ display: "inline-flex" }}>

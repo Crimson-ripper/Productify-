@@ -60,11 +60,11 @@ export default function Shop() {
         </div>
         <form className="shop-search" onSubmit={onSearch}>
           <Search size={16} />
-          <input value={localQ} onChange={(e) => setLocalQ(e.target.value)} placeholder="Search products…" data-testid="shop-search-input" />
+          <input value={localQ} onChange={(e) => setLocalQ(e.target.value)} placeholder="Search products…" aria-label="Search products" data-testid="shop-search-input" />
         </form>
         <div className="sort-wrap">
           <SlidersHorizontal size={15} />
-          <select value={sort} onChange={(e) => set("sort", e.target.value)} data-testid="shop-sort-select">
+          <select value={sort} onChange={(e) => set("sort", e.target.value)} aria-label="Sort products" data-testid="shop-sort-select">
             <option value="recent">Most recent</option>
             <option value="price_asc">Price · low to high</option>
             <option value="price_desc">Price · high to low</option>

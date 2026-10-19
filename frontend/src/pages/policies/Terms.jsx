@@ -28,7 +28,7 @@ export default function Terms() {
 
       <h2>6. GPU / system rentals</h2>
       <ul>
-        <li>All rental listings are verified by Productify before going live. Verification is a good-faith check, not a warranty of continuous performance.</li>
+        <li>GPU machines are paired with the Productify Node app, which reports their hardware, and are reviewed by Productify before going live. This is a good-faith check, not a warranty of availability or performance; providers' machines can go offline.</li>
         <li>Rentals are billed by the hour or as specified in the listing.</li>
         <li>The rental is delivered as a service — access to a remote system for the paid duration. No physical hardware ships.</li>
         <li>Illegal, abusive or unsafe use is prohibited under our Acceptable Use Policy and will result in immediate suspension.</li>

@@ -497,26 +497,28 @@ export default function InstanceDetail() {
           {/* GPU Telemetry */}
           <div style={{ background: "#ffffff", padding: "20px", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted, #777)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
-              <Gauge size={15} /> GPU Utilization & VRAM
+              <Gauge size={15} /> GPU
             </div>
-            <div style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "var(--font-mono, monospace)", color: "var(--ink, #101112)", margin: "8px 0 2px" }}>
-              {instance.telemetry?.gpu_utilization_pct || 78}%
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink, #101112)", margin: "10px 0 4px" }}>
+              {instance.gpu}{instance.vram ? ` · ${instance.vram}` : ""}
             </div>
             <span style={{ fontSize: "0.75rem", color: "#666" }}>
-              VRAM: {instance.telemetry?.vram_used_gb || 16.4} / {instance.telemetry?.vram_total_gb || 24} GB · {instance.telemetry?.temperature_c || 64}°C
+              {instance.telemetry
+                ? `Utilisation ${instance.telemetry.gpu_utilization_pct}% · VRAM ${instance.telemetry.vram_used_gb} GB used`
+                : "Live GPU usage isn't reported yet. Run nvidia-smi in the terminal to check."}
             </span>
           </div>
 
           {/* Host Node Specs */}
           <div style={{ background: "#ffffff", padding: "20px", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted, #777)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
-              <Server size={15} /> Node Connectivity
+              <Server size={15} /> Machine connection
             </div>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink, #101112)", margin: "10px 0 4px", fontFamily: "var(--font-mono, monospace)" }}>
-              {instance.host_ip}:{instance.ssh_port}
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: instance.tunnel_connected ? "var(--ok)" : "var(--danger)", margin: "10px 0 4px" }}>
+              {instance.tunnel_connected ? "Connected" : "Machine offline"}
             </div>
             <span style={{ fontSize: "0.75rem", color: "#666" }}>
-              Scratch: {instance.disk_size_gb} GB NVMe ext4 attached
+              Disk: {instance.disk_size_gb} GB
             </span>
           </div>
         </div>
@@ -537,42 +539,12 @@ export default function InstanceDetail() {
           }}
         >
           <div>
-            <div style={{ fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "var(--font-mono, monospace)", marginBottom: "4px" }}>
-              DIRECT ACCESS PROTOCOLS
+            <div style={{ fontSize: "0.72rem", color: "var(--on-ink-subtle)", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "var(--font-mono, monospace)", marginBottom: "4px" }}>
+              How to connect
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: "#a3e635", fontSize: "0.85rem", fontWeight: 700 }}>SSH command:</span>
-                <code style={{ background: "#26292b", padding: "5px 10px", borderRadius: 0, fontSize: "0.82rem", color: "#e5e7eb" }}>
-                  {instance.ssh_command}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(instance.ssh_command, "ssh")}
-                  style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", padding: "2px" }}
-                  title="Copy SSH command"
-                >
-                  {copiedField === "ssh" ? <Check size={16} color="#a3e635" /> : <Copy size={16} />}
-                </button>
-              </div>
-
-              {instance.jupyter_token && (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ color: "#a3e635", fontSize: "0.85rem", fontWeight: 700 }}>Token:</span>
-                  <code style={{ background: "#26292b", padding: "5px 10px", borderRadius: 0, fontSize: "0.82rem", color: "#e5e7eb" }}>
-                    {instance.jupyter_token}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(instance.jupyter_token, "token")}
-                    style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", padding: "2px" }}
-                    title="Copy auth token"
-                  >
-                    {copiedField === "token" ? <Check size={16} color="#a3e635" /> : <Copy size={16} />}
-                  </button>
-                </div>
-              )}
-            </div>
+            <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--on-ink-muted)", maxWidth: 520 }}>
+              Use the browser terminal below to run Python and PyTorch commands in your container. SSH and JupyterLab access aren't available yet.
+            </p>
           </div>
 
           <div>
@@ -595,7 +567,7 @@ export default function InstanceDetail() {
                 border: "none",
               }}
             >
-              <ExternalLink size={15} /> Launch In-Browser {instance.service_name}
+              <ExternalLink size={15} /> Open browser terminal
             </button>
           </div>
         </div>
@@ -619,17 +591,17 @@ export default function InstanceDetail() {
             <ShieldCheck size={20} color="var(--ok)" />
             <div>
               <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#166534" }}>
-                Zero-Persistence Sandboxed Pod · Hardware Isolation Active
+                Isolated container
               </div>
               <div style={{ fontSize: "0.78rem", color: "var(--ok)", marginTop: "2px" }}>
-                All container memory, mounted scratch disks, and temporary tokens are cryptographically wiped from the host rig the moment this instance is terminated.
+                Your job runs in a container without access to the provider's files. When you stop the instance, the container and its files are deleted. <a href="/security" style={{ color: "inherit", textDecoration: "underline" }}>How isolation works</a>
               </div>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.76rem", color: "#166534", fontFamily: "var(--font-mono, monospace)" }}>
             <span style={{ background: "#e9f3e5", padding: "4px 8px", borderRadius: 0, border: "1px solid #86efac", fontWeight: 600 }}>
-              {instance.tunnel_connected ? "REVERSE_TUNNEL: ONLINE" : "CLOUD_SANDBOX: ACTIVE"}
+              {instance.tunnel_connected ? "MACHINE: ONLINE" : "MACHINE: OFFLINE"}
             </span>
             {instance.host_meta?.docker_available && (
               <span style={{ background: "#e9f3e5", padding: "4px 8px", borderRadius: 0, border: "1px solid #86efac", fontWeight: 600 }}>

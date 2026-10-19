@@ -1,45 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { HardDrive, ShieldCheck, Zap, X, CheckCircle2, Loader2, Key } from "lucide-react";
+import { HardDrive, Zap, X, CheckCircle2, Loader2 } from "lucide-react";
 import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import TemplateIcon from "@/components/TemplateIcon";
 
-const DEFAULT_TEMPLATES = [
-  {
-    id: "jupyter-pytorch",
-    name: "PyTorch 2.4 + JupyterLab",
-    category: "Deep Learning & AI",
-    description: "CUDA 12.4, PyTorch 2.4, TorchVision, Torchaudio, FlashAttention-2, JupyterLab in-browser.",
-    port: 8888,
-    service_name: "JupyterLab",
-  },
-  {
-    id: "comfyui-sdxl",
-    name: "ComfyUI + SDXL & Flux",
-    category: "Generative Art",
-    description: "Pre-loaded with SDXL Turbo, Flux weights, and ControlNet for visual generation.",
-    port: 8188,
-    service_name: "ComfyUI Web",
-  },
-  {
-    id: "ollama-llm",
-    name: "Ollama + Open WebUI",
-    category: "LLMs & Chat",
-    description: "Host DeepSeek-R1, Llama 3.3, and Mistral with lightning-fast inference and UI.",
-    port: 11434,
-    service_name: "Ollama API & WebUI",
-  },
-  {
-    id: "ubuntu-base",
-    name: "Ubuntu 22.04 LTS (CUDA Base)",
-    category: "Custom Compute",
-    description: "Pure Linux root shell with NVIDIA Drivers 550, Docker, Git, and full SSH access.",
-    port: 22,
-    service_name: "SSH Shell",
-  },
-];
+import { DEFAULT_TEMPLATES } from "@/lib/templates";
 
 export default function GpuDeployModal({ rental, isOpen, onClose }) {
   const { user } = useAuth();
@@ -48,8 +15,6 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
   const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
   const [selectedTemplate, setSelectedTemplate] = useState("jupyter-pytorch");
   const [diskSize, setDiskSize] = useState(50);
-  const [sshKey, setSshKey] = useState("");
-  const [showSshInput, setShowSshInput] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => {
@@ -84,10 +49,9 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
         rental_id: rental.id,
         template_id: selectedTemplate,
         disk_size_gb: Number(diskSize),
-        ssh_public_key: sshKey.trim() || null,
       });
 
-      toast.success("Instance container launched! Connecting to node...");
+      toast.success("Container started.");
       onClose();
       navigate(`/instances/${res.data.id}`);
     } catch (err) {
@@ -111,16 +75,14 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
               <Zap size={14} /> Launch a container
             </div>
             <h2 style={{ margin: "2px 0 6px", fontSize: "1.45rem", fontFamily: "var(--font-heading, sans-serif)", letterSpacing: "-0.03em" }}>
-              Launch Cloud Instance
+              Start an instance
             </h2>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.85rem", color: "var(--muted, #666)" }}>
               <span><b>{rental.gpu}</b> ({rental.vram})</span>
               <span>•</span>
               <span>{rental.location}</span>
               <span>•</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#3c9563" }}>
-                <ShieldCheck size={14} /> {rental.owner}
-              </span>
+              <span>Provider: {rental.owner}</span>
             </div>
           </div>
           <button
@@ -157,7 +119,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
                     <TemplateIcon id={tpl.id} />
                     <span style={{ fontSize: "0.72rem", background: "#f1f3ed", color: "#4f5348", padding: "2px 7px", borderRadius: "100px", fontFamily: "var(--font-mono, monospace)" }}>
-                      Port {tpl.port}
+                      {tpl.service_name}
                     </span>
                   </div>
                   <h4 style={{ margin: "0 0 4px", fontSize: "0.92rem", fontWeight: 700 }}>{tpl.name}</h4>
@@ -179,7 +141,7 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
         <div style={{ marginBottom: "22px", background: "#f8f9f5", padding: "16px", borderRadius: 0, border: "1px solid #ebece4" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700 }}>
-              <HardDrive size={16} /> Fast NVMe Scratch Disk
+              <HardDrive size={16} /> Disk size
             </div>
             <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700, fontSize: "0.95rem" }}>
               {diskSize} GB <span style={{ fontSize: "0.75rem", color: "#666", fontWeight: 400 }}>(+{money(diskCostPerHour)}/hr)</span>
@@ -195,36 +157,14 @@ export default function GpuDeployModal({ rental, isOpen, onClose }) {
             style={{ width: "100%", accentColor: "var(--ink, #101112)", cursor: "pointer" }}
           />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#888", marginTop: "4px" }}>
-            <span>20 GB (Light)</span>
-            <span>100 GB (Model weights)</span>
-            <span>500 GB (Massive datasets)</span>
+            <span>20 GB</span>
+            <span>500 GB</span>
           </div>
         </div>
 
-        {/* Step 3: Optional SSH Public Key */}
-        <div style={{ marginBottom: "22px" }}>
-          <button
-            type="button"
-            onClick={() => setShowSshInput(!showSshInput)}
-            style={{ background: "transparent", border: "none", color: "var(--violet, #6556e8)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", padding: 0 }}
-          >
-            <Key size={14} /> {showSshInput ? "Hide SSH public key" : "+ Add SSH public key for direct shell login"}
-          </button>
-          {showSshInput && (
-            <div style={{ marginTop: "10px" }}>
-              <textarea
-                value={sshKey}
-                onChange={(e) => setSshKey(e.target.value)}
-                placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... or ssh-rsa AAAAB3NzaC1yc2E..."
-                rows={3}
-                style={{ width: "100%", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)", padding: "10px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff" }}
-              />
-              <span style={{ fontSize: "0.72rem", color: "#777" }}>
-                Leave blank to use web-based in-browser Jupyter / Terminal.
-              </span>
-            </div>
-          )}
-        </div>
+        <p style={{ margin: "0 0 22px", fontSize: "0.8rem", color: "var(--muted)", lineHeight: 1.5 }}>
+          Closed beta: payments are in test mode. Billing starts when the container starts and stops when you stop it. The container and its files are deleted when you stop.
+        </p>
 
         {/* Pricing Summary & Launch Action */}
         <div style={{ borderTop: "1px solid var(--line, #e2e2dc)", paddingTop: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px" }}>

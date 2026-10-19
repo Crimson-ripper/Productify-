@@ -47,15 +47,15 @@ export default function Login() {
         <div className="auth-card" data-testid="login-card">
           <div className="auth-mark">P</div>
           <div className="eyebrow">WELCOME BACK</div>
-          <h2>Sign in.</h2>
+          <h1>Sign in.</h1>
           <p>Buy better tools, or build a business around yours.</p>
 
           <GoogleLoginButton text="signin_with" />
           <div className="or"><span /> or continue with email <span /></div>
 
           <form onSubmit={submit}>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" required data-testid="login-email-input" />
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required data-testid="login-password-input" />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" aria-label="Email address" autoComplete="email" required data-testid="login-email-input" />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" aria-label="Password" autoComplete="current-password" required data-testid="login-password-input" />
             {err && <div className="form-error" data-testid="login-error">{err}</div>}
             <button className="primary-button full" disabled={busy} data-testid="login-submit-button">{busy ? "Signing in…" : "Sign in"} <ArrowRight size={17} /></button>
           </form>

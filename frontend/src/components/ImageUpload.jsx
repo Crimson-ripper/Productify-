@@ -27,7 +27,7 @@ export default function ImageUpload({ value, onChange, label = "Upload image", t
   };
   return (
     <div className="uploader" data-testid={testid}>
-      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={onFile} hidden data-testid={`${testid}-input`} />
+      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={onFile} aria-label="Upload image" hidden data-testid={`${testid}-input`} />
       {value ? (
         <div className="uploader-preview">
           <img src={value} alt="" />

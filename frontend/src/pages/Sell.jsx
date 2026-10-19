@@ -13,13 +13,6 @@ const PLANS = [
     commission: "10%",
     points: ["Unlimited product listings", "List GPU machines for rent", "Earnings analytics in Seller studio", "Payouts to bank, PayPal or UPI"],
   },
-  {
-    name: "Pro",
-    price: "$29",
-    note: "per month",
-    commission: "0%",
-    points: ["Everything in Free", "No commission on sales or rentals"],
-  },
 ];
 
 export default function Sell() {
@@ -66,7 +59,7 @@ export default function Sell() {
         <div className="pillar">
           <div className="pillar-icon"><Cpu size={20} /></div>
           <h3>GPU rental</h3>
-          <p>Install Productify Node on the machine, pair it with your account, and set an hourly price. Renters' jobs run in containers with the RAM, disk and temperature limits you choose.</p>
+          <p>Install Productify Node on the machine, pair it with your account, and set an hourly price. Renters' jobs run in isolated containers, and each machine is reviewed before it's listed.</p>
         </div>
       </section>
 
@@ -84,7 +77,7 @@ export default function Sell() {
             </div>
           ))}
         </div>
-        <p className="plans-note">You can switch plans any time from Seller studio.</p>
+        <p className="plans-note">Paid plans aren't available yet; payments are in test mode during the closed beta. GPU earnings depend on how often your machine is rented, your price, power costs and downtime — there's no guaranteed income. <Link to="/earn-with-hardware">How providing works</Link>.</p>
       </section>
 
       <section className="how-it-works">

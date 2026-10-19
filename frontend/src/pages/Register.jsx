@@ -62,7 +62,7 @@ export default function Register() {
           <div className="auth-card" data-testid="register-upgrade-card">
             <div className="auth-mark">P</div>
             <div className="eyebrow">SELLER IDENTITY VERIFICATION</div>
-            <h2>Verify & activate seller account.</h2>
+            <h1>Verify & activate seller account.</h1>
             <p>You are signed in as <b>{user.name}</b> ({user.email}). Complete 1:1 email & phone verification to unlock listing digital products and renting GPU capacity.</p>
             {err && <div className="form-error" data-testid="register-error">{err}</div>}
             <button className="primary-button full" onClick={() => setModalOpen(true)} data-testid="register-upgrade-button">
@@ -83,14 +83,14 @@ export default function Register() {
         <div className="auth-card" data-testid="register-card">
           <div className="auth-mark">P</div>
           <div className="eyebrow">JOIN PRODUCTIFY</div>
-          <h2>Create your account.</h2>
+          <h1>Create your account.</h1>
           <p>Buy digital tools, sell your work, or rent your GPUs.</p>
           <GoogleLoginButton text="signup_with" />
           <div className="or"><span /> or with email <span /></div>
           <form onSubmit={submit}>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required data-testid="register-name-input" />
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" required data-testid="register-email-input" />
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (min 8 chars)" required minLength={8} data-testid="register-password-input" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" aria-label="Your name" autoComplete="name" required data-testid="register-name-input" />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" aria-label="Email address" autoComplete="email" required data-testid="register-email-input" />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (min 8 chars)" aria-label="Password, at least 8 characters" autoComplete="new-password" required minLength={8} data-testid="register-password-input" />
             <div className="role-toggle">
               <button type="button" className={role === "buyer" ? "selected" : ""} onClick={() => setRole("buyer")} data-testid="register-role-buyer-button">I'm buying</button>
               <button type="button" className={role === "seller" ? "selected" : ""} onClick={() => setRole("seller")} data-testid="register-role-seller-button">I'm selling</button>

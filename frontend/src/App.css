@@ -402,6 +402,42 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .lp-cta{background:var(--ink);color:var(--on-ink);padding:var(--sp-8) 8%}
 .lp-cta h2{margin-top:0}
 .lp-cta p{color:var(--on-ink-muted);font-size:var(--fs-md);margin:0 0 var(--sp-5);max-width:560px}
+/* Rental space: start an instance (Task 8) */
+.rs-page{max-width:1100px;margin:0 auto;padding:var(--sp-6) 6% var(--sp-8)}
+.rs-crumbs{display:flex;gap:6px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--muted);margin-bottom:var(--sp-5)}
+.rs-crumbs a{color:var(--ink)}
+.rs-head{display:grid;grid-template-columns:1.4fr 1fr;gap:var(--sp-5);background:var(--surface);border:1px solid var(--line);padding:var(--sp-6);margin-bottom:var(--sp-5)}
+.rs-head h1{font:600 var(--fs-h2) var(--font-heading);letter-spacing:-.04em;margin:var(--sp-2) 0}
+.rs-desc{color:var(--text-2);line-height:1.6;margin:0 0 var(--sp-3)}
+.rs-facts{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-5);font-size:var(--fs-sm);color:var(--text-2)}
+.rs-facts b{color:var(--subtle);font:var(--fs-label) var(--font-mono);text-transform:uppercase;margin-right:4px}
+.rs-price{background:var(--surface-warm);border:1px solid var(--line);padding:var(--sp-5)}
+.rs-price p,.rs-launch p{margin:var(--sp-1) 0 0;font-size:var(--fs-sm);color:var(--muted);line-height:1.5}
+.rs-label{font:var(--fs-label) var(--font-mono);text-transform:uppercase;color:var(--subtle)}
+.rs-big{font:700 28px var(--font-heading);letter-spacing:-.03em}
+.rs-big small{font:400 var(--fs-sm) var(--font-body);color:var(--muted)}
+.rs-card{background:var(--surface);border:1px solid var(--line);padding:var(--sp-6);margin-bottom:var(--sp-5)}
+.rs-card h2{display:flex;align-items:center;gap:8px;font:600 var(--fs-lg) var(--font-heading);margin:0 0 var(--sp-3)}
+.rs-card h2:not(:first-child){margin-top:var(--sp-5)}
+.rs-card p{margin:0 0 var(--sp-2);color:var(--text-2)}
+.rs-note{font-size:var(--fs-sm);color:var(--muted)!important}
+.rs-templates{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--sp-3)}
+.rs-tpl{display:flex;flex-direction:column;gap:6px;text-align:left;padding:var(--sp-4);background:var(--surface);border:1px solid var(--line);cursor:pointer;font:inherit;color:var(--ink)}
+.rs-tpl.active{border:2px solid var(--ink);background:var(--surface-warm)}
+.rs-tpl-top{display:flex;justify-content:space-between}
+.rs-tpl span:last-child{font-size:var(--fs-sm);color:var(--muted);line-height:1.45}
+.rs-disk{background:var(--surface-warm);border:1px solid var(--line);padding:var(--sp-4);margin-bottom:var(--sp-3)}
+.rs-disk label{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:var(--sp-2)}
+.rs-disk small{font-weight:400;color:var(--muted)}
+.rs-disk input{width:100%;accent-color:var(--ink)}
+.rs-range{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--subtle)}
+.rs-launch{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-4);background:var(--ink);color:var(--on-ink);padding:var(--sp-5) var(--sp-6)}
+.rs-launch p{color:var(--on-ink-muted)}
+.rs-launch .primary-button:disabled{opacity:.5;cursor:not-allowed}
+.rs-why{flex-basis:100%;margin:0!important;text-align:right}
+.rs-empty{padding:80px 20px;text-align:center}
+@media(max-width:900px){.rs-head{grid-template-columns:1fr;padding:var(--sp-5)}.rs-card{padding:var(--sp-5)}.rs-why{text-align:left}}
+
 /* Lead forms: waitlist, provider application (Task 4) */
 .lf-wrap{max-width:820px}
 .lead-form{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4) var(--sp-5)}
@@ -767,7 +803,7 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .auth-page{min-height:calc(100vh - 200px);display:grid;place-items:center;padding:60px 8%;background:var(--surface-2)}
 .auth-card{width:min(430px,100%);background:var(--paper);padding:40px}
 .auth-mark{width:38px;height:38px;background:var(--ink);color:var(--lime);display:grid;place-items:center;font:700 25px var(--font-heading);margin-bottom:22px}
-.auth-card h2{font:600 32px var(--font-heading);letter-spacing:-.06em;margin:12px 0 8px}
+.auth-card h1,.auth-card h2{font:600 32px var(--font-heading);letter-spacing:-.06em;margin:12px 0 8px}
 .auth-card>p{font-size:12px;color:var(--subtle);margin-bottom:24px}
 .google-button{width:100%;border:1px solid var(--line);background:var(--surface);padding:12px;display:flex;gap:10px;align-items:center;justify-content:center;font-size:12px;font-weight:700}
 .google-button span{font-weight:800;color:#4285f4}

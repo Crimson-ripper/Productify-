@@ -5,13 +5,11 @@ import {
   ArrowLeft,
   CheckCircle2,
   ShieldCheck,
-  Sparkles,
   Copy,
   Check,
   Mail,
   Phone,
-  KeyRound,
-  Award
+  KeyRound
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
@@ -753,10 +751,10 @@ export default function SellerOnboarding() {
                     <CheckCircle2 size={32} />
                   </div>
                   <h2 style={{ font: "600 28px 'Space Grotesk', sans-serif", margin: "0 0 6px" }}>
-                    Welcome to the Seller Guild<em>!</em>
+                    You're set up as a seller
                   </h2>
                   <p style={{ color: "var(--muted, #747570)", fontSize: "0.95rem", maxWidth: 540, margin: "0 auto" }}>
-                    Your seller account is 100% verified. You can start creating listings immediately or choose an optional membership upgrade.
+                    Your email and phone are verified. You can start creating listings now. GPU machines are reviewed before renters can see them.
                   </p>
                 </div>
 
@@ -775,7 +773,7 @@ export default function SellerOnboarding() {
                       <KeyRound size={16} /> Recovery key
                     </div>
                     <p style={{ fontSize: "0.82rem", color: "#78350F", margin: "0 0 10px", lineHeight: 1.5 }}>
-                      If you ever lose access to your verified email or mobile phone, this key allows you to safely recover your seller account and balance. Store it securely!
+                      If you ever lose access to your verified email or mobile phone, this key lets you recover your seller account. Store it somewhere safe.
                     </p>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <code style={{ flex: 1, padding: "8px 12px", background: "#fff", border: "1px solid rgba(165, 107, 26, 0.4)", borderRadius: 0, font: "700 0.95rem 'DM Mono', monospace", color: "var(--ink)" }}>
@@ -798,10 +796,10 @@ export default function SellerOnboarding() {
                 <div style={{ marginBottom: 28 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
                     <h3 style={{ font: "600 18px 'Space Grotesk', sans-serif", margin: 0 }}>
-                      Choose your membership plan
+                      Your plan
                     </h3>
                     <small style={{ color: "var(--muted, #747570)", font: "11px 'DM Mono', monospace" }}>
-                      Subscriptions are optional · change anytime
+                      Closed beta
                     </small>
                   </div>
 
@@ -829,76 +827,20 @@ export default function SellerOnboarding() {
                         )}
                       </div>
                       <div style={{ font: "800 24px 'Space Grotesk', sans-serif", margin: "6px 0 2px" }}>$0 <small style={{ font: "400 11px 'DM Mono'", color: "var(--muted)" }}>/ forever</small></div>
-                      <p style={{ fontSize: "0.78rem", color: "var(--muted, #747570)", marginBottom: 12 }}>100% Free activation with standard 10% commission on sales.</p>
+                      <p style={{ fontSize: "0.78rem", color: "var(--muted, #747570)", marginBottom: 12 }}>Free to join. Productify keeps a 10% fee on sales and rentals.</p>
                       <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: 6 }}>
                         <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> Unlimited digital products</li>
                         <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> GPU rental node listings</li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> Weekly automated bank payouts</li>
+                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Check size={14} color="var(--ok)" /> Withdraw from $10 (each request is reviewed)</li>
                       </ul>
                     </div>
 
-                    {/* Productify Plus Tier */}
-                    <div
-                      onClick={() => handleSelectTier("plus")}
-                      style={{
-                        background: selectedTier === "plus" ? "rgba(101, 86, 232, 0.05)" : "#fafaf8",
-                        border: selectedTier === "plus" ? "2px solid var(--violet, #6556e8)" : "1px solid var(--line, #dedfd9)",
-                        borderRadius: 0,
-                        padding: 20,
-                        cursor: "pointer",
-                        position: "relative",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ font: "700 10px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "var(--violet, #6556e8)" }}>PLUS</span>
-                        {selectedTier === "plus" ? (
-                          <span style={{ background: "var(--violet, #6556e8)", color: "#fff", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
-                            ACTIVE ✓
-                          </span>
-                        ) : (
-                          <span style={{ font: "700 10px 'DM Mono'", color: "var(--muted)" }}>OPTIONAL</span>
-                        )}
-                      </div>
-                      <div style={{ font: "800 24px 'Space Grotesk', sans-serif", margin: "6px 0 2px" }}>$12 <small style={{ font: "400 11px 'DM Mono'", color: "var(--muted)" }}>/ month</small></div>
-                      <p style={{ fontSize: "0.78rem", color: "var(--muted, #747570)", marginBottom: 12 }}>Cut fees by 50% and receive 48-hour expedited payouts.</p>
-                      <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={14} color="var(--violet)" /> <b>5% Reduced Marketplace Fee</b></li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={14} color="var(--violet)" /> Priority search ranking</li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={14} color="var(--violet)" /> 48-Hour expedited cashouts</li>
-                      </ul>
-                    </div>
-
-                    {/* Productify Pro Tier */}
-                    <div
-                      onClick={() => handleSelectTier("pro")}
-                      style={{
-                        background: selectedTier === "pro" ? "rgba(165, 107, 26, 0.08)" : "#fafaf8",
-                        border: selectedTier === "pro" ? "2px solid #a56b1a" : "1px solid var(--line, #dedfd9)",
-                        borderRadius: 0,
-                        padding: 20,
-                        cursor: "pointer",
-                        position: "relative",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ font: "700 10px 'DM Mono'", textTransform: "uppercase", letterSpacing: "1px", color: "#a56b1a" }}>PRO</span>
-                        {selectedTier === "pro" ? (
-                          <span style={{ background: "#a56b1a", color: "#000", font: "800 10px 'DM Mono'", padding: "2px 8px", borderRadius: 100 }}>
-                            ACTIVE ✓
-                          </span>
-                        ) : (
-                          <span style={{ font: "700 10px 'DM Mono'", color: "var(--muted)" }}>OPTIONAL</span>
-                        )}
-                      </div>
-                      <div style={{ font: "800 24px 'Space Grotesk', sans-serif", margin: "6px 0 2px" }}>$29 <small style={{ font: "400 11px 'DM Mono'", color: "var(--muted)" }}>/ month</small></div>
-                      <p style={{ fontSize: "0.78rem", color: "var(--muted, #747570)", marginBottom: 12 }}>Keep 100% of sales with zero fee and instant automated payouts.</p>
-                      <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#a56b1a" /> <b>0% Marketplace Fee</b></li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#a56b1a" /> Instant 15-Minute bank cashouts</li>
-                        <li style={{ display: "flex", alignItems: "center", gap: 6 }}><Award size={14} color="#a56b1a" /> Golden Badge & GPU telemetry</li>
-                      </ul>
+                    {/* Paid plans: not available while payments are in test mode (honesty rules 2–3) */}
+                    <div style={{ border: "1px dashed var(--line)", padding: 20, background: "var(--surface-warm)" }}>
+                      <span style={{ font: "700 10px var(--font-mono)", textTransform: "uppercase", letterSpacing: "1px", color: "var(--subtle)" }}>PAID PLANS</span>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-2)", margin: "10px 0 0", lineHeight: 1.55 }}>
+                        Paid plans with lower fees aren't available yet. Payments are in test mode during the closed beta. We'll announce plans and their terms before they launch.
+                      </p>
                     </div>
                   </div>
                 </div>
