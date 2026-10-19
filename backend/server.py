@@ -1120,8 +1120,9 @@ async def create_product(data: ProductInput, user=Depends(current_user)):
 @api.get("/rentals")
 async def rentals(q: str = "", sort: str = "recent"):
     rows = await db.rentals.find({"status": "approved"}, {"_id": 0, "pairing_token": 0}).to_list(200)
+    busy = {i["rental_id"] for i in await db.instances.find({"status": {"$in": ["running", "paused"]}}, {"_id": 0, "rental_id": 1}).to_list(1000)}
     for r in rows:
-        r["is_online"] = host_tunnel_manager.is_connected(r.get("id"))
+        add_availability(r, busy)
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in (r.get("title", "") + " " + r.get("gpu", "") + " " + r.get("description", "")).lower()]
@@ -1137,8 +1138,26 @@ async def rental_detail(rid: str):
     r = await db.rentals.find_one({"id": rid}, {"_id": 0, "pairing_token": 0})
     if not r:
         raise HTTPException(404, "Rental not found")
-    r["is_online"] = host_tunnel_manager.is_connected(rid)
+    busy = {i["rental_id"] for i in await db.instances.find({"rental_id": rid, "status": {"$in": ["running", "paused"]}}, {"_id": 0, "rental_id": 1}).to_list(5)}
+    add_availability(r, busy)
     return r
+
+
+def add_availability(r: dict, busy: set):
+    """availability: available | in_use | paused | offline -- what a renter can do right now."""
+    rid = r.get("id")
+    r["is_online"] = host_tunnel_manager.is_connected(rid)
+    meta = node_hub.meta.get(rid) or {}
+    r["live"] = meta.get("live")
+    r["in_use"] = rid in busy
+    if not r["is_online"]:
+        r["availability"] = "offline"
+    elif r["in_use"]:
+        r["availability"] = "in_use"
+    elif meta.get("live") is False:
+        r["availability"] = "paused"
+    else:
+        r["availability"] = "available"
 
 
 @api.post("/rentals")
@@ -2570,6 +2589,26 @@ V2_TEMPLATES = {"jupyter-pytorch": "pytorch", "ubuntu-base": "python"}
 V2_EXEC_TIMEOUT_S = 60
 
 
+MACHINE_ERRORS = [  # agent error text -> what a renter should read
+    ("paused by its owner", "This machine is paused by its owner right now. Try another machine."),
+    ("already in use", "This machine is in use by another renter. Try another machine, or try again later."),
+    ("docker is not available", "This machine isn't ready to run jobs right now (Docker isn't running). Try another machine."),
+    ("network isolation", "This machine can't start jobs safely right now. Try another machine."),
+    ("is not running on this machine", "This instance has ended on the machine."),
+]
+
+
+def machine_error_is_state(err: str) -> bool:
+    return any(k in (err or "") for k in ("paused by its owner", "already in use", "is not running on this machine"))
+
+
+def friendly_machine_error(err: str) -> str:
+    for needle, text in MACHINE_ERRORS:
+        if needle in (err or ""):
+            return text
+    return "The machine couldn't do that right now. Please try again."
+
+
 class NodeHub:
     """Connections from Productify Node v2 agents, one per rental."""
 
@@ -2601,7 +2640,8 @@ class NodeHub:
         finally:
             self.pending.pop(req_id, None)
         if not res.get("ok"):
-            raise HTTPException(502, f"The machine refused: {res.get('error', 'unknown error')}")
+            err = res.get("error", "")
+            raise HTTPException(409 if machine_error_is_state(err) else 502, friendly_machine_error(err))
         return res
 
     def resolve(self, rental_id: str, frame: dict):
@@ -2655,18 +2695,23 @@ async def node_v1_websocket(websocket: WebSocket):
             frame = await websocket.receive_json()
             kind = frame.get("type")
             if kind == "hello":
-                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live")
-                node_hub.meta[rental_id] = {**{k: frame.get(k) for k in allowed}, "last_seen": time.time(), "transport": "node-v1"}
+                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live", "isolation")
+                prev_seen = (node_hub.meta.get(rental_id) or {}).get("job_seen", {})  # keep across reconnects
+                node_hub.meta[rental_id] = {**{k: frame.get(k) for k in allowed}, "last_seen": time.time(), "transport": "node-v1", "job_seen": prev_seen}
                 await node_manager.record_heartbeat(rental_id, node_hub.meta[rental_id], transport="node-v1")
                 await record_machine_hardware(rental_id, node_hub.meta[rental_id])
+                spawn(reconcile_machine_jobs(rental_id, frame.get("job_ids")))
             elif kind == "heartbeat":
                 m = node_hub.meta.setdefault(rental_id, {"transport": "node-v1"})
                 m.update({k: frame.get(k) for k in ("live", "jobs", "gpu_temp_c", "paused_reason")}, last_seen=time.time())
                 await node_manager.record_heartbeat(rental_id, m, transport="node-v1")
+                spawn(reconcile_machine_jobs(rental_id, frame.get("job_ids")))
             elif kind == "result":
                 node_hub.resolve(rental_id, frame)
             elif kind == "event":
-                logger.warning(f"Node {rental_id} event: {frame.get('kind')} job={frame.get('job_id')}")
+                logger.warning(f"Node {rental_id} event: {frame.get('kind')} job={frame.get('job_id')} reason={frame.get('reason')}")
+                if frame.get("kind") == "job_ended" and isinstance(frame.get("job_id"), str):
+                    spawn(end_instance_on_machine(rental_id, frame["job_id"], str(frame.get("reason") or "ended_on_machine")[:40]))
     except (WebSocketDisconnect, ValueError):
         pass
     except Exception as e:
@@ -2674,6 +2719,72 @@ async def node_v1_websocket(websocket: WebSocket):
     finally:
         if node_hub.conns.get(rental_id) is websocket:
             node_hub.conns.pop(rental_id, None)
+
+
+_bg_tasks: set = set()
+
+
+def spawn(coro):
+    """Run billing work off the websocket loop, so the loop keeps reading the machine's replies."""
+    t = asyncio.create_task(coro)
+    _bg_tasks.add(t)
+    t.add_done_callback(_bg_tasks.discard)
+    return t
+
+
+JOB_START_GRACE_S = 120  # a job may still be starting (image pull) and not yet listed by the agent
+
+
+async def end_instance_on_machine(rental_id: str, inst_id: str, reason: str, ended_at: Optional[datetime] = None):
+    """A job ended on the provider's machine (emergency stop, overheating, crash, restart):
+    stop the instance and its billing at that moment."""
+    inst = await db.instances.find_one({"id": inst_id, "rental_id": rental_id}, {"_id": 0})
+    if not inst or inst.get("status") not in ("running", "paused"):
+        return False
+    end = ended_at or datetime.now(timezone.utc)
+    total_sec = int(inst.get("total_runtime_seconds", 0))
+    cost = float(inst.get("cost_accumulated", 0.0))
+    if inst.get("status") == "running" and inst.get("started_at"):
+        try:
+            started = datetime.fromisoformat(inst["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            delta = max(0, int((end - started).total_seconds()))
+            total_sec += delta
+            cost += delta / 3600.0 * float(inst.get("hourly_price", 0.5))
+        except Exception:
+            pass
+    # The container is already gone on the machine; don't ask it to destroy anything
+    # (and never wait on the machine from inside its own websocket loop).
+    await finish_instance(inst, total_sec, cost, end.isoformat(), reason=f"ended on machine: {reason}", destroy=False)
+    logger.warning(f"Instance {inst_id} on {rental_id} ended on the machine ({reason}); billing stopped")
+    return True
+
+
+async def reconcile_machine_jobs(rental_id: str, job_ids):
+    """The agent lists the jobs it runs in every hello/heartbeat. Anything we bill for that it
+    no longer runs has ended: stop billing at the last time the agent listed it."""
+    if not isinstance(job_ids, list):
+        return  # older agent that doesn't report jobs
+    now = datetime.now(timezone.utc)
+    meta = node_hub.meta.setdefault(rental_id, {})
+    seen = meta.setdefault("job_seen", {})
+    for jid in job_ids:
+        if isinstance(jid, str):
+            seen[jid] = now
+    active = await db.instances.find({"rental_id": rental_id, "status": {"$in": ["running", "paused"]}}, {"_id": 0}).to_list(50)
+    for inst in active:
+        if inst["id"] in job_ids:
+            continue
+        try:
+            created = datetime.fromisoformat(inst.get("created_at"))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+        except Exception:
+            created = now
+        if (now - created).total_seconds() < JOB_START_GRACE_S:
+            continue
+        await end_instance_on_machine(rental_id, inst["id"], "not_running", ended_at=seen.pop(inst["id"], None) or now)
 
 
 @app.websocket("/ws/tunnel/host/{rental_id}")
@@ -2936,6 +3047,11 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
     # container actually started on the provider's machine (CLAUDE.md §5: machine health, metering).
     if not host_tunnel_manager.is_connected(rental["id"]):
         raise HTTPException(409, "This machine is offline right now. Choose another machine or try again later.")
+    if await db.instances.find_one({"rental_id": rental["id"], "status": {"$in": ["running", "paused"]}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "This machine is in use by another renter. Try another machine, or try again later.")
+    renter = await db.users.find_one({"id": user["id"]}) or {}
+    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+        raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
     try:
         pod_res = await host_tunnel_manager.send_rpc(
             rental["id"],
@@ -2950,8 +3066,10 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
             },
             timeout=25.0
         )
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        if e.status_code == 409:
+            raise
+        raise HTTPException(502, f"{e.detail} You haven't been charged.")
     except Exception as e:
         logger.warning(f"Deploy failed on {rental['id']}: {e}")
         raise HTTPException(502, "The machine couldn't start your container. You haven't been charged. Please try again.")
@@ -3096,22 +3214,17 @@ async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(
             pass
 
     if action == "pause":
-        if current_status == "terminated":
-            raise HTTPException(400, "Cannot pause a terminated instance")
-        await db.instances.update_one(
-            {"id": inst_id},
-            {"$set": {
-                "status": "paused",
-                "paused_at": now_iso,
-                "total_runtime_seconds": total_sec,
-                "cost_accumulated": round(accum_cost, 4),
-            }}
-        )
-        return {"ok": True, "status": "paused", "total_runtime_seconds": total_sec, "cost_accumulated": round(accum_cost, 4)}
+        # Pausing stopped billing while the container kept the provider's GPU busy, so it's off.
+        raise HTTPException(400, "Pausing isn't available. Save any files you need, then stop the instance when you're done.")
 
     elif action == "resume":
         if current_status == "terminated":
             raise HTTPException(400, "Cannot resume a terminated instance")
+        if not host_tunnel_manager.is_connected(inst.get("rental_id")):
+            raise HTTPException(409, "This machine is offline right now.")
+        renter = await db.users.find_one({"id": inst.get("user_id")}) or {}
+        if float(renter.get("compute_credits", 0.0)) - accum_cost < MIN_CREDITS_TO_START:
+            raise HTTPException(402, "Not enough compute credits to resume.")
         await db.instances.update_one(
             {"id": inst_id},
             {"$set": {
@@ -3123,44 +3236,81 @@ async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(
         return {"ok": True, "status": "running"}
 
     elif action == "terminate":
-        final_cost = round(accum_cost, 4)
-        await db.instances.update_one(
-            {"id": inst_id},
-            {"$set": {
-                "status": "terminated",
-                "terminated_at": now_iso,
-                "total_runtime_seconds": total_sec,
-                "cost_accumulated": final_cost,
-            }}
-        )
-
-        # Trigger physical container destruction and scratch disk wipe on host
-        rental_id = inst.get("rental_id")
-        if rental_id and host_tunnel_manager.is_connected(rental_id):
-            try:
-                await host_tunnel_manager.send_rpc(
-                    rental_id,
-                    action="destroy_pod",
-                    payload={"instance_id": inst_id},
-                    timeout=10.0
-                )
-            except Exception as e:
-                logger.warning(f"Could not destroy pod on host: {e}")
-
-        seller_id = inst.get("seller_id")
-        if seller_id and final_cost > 0:
-            seller = await db.users.find_one({"id": seller_id})
-            if seller:
-                fee_rate = 0.05 if seller.get("seller_tier") == "pro" else 0.10
-                seller_net = round(final_cost * (1.0 - fee_rate), 4)
-                await db.users.update_one(
-                    {"id": seller_id},
-                    {"$inc": {"balance": seller_net}}
-                )
-
+        if current_status == "terminated":
+            return {"ok": True, "status": "terminated", "total_runtime_seconds": total_sec, "cost_accumulated": round(accum_cost, 4)}
+        final_cost = await finish_instance(inst, total_sec, accum_cost, now_iso, reason="stopped by user")
         return {"ok": True, "status": "terminated", "total_runtime_seconds": total_sec, "cost_accumulated": final_cost}
     else:
         raise HTTPException(400, f"Unsupported action: {action}")
+
+
+# ---------- Credits & billing (one place for every way an instance ends) ----------
+MIN_CREDITS_TO_START = 0.50   # USD of credit needed to start or resume
+FREE_BETA_CREDITS = 5.00      # one-time free-tier credit per account (closed beta)
+CREDIT_PLANS = [  # 1 credit = US$1. Paid packs are planned, not on sale (payments aren't live).
+    {"id": "free", "name": "Free", "price_usd": 0, "credits": FREE_BETA_CREDITS, "bonus_pct": 0, "available": True,
+     "points": ["One-time $5 of credit per account", "About 10 hours on a $0.50/hr GPU", "PyTorch and Python environments"]},
+    {"id": "starter", "name": "Starter", "price_usd": 20, "credits": 21, "bonus_pct": 5, "available": False,
+     "points": ["$21 of credit for $20", "Credits don't expire", "Email support"]},
+    {"id": "builder", "name": "Builder", "price_usd": 50, "credits": 53, "bonus_pct": 6, "available": False,
+     "points": ["$53 of credit for $50", "Credits don't expire", "Priority email support"]},
+]
+
+
+async def finish_instance(inst: dict, total_sec: int, accum_cost: float, now_iso: str, reason: str, destroy: bool = True) -> float:
+    """Terminate an instance exactly once: record usage, charge the renter's credits,
+    credit the provider (minus platform fee) and destroy the container on the host."""
+    final_cost = round(accum_cost, 4)
+    res = await db.instances.update_one(
+        {"id": inst["id"], "status": {"$ne": "terminated"}},  # guard against double-charging
+        {"$set": {"status": "terminated", "terminated_at": now_iso, "total_runtime_seconds": total_sec,
+                  "cost_accumulated": final_cost, "end_reason": reason}},
+    )
+    if not getattr(res, "modified_count", 1):
+        return final_cost
+    rental_id = inst.get("rental_id")
+    if destroy and rental_id and host_tunnel_manager.is_connected(rental_id):
+        try:
+            await host_tunnel_manager.send_rpc(rental_id, action="destroy_pod", payload={"instance_id": inst["id"]}, timeout=10.0)
+        except Exception as e:
+            logger.warning(f"Could not destroy pod on host: {e}")
+    if final_cost > 0:
+        await db.users.update_one({"id": inst.get("user_id")}, {"$inc": {"compute_credits": -final_cost}})
+        seller_id = inst.get("seller_id")
+        seller = await db.users.find_one({"id": seller_id}) if seller_id else None
+        if seller:
+            from currency_engine import get_commission_rate
+            fee_rate = get_commission_rate(seller.get("seller_tier"))
+            await db.users.update_one({"id": seller_id}, {"$inc": {"balance": round(final_cost * (1.0 - fee_rate), 4)}})
+    return final_cost
+
+
+async def enforce_credit_limits():
+    """Stop running instances whose cost has reached the renter's credit balance."""
+    now = datetime.now(timezone.utc)
+    running = await db.instances.find({"status": "running"}, {"_id": 0}).to_list(1000)
+    for inst in running:
+        try:
+            started = datetime.fromisoformat(inst["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            delta = max(0, int((now - started).total_seconds()))
+            total_sec = int(inst.get("total_runtime_seconds", 0)) + delta
+            cost = float(inst.get("cost_accumulated", 0.0)) + delta / 3600.0 * float(inst.get("hourly_price", 0.5))
+            renter = await db.users.find_one({"id": inst.get("user_id")}) or {}
+            if cost >= float(renter.get("compute_credits", 0.0)):
+                await finish_instance(inst, total_sec, cost, now.isoformat(), reason="credits ran out")
+        except Exception as e:
+            logger.warning(f"credit check failed for {inst.get('id')}: {e}")
+
+
+async def credit_limit_loop():
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await enforce_credit_limits()
+        except Exception as e:
+            logger.warning(f"credit limit loop: {e}")
 
 
 @api.post("/instances/{inst_id}/exec")
@@ -3288,7 +3438,27 @@ async def topup_credits(data: CreditTopupInput, user=Depends(current_user)):
 @api.get("/credits/balance")
 async def get_credits_balance(user=Depends(current_user)):
     u = await db.users.find_one({"id": user["id"]})
-    return {"compute_credits": float(u.get("compute_credits", 0.0)) if u else 0.0}
+    return {"compute_credits": float(u.get("compute_credits", 0.0)) if u else 0.0,
+            "free_credits_claimed": bool(u and u.get("free_credits_claimed_at"))}
+
+
+@api.get("/credits/plans")
+async def get_credit_plans():
+    return CREDIT_PLANS
+
+
+@api.post("/credits/claim-free")
+async def claim_free_credits(user=Depends(current_user)):
+    """Free tier: one-time beta credit per account. Atomic, so it can't be claimed twice."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    res = await db.users.update_one(
+        {"id": user["id"], "free_credits_claimed_at": {"$exists": False}},
+        {"$set": {"free_credits_claimed_at": now_iso}, "$inc": {"compute_credits": FREE_BETA_CREDITS}},
+    )
+    if not getattr(res, "modified_count", 0):
+        raise HTTPException(409, "You've already claimed your free credits.")
+    u = await db.users.find_one({"id": user["id"]}) or {}
+    return {"ok": True, "added": FREE_BETA_CREDITS, "compute_credits": float(u.get("compute_credits", 0.0))}
 
 
 @api.post("/host/auto-detect")
@@ -4368,6 +4538,7 @@ async def startup():
     # Launch background liveness and currency sync tasks
     asyncio.create_task(node_watchdog_loop())
     asyncio.create_task(currency_sync_loop())
+    asyncio.create_task(credit_limit_loop())
 
 
 @app.on_event("shutdown")
