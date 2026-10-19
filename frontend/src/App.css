@@ -136,6 +136,9 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .hero-card-top{font:10px var(--font-mono);color:var(--on-ink-subtle);display:flex;align-items:center;gap:8px;text-transform:uppercase}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
 .live-dot.off{background:var(--subtle)}
+.live-dot.busy{background:var(--warn-text)}
+.node-status.busy{color:var(--warn-text)}
+.dark-button.is-disabled,.primary-button.is-disabled{opacity:.45;pointer-events:none}
 .hero-gpu{font:700 32px var(--font-heading);margin-top:40px;letter-spacing:-.04em;line-height:1.05}
 .hero-spec{display:flex;justify-content:space-between;gap:12px;color:var(--on-ink-subtle);font:10px var(--font-mono);margin-top:10px}
 .hero-price{margin-top:24px;color:var(--lime);font:600 24px var(--font-heading)}
@@ -204,6 +207,7 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .rental-info{padding:25px}
 .node-status{display:inline-flex;align-items:center;gap:7px;color:var(--subtle);font:10px var(--font-mono);text-transform:uppercase;letter-spacing:.04em}
 .node-status.online{color:var(--ok)}
+.node-status-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .node-verified{color:var(--subtle);text-transform:none}
 .rental-info h3{font-size:19px;margin:15px 0 22px}
 .rental-info h3 a:hover{color:var(--violet)}
@@ -402,6 +406,22 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .lp-cta{background:var(--ink);color:var(--on-ink);padding:var(--sp-8) 8%}
 .lp-cta h2{margin-top:0}
 .lp-cta p{color:var(--on-ink-muted);font-size:var(--fs-md);margin:0 0 var(--sp-5);max-width:560px}
+/* Credit plans (free tier + planned packs) */
+.cp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-4);margin-top:var(--sp-3)}
+.cp-plan{display:flex;flex-direction:column;gap:var(--sp-2);background:var(--surface);border:1px solid var(--line);padding:var(--sp-5)}
+.cp-free{border:2px solid var(--ink)}
+.cp-name{font:var(--fs-label) var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--subtle)}
+.cp-price{font:700 28px var(--font-heading);letter-spacing:-.03em}
+.cp-price small{font:400 var(--fs-sm) var(--font-body);color:var(--muted)}
+.cp-credits{font-weight:700;color:var(--text-2)}
+.cp-plan ul{list-style:none;margin:var(--sp-2) 0;padding:0;flex:1;display:grid;gap:6px;font-size:var(--fs-sm);color:var(--text-2)}
+.cp-plan li{display:flex;gap:6px;align-items:flex-start}
+.cp-plan li svg{flex-shrink:0;margin-top:2px;color:var(--ok)}
+.cp-plan button:disabled{opacity:.55;cursor:not-allowed}
+.cp-plan .primary-button,.cp-plan .secondary-button{justify-content:center}
+.cp-note{grid-column:1/-1;margin:0;font-size:var(--fs-sm);color:var(--muted);line-height:1.55}
+@media(max-width:900px){.cp-grid{grid-template-columns:1fr}}
+
 /* Admin leads (Task 9) */
 .lead-row{cursor:pointer}
 .lead-row:hover td{background:var(--surface-2)}

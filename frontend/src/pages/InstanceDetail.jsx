@@ -4,7 +4,6 @@ import {
   Cpu,
   Copy,
   ExternalLink,
-  Square,
   Play,
   RotateCcw,
   Check,
@@ -59,8 +58,8 @@ export default function InstanceDetail() {
 
   // Terminal Interactive State
   const [terminalLines, setTerminalLines] = useState([
-    { type: "system", text: "Productify Hypervisor Live Container Telemetry Stream" },
-    { type: "system", text: "Interactive bash shell session active. Type 'help' or 'nvidia-smi' below." }
+    { type: "system", text: "Browser terminal. Each command runs on its own inside your container (it isn't a full shell session, so `cd` doesn't carry over)." },
+    { type: "system", text: "Commands time out after 2 minutes. Try nvidia-smi or python -c \"import torch; print(torch.cuda.is_available())\"." }
   ]);
   const [termInput, setTermInput] = useState("");
   const [termHistory, setTermHistory] = useState([]);
@@ -269,7 +268,7 @@ export default function InstanceDetail() {
     return (
       <div className="empty-block" style={{ padding: "80px 20px", textAlign: "center" }}>
         <h2>Instance not found</h2>
-        <p>This instance may have expired or you do not have permission to view it.</p>
+        <p>Either this instance doesn't exist, or it belongs to a different account. If you started it, make sure you're signed in with that account (each window shares one sign-in).</p>
         <Link to="/rentals" className="primary-button" style={{ marginTop: "14px", display: "inline-flex" }}>
           Browse GPU Nodes
         </Link>
@@ -419,17 +418,7 @@ export default function InstanceDetail() {
 
           {/* Action Buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            {instance.status === "running" ? (
-              <button
-                type="button"
-                onClick={() => handleAction("pause")}
-                disabled={actionBusy}
-                className="secondary-button"
-                style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "10px 18px", fontSize: "0.85rem", fontWeight: 700, border: "1px solid var(--line, #dedfd9)" }}
-              >
-                <Square size={14} fill="currentColor" /> Pause Compute
-              </button>
-            ) : instance.status === "paused" ? (
+            {instance.status === "paused" ? (
               <button
                 type="button"
                 onClick={() => handleAction("resume")}
@@ -680,7 +669,7 @@ export default function InstanceDetail() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1e2430", paddingBottom: "10px", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted)", fontSize: "0.78rem" }}>
                   <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: instance.status === "running" ? "var(--ok)" : "#a56b1a", display: "inline-block" }} />
-                  <span>Productify Hypervisor TTY · Pod <b>{instance.id}</b> ({instance.gpu})</span>
+                  <span>Browser terminal · <b>{instance.id}</b> ({instance.gpu})</span>
                 </div>
                 <div style={{ display: "flex", gap: "6px" }}>
                   <button
@@ -719,7 +708,7 @@ export default function InstanceDetail() {
                     )}
                     {line.type === "command" && (
                       <div style={{ color: "var(--violet)", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span>root@instance-{instance.id.substring(5)}:~#</span>
+                        <span>$</span>
                         <span style={{ color: "#ffffff" }}>{line.text}</span>
                         {line.time && <span style={{ color: "#4a4a45", fontSize: "0.72rem", marginLeft: "auto" }}>{line.time}</span>}
                       </div>
@@ -762,8 +751,7 @@ export default function InstanceDetail() {
                   "python -c \"import sys; print(f'Python {sys.version.split()[0]}')\"",
                   "pip list",
                   "df -h",
-                  "uname -a",
-                  "help"
+                  "uname -a"
                 ].map((chipCmd) => (
                   <button
                     key={chipCmd}
@@ -781,7 +769,7 @@ export default function InstanceDetail() {
                       fontFamily: "inherit",
                     }}
                   >
-                    {chipCmd.split(" ")[0] === "python" ? "python info" : chipCmd}
+                    {chipCmd.split(" ")[0] === "python" ? "python version" : chipCmd}
                   </button>
                 ))}
               </div>
@@ -799,14 +787,14 @@ export default function InstanceDetail() {
                 }}
               >
                 <span style={{ color: "var(--violet)", fontWeight: 700, whiteSpace: "nowrap", fontSize: "0.82rem" }}>
-                  root@node:~#
+                  $
                 </span>
                 <input
                   type="text"
                   value={termInput}
                   onChange={(e) => setTermInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={instance.status === "running" ? "Type command (e.g. nvidia-smi, df -h, python -c '...') or press Enter" : "Instance is paused/stopped"}
+                  placeholder={instance.status === "running" ? "Type command (e.g. nvidia-smi, df -h, python -c '...') or press Enter" : "This instance has ended"}
                   disabled={termExecuting || instance.status !== "running"}
                   style={{
                     flex: 1,

@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import SEO from "@/components/SEO";
 import { ctaProps } from "@/lib/analytics";
 import { ROUTES } from "@/lib/routes";
+import CreditPlans from "@/components/CreditPlans";
 
 const RENTER = [
   ["Hourly price", "Each provider sets an hourly price for their machine. You see it on the machine's page before you start."],
@@ -47,7 +48,13 @@ export default function Pricing() {
         </div>
       </section>
 
-      <section className="lp-section" aria-labelledby="pr-provider">
+      <section className="lp-section" aria-labelledby="pr-credits">
+        <div className="eyebrow">Credits</div>
+        <h2 id="pr-credits">Start free, top up later</h2>
+        <CreditPlans />
+      </section>
+
+      <section className="lp-section lp-tint" aria-labelledby="pr-provider">
         <div className="lp-cols">
           <div><div className="eyebrow">For providers</div><h2 id="pr-provider">What you receive</h2></div>
           <Rows rows={PROVIDER} />

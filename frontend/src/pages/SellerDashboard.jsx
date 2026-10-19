@@ -11,7 +11,7 @@ import { toast } from "sonner";
 const CATS = ["Software", "Design", "Development", "Creative"];
 const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
 // Direct link to the installer file, so the browser downloads it instead of opening GitHub.
-const NODE_DOWNLOAD_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/download/v2.0.0/ProductifyNode-Setup.exe";
+const NODE_DOWNLOAD_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/download/v2.1.0/ProductifyNode-Setup.exe";
 const PLANS = [
   { tier: "free", name: "Free", fee: "10%" },
   { tier: "plus", name: "Plus", fee: "5%" },

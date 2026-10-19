@@ -6,6 +6,7 @@ import { ctaProps } from "@/lib/analytics";
 import { ROUTES } from "@/lib/routes";
 import SEO from "@/components/SEO";
 import GpuVisual from "@/components/GpuVisual";
+import Availability, { availabilityOf } from "@/components/Availability";
 
 const USE_CASES = [
   { icon: Code2, title: "AI development", text: "Run Python and PyTorch code on an NVIDIA GPU when your laptop isn't enough. JupyterLab is on the way." },
@@ -35,9 +36,7 @@ function MachineCard({ r }) {
       <Link to={`/rental/${r.id}`} className="hm-card-visual" aria-label={r.title}><GpuVisual rental={r} /></Link>
       <div className="hm-card-body">
         <div className="hm-card-top">
-          <span className={r.is_online ? "node-status online" : "node-status"}>
-            <span className={r.is_online ? "live-dot" : "live-dot off"} />{r.is_online ? "Online now" : "Offline"}
-          </span>
+          <Availability r={r} />
           <span className="dash-pill muted">Closed beta</span>
         </div>
         <dl className="hm-specs">
@@ -57,7 +56,7 @@ export default function Home() {
 
   useEffect(() => {
     api.get("/rentals")
-      .then((res) => setMachines([...res.data].sort((a, b) => Number(b.is_online) - Number(a.is_online) || a.price - b.price)))
+      .then((res) => setMachines([...res.data].sort((a, b) => Number(availabilityOf(b) === "available") - Number(availabilityOf(a) === "available") || Number(b.is_online) - Number(a.is_online) || a.price - b.price)))
       .catch(() => setMachines([]));
   }, []);
 

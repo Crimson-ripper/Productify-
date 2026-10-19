@@ -2,16 +2,16 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Cpu, MapPin } from "lucide-react";
 import { money } from "@/lib/api";
 import GpuVisual from "@/components/GpuVisual";
+import Availability, { availabilityOf } from "@/components/Availability";
 
 export default function RentalCard({ r }) {
   return (
     <article className="rental-card" data-testid={`rental-card-${r.id}`}>
       <Link to={`/rental/${r.id}`} className="rental-card-visual" aria-label={r.title}><GpuVisual rental={r} /></Link>
       <div className="rental-info">
-        <div className={r.is_online ? "node-status online" : "node-status"}>
-          <span className={r.is_online ? "live-dot" : "live-dot off"} />
-          {r.is_online ? "Online now" : "Offline"}
-          {r.is_verified && <span className="node-verified">· Hardware checked</span>}
+        <div className="node-status-row">
+          <Availability r={r} />
+          {r.is_verified && <span className="node-status node-verified">· Hardware checked</span>}
         </div>
         <h3><Link to={`/rental/${r.id}`}>{r.title}</Link></h3>
         <div className="spec-row">
@@ -21,9 +21,13 @@ export default function RentalCard({ r }) {
         </div>
         <div className="rental-bottom">
           <strong>{money(r.price)} <small>/ hour</small></strong>
-          <Link to={`/rentals/reserve/${r.id}`} className="dark-button" data-testid={`rent-node-${r.id}-button`}>
-            Reserve <ArrowRight size={14} />
-          </Link>
+          {availabilityOf(r) === "available" ? (
+            <Link to={`/rentals/reserve/${r.id}`} className="dark-button" data-testid={`rent-node-${r.id}-button`}>
+              Reserve <ArrowRight size={14} />
+            </Link>
+          ) : (
+            <Link to={`/rental/${r.id}`} className="dark-button" data-testid={`rent-node-${r.id}-button`}>View</Link>
+          )}
         </div>
       </div>
     </article>

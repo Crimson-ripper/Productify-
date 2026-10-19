@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Availability, { availabilityOf, UNAVAILABLE_REASON } from "@/components/Availability";
 import { Link, useParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { api, money } from "@/lib/api";
@@ -38,9 +39,7 @@ export default function RentalDetail() {
           <h1>{r.title}</h1>
           <div className="detail-seller">
             Listed by <b>{r.owner}</b>
-            <span className={r.is_online ? "node-status online" : "node-status"}>
-              <span className={r.is_online ? "live-dot" : "live-dot off"} />{r.is_online ? "Online now" : "Offline"}
-            </span>
+            <Availability r={r} />
           </div>
           <div className="detail-price">{money(r.price)} <small>/ hour</small></div>
           {r.description && <p className="detail-desc">{r.description}</p>}
@@ -52,15 +51,18 @@ export default function RentalDetail() {
             ))}
             {r.location && <div><dt>Location</dt><dd>{r.location}</dd></div>}
           </dl>
-          <div className="detail-actions">
-            <Link to={`/rentals/reserve/${r.id}`} className="primary-button" data-testid="rental-detail-reserve-button">
-              Reserve this GPU <ArrowRight size={16} />
-            </Link>
-            <button type="button" className="text-button text-button-dark" onClick={() => setDeployModalOpen(true)} data-testid="rental-detail-deploy-button">
-              Launch from a template
-            </button>
-          </div>
-          {!r.is_online && <p className="detail-note">This machine is offline right now, so nothing can run on it until its owner reconnects it.</p>}
+          {availabilityOf(r) === "available" ? (
+            <div className="detail-actions">
+              <Link to={`/rentals/reserve/${r.id}`} className="primary-button" data-testid="rental-detail-reserve-button">
+                Reserve this GPU <ArrowRight size={16} />
+              </Link>
+              <button type="button" className="text-button text-button-dark" onClick={() => setDeployModalOpen(true)} data-testid="rental-detail-deploy-button">
+                Start an instance
+              </button>
+            </div>
+          ) : (
+            <p className="detail-note">{UNAVAILABLE_REASON[availabilityOf(r)]} <Link to="/rentals">See other machines</Link></p>
+          )}
           <div className="detail-report"><ReportButton listingId={r.id} listingKind="rental" /></div>
         </div>
       </section>

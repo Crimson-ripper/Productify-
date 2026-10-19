@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import SEO from "@/components/SEO";
 import TemplateIcon from "@/components/TemplateIcon";
+import CreditPlans from "@/components/CreditPlans";
+import Availability, { availabilityOf, UNAVAILABLE_REASON } from "@/components/Availability";
 import { toast } from "sonner";
 
 export default function GpuRentalSpace() {
@@ -16,6 +18,7 @@ export default function GpuRentalSpace() {
   const [rental, setRental] = useState(null);
   const [loading, setLoading] = useState(true);
   const [credits, setCredits] = useState(0);
+  const [freeClaimed, setFreeClaimed] = useState(false);
   const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
   const [selectedTemplate, setSelectedTemplate] = useState("jupyter-pytorch");
   const [diskSize, setDiskSize] = useState(50);
@@ -29,6 +32,7 @@ export default function GpuRentalSpace() {
       ]);
       setRental(rRes.data);
       setCredits(Number(cRes.data?.compute_credits || 0));
+      setFreeClaimed(Boolean(cRes.data?.free_credits_claimed));
     } catch (err) {
       toast.error(getErrorMessage(err, "Couldn't load this machine"));
     } finally {
@@ -54,10 +58,11 @@ export default function GpuRentalSpace() {
   const diskCostPerHour = diskSize * 0.0002;
   const totalPerHour = basePrice + diskCostPerHour;
   const hoursCovered = totalPerHour > 0 ? (credits / totalPerHour).toFixed(1) : "0.0";
-  const canLaunch = rental.is_online && credits >= 0.5;
+  const avail = availabilityOf(rental);
+  const canLaunch = avail === "available" && credits >= 0.5;
 
   const launch = async () => {
-    if (!rental.is_online) return toast.error("This machine is offline right now.");
+    if (avail !== "available") return toast.error(UNAVAILABLE_REASON[avail]);
     if (credits < 0.5) return toast.error("You need compute credits to start an instance.");
     setLaunching(true);
     try {
@@ -95,9 +100,7 @@ export default function GpuRentalSpace() {
               <li><b>Region</b> {rental.location || "—"}</li>
               <li><b>Provider</b> {rental.owner}</li>
               <li>
-                <span className={rental.is_online ? "node-status online" : "node-status"}>
-                  <span className={rental.is_online ? "live-dot" : "live-dot off"} />{rental.is_online ? "Online now" : "Offline"}
-                </span>
+                <Availability r={rental} />
               </li>
             </ul>
           </div>
@@ -111,7 +114,7 @@ export default function GpuRentalSpace() {
         <section className="rs-card">
           <h2><Wallet size={18} aria-hidden="true" /> Compute credits</h2>
           <p>Your balance: <b>{money(credits)}</b>{totalPerHour > 0 && <> — about {hoursCovered} hours on this machine</>}.</p>
-          <p className="rs-note">Closed beta: payments are in test mode, so credits can't be bought yet. [TODO: confirm how beta renters receive credits]</p>
+          <CreditPlans claimed={freeClaimed} onBalance={(b) => { setCredits(b); setFreeClaimed(true); }} />
         </section>
 
         <section className="rs-card">
@@ -146,7 +149,7 @@ export default function GpuRentalSpace() {
           <button type="button" className="primary-button" onClick={launch} disabled={launching || !canLaunch}>
             {launching ? <><Loader2 size={18} className="spin" /> Starting…</> : <><Zap size={18} /> Start instance <ArrowRight size={16} /></>}
           </button>
-          {!canLaunch && <p className="rs-why">{!rental.is_online ? "This machine is offline." : "You need compute credits to start."}</p>}
+          {!canLaunch && <p className="rs-why">{avail !== "available" ? UNAVAILABLE_REASON[avail] : "You need compute credits to start. Claim your free credits above."}</p>}
         </section>
       </div>
     </>
