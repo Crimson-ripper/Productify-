@@ -75,8 +75,8 @@ changing build or hosting configuration.
 
 ## Task 7 — Analytics
 
-- [ ] Implement `page_view`, `cta_click`, `waitlist_submit`, `provider_form_submit`, `form_success`, `form_error`.
-- [ ] Add consent handling if the analytics tool requires it.
+- [x] Implement `page_view`, `cta_click`, `waitlist_submit`, `provider_form_submit`, `form_success`, `form_error`. _(GA4 G-NFV3XD68MB, loaded only after "Accept all"; Consent Mode v2)_
+- [x] Add consent handling if the analytics tool requires it.
 
 Done when: each event is verified firing once per action (show how it was verified).
 
