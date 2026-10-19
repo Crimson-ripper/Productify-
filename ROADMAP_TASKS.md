@@ -90,8 +90,8 @@ Done when: a QA checklist is written with pass/fail per item and failures fixed 
 
 ## Task 9 — Lead tracking (only if the project has a backend/database)
 
-- [ ] Store leads with: type (renter/provider), source/channel, region, use case or hardware profile, qualification status, stage, owner, last contact, next action, outcome.
-- [ ] Simple internal view or export (CSV). Protect it behind auth.
+- [x] Store leads with: type (renter/provider), source/channel, region, use case or hardware profile, qualification status, stage, owner, last contact, next action, outcome.
+- [x] Simple internal view or export (CSV). Protect it behind auth. _(admin dashboard → Leads tab; CSV export; staff only)_
 
 Done when: form submissions appear as leads with a stage and can be exported. ASK before adding a
 database or third-party CRM.
