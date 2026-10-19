@@ -82,9 +82,9 @@ Done when: each event is verified firing once per action (show how it was verifi
 
 ## Task 8 — QA pass
 
-- [ ] Mobile layouts, page speed, broken links, accessibility basics (labels, alt text, contrast, keyboard).
-- [ ] Test in at least two browsers.
-- [ ] Re-check all copy against the honesty rules.
+- [x] Mobile layouts, page speed, broken links, accessibility basics (labels, alt text, contrast, keyboard).
+- [ ] Test in at least two browsers. _(open: only Chromium tested so far; needs Firefox and Safari/iOS by hand)_
+- [x] Re-check all copy against the honesty rules. _(also removed fake GPU telemetry, fake SSH/IP, unsupported templates and unavailable paid plans; deploy now refuses offline machines)_
 
 Done when: a QA checklist is written with pass/fail per item and failures fixed or logged.
 
