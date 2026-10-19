@@ -978,6 +978,8 @@ footer .brand{color:var(--on-ink);margin-bottom:16px}
 .footer-col h5{font:700 11px var(--font-mono);color:var(--lime);letter-spacing:.15em;margin:0 0 14px}
 .footer-col a{display:block;padding:5px 0;color:var(--on-ink-muted);transition:color .2s}
 .footer-col a:hover{color:var(--surface)}
+.footer-linkbtn{display:block;padding:5px 0;background:none;border:0;font:inherit;color:var(--on-ink-muted);cursor:pointer;text-align:left}
+.footer-linkbtn:hover{color:var(--surface)}
 .footer-bar{display:flex;justify-content:space-between;padding-top:24px;color:var(--on-ink-subtle);font-size:11px;flex-wrap:wrap;gap:12px}
 
 /* Responsive */

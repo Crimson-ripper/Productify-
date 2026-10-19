@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { OPEN_COOKIE_SETTINGS } from "@/components/CookieBanner";
 
 export default function Footer() {
   return (
@@ -44,6 +45,7 @@ export default function Footer() {
           <Link to="/legal/refunds" data-testid="footer-refunds-link">Refunds</Link>
           <Link to="/legal/cookies" data-testid="footer-cookies-link">Cookies</Link>
           <Link to="/legal/acceptable-use" data-testid="footer-aup-link">Acceptable use</Link>
+          <button type="button" className="footer-linkbtn" onClick={() => window.dispatchEvent(new Event(OPEN_COOKIE_SETTINGS))}>Cookie settings</button>
         </div>
       </div>
       <div className="footer-bar">

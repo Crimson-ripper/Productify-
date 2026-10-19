@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { track } from "@/lib/analytics";
 import { Toaster } from "sonner";
 import "@/App.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -50,6 +52,11 @@ import PolicyBumpModal from "@/components/PolicyBumpModal";
 
 export function AppRouter() {
   const location = useLocation();
+  useEffect(() => {
+    // small delay so react-helmet has set the new page title first
+    const t = setTimeout(() => track("page_view"), 150);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
   // Detect Emergent OAuth callback via URL fragment — must happen before other route logic
   if (location.hash?.includes("session_id=")) return <AuthCallback />;
   return (

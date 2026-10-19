@@ -17,7 +17,7 @@ export default function PrivacyPolicy() {
         <li><b>Listings & content</b> — product descriptions, GPU node specifications, uploaded images, and any files you transfer during a GPU rental session.</li>
         <li><b>Waitlist and provider applications</b> — what you enter in the renter waitlist or provider application: name, email or preferred contact, role, region, workload or hardware details, availability and any notes. We use it only to run the closed beta and contact you about it. We don't ask for ID documents or bank details in these forms. To have an entry deleted, email <a href="mailto:privacy@productifynow.com">privacy@productifynow.com</a>.</li>
         <li><b>Transactions</b> — cart contents, order totals, payment provider, timestamps, region. Card and bank details are handled by our payment providers (Stripe, PayPal, Razorpay) — we never store your card number.</li>
-        <li><b>Technical data</b> — IP address, device, browser, cookies, log data, approximate location for region-based checkout. We don't currently use a third-party analytics or session-recording tool; if we add one, we'll update this notice first.</li>
+        <li><b>Technical data</b> — IP address, device, browser, cookies, log data, approximate location for region-based checkout. If you accept analytics cookies, Google Analytics 4 records page views and which buttons and forms are used (never your name, email or form answers); see the <a href="/legal/cookies">Cookie Policy</a>. We don't use session recording.</li>
       </ul>
 
       <h2>3. Why we use it (legal bases)</h2>
@@ -32,6 +32,7 @@ export default function PrivacyPolicy() {
       <p>We share the minimum data needed with:</p>
       <ul>
         <li><b>Payment providers</b> — Stripe, PayPal, Razorpay for processing purchases (region-based selection).</li>
+        <li><b>Google Analytics / Google Ads</b> — only if you accept analytics cookies: page-view and event data, IP-derived approximate location, device and browser. You can withdraw consent with "Cookie settings" in the footer.</li>
         <li><b>Infrastructure</b> — Emergent Object Storage for hosting uploaded files; Google (only if you sign in with Google).</li>
         <li><b>Sellers/buyers</b> — buyers see the seller's display name; sellers see the buyer's name for fulfillment.</li>
         <li><b>Legal & safety</b> — courts, regulators or law-enforcement where required by law.</li>

@@ -18,14 +18,17 @@ export default function Cookies() {
         <li><b>productify-user</b> / <b>productify-cart</b> — remembers your profile info and cart between visits.</li>
       </ul>
 
-      <h3>Analytics</h3>
-      <p>We do not currently use analytics cookies or session recording. If we add analytics later, we will list it here and ask for your consent first where the law requires it.</p>
+      <h3>Analytics (only if you choose "Accept all")</h3>
+      <ul>
+        <li><b>_ga</b>, <b>_ga_&lt;ID&gt;</b> — Google Analytics 4. Distinguish visits so we can count page views and which buttons and forms are used. Set by Google, up to 2 years.</li>
+      </ul>
+      <p>Google Analytics isn't loaded at all until you accept. We don't send your name, email or form answers to Google — only page views and events like "waitlist form submitted". We don't use session recording.</p>
 
-      <h3>Advertising</h3>
-      <p>We do not currently use advertising cookies.</p>
+      <h3>Advertising (only if you choose "Accept all")</h3>
+      <p>We plan to advertise with Google Ads. When we do, the same consent lets Google measure whether an ad led to a visit or sign-up, and may set Google advertising cookies. If your browser sends a Global Privacy Control signal, we keep advertising storage and personalisation off even if you accept.</p>
 
       <h2>3. Managing cookies</h2>
-      <p>You can accept or reject non-essential cookies via the banner shown on first visit. You can also block cookies through your browser settings — note that blocking essential cookies will break sign-in and checkout.</p>
+      <p>You can accept or reject non-essential cookies via the banner shown on first visit, and change your choice at any time with "Cookie settings" in the footer. Choosing "Necessary only" stops Google Analytics and deletes its cookies. You can also block cookies through your browser settings — note that blocking essential cookies will break sign-in and checkout.</p>
 
       <h2>4. Regional notes</h2>
       <ul>
