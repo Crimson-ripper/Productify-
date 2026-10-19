@@ -2342,50 +2342,30 @@ async def list_workspace_files(rid: str, user=Depends(current_user)):
 
 # ============== CLOUD GPU INSTANCES (ON-DEMAND RUNPOD/VAST.AI ENGINE) ==============
 
+# Only what Productify Node v2 actually runs (see V2_TEMPLATES). Honesty rule 4: don't list
+# workloads we can't run. JupyterLab, ComfyUI, Ollama and SSH access are not supported yet.
 INSTANCE_TEMPLATES = [
     {
         "id": "jupyter-pytorch",
-        "name": "PyTorch 2.4 + JupyterLab",
-        "category": "Deep Learning & AI",
-        "description": "Pre-configured with CUDA 12.4, PyTorch 2.4, TorchVision, Torchaudio, FlashAttention-2, and JupyterLab environment.",
+        "name": "PyTorch (CUDA)",
+        "category": "AI development",
+        "description": "Python with PyTorch and CUDA on the machine's NVIDIA GPU. Run commands from the browser terminal. JupyterLab is on the way.",
         "icon": "⚡",
-        "port": 8888,
-        "service_name": "JupyterLab",
+        "port": None,
+        "service_name": "Browser terminal",
         "docker_image": "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime",
-        "default_command": "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root",
-    },
-    {
-        "id": "comfyui-sdxl",
-        "name": "ComfyUI + SDXL & Flux",
-        "category": "Generative Art",
-        "description": "State-of-the-art node-based generative image pipeline pre-loaded with SDXL Turbo, Flux weights, and ControlNet acceleration.",
-        "icon": "🎨",
-        "port": 8188,
-        "service_name": "ComfyUI Web",
-        "docker_image": "comfyanonymous/comfyui:latest-cuda",
-        "default_command": "python main.py --listen 0.0.0.0 --port 8188",
-    },
-    {
-        "id": "ollama-llm",
-        "name": "Ollama + Open WebUI",
-        "category": "LLMs & Inference",
-        "description": "Run open-weights LLMs like DeepSeek-R1, Llama 3.3 70B, and Mistral with high-throughput vLLM inference and sleek chat UI.",
-        "icon": "🦙",
-        "port": 11434,
-        "service_name": "Ollama API & WebUI",
-        "docker_image": "ollama/ollama:latest",
-        "default_command": "ollama serve",
+        "default_command": "",
     },
     {
         "id": "ubuntu-base",
-        "name": "Ubuntu 22.04 LTS (CUDA 12.4 Base)",
-        "category": "Custom Compute",
-        "description": "Clean Linux environment with NVIDIA Drivers 550, CUDA Toolkit 12.4, Docker-in-Docker, Git, and root SSH access.",
+        "name": "Python",
+        "category": "General",
+        "description": "A plain Python environment for scripts and tools. Run commands from the browser terminal.",
         "icon": "💻",
-        "port": 22,
-        "service_name": "SSH Shell",
-        "docker_image": "nvidia/cuda:12.4.1-devel-ubuntu22.04",
-        "default_command": "/usr/sbin/sshd -D",
+        "port": None,
+        "service_name": "Browser terminal",
+        "docker_image": "python",
+        "default_command": "",
     },
 ]
 
@@ -2856,37 +2836,34 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
     hourly_price = round(base_price + disk_price, 4)
 
     instance_id = f"inst-{uuid.uuid4().hex[:10]}"
-    ssh_port = random.randint(22000, 29999)
-    host_ip = "142.132.189." + str(random.randint(12, 235))
-    now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Check if seller's physical machine is connected via reverse tunnel
-    tunnel_connected = host_tunnel_manager.is_connected(rental["id"])
-    container_id = None
-    initial_logs = []
-
-    if tunnel_connected:
-        try:
-            pod_res = await host_tunnel_manager.send_rpc(
-                rental["id"],
-                action="deploy_pod",
-                payload={
-                    "instance_id": instance_id,
-                    "template_id": template["id"],
-                    "docker_image": template["docker_image"],
-                    "disk_size_gb": data.disk_size_gb,
-                    "ssh_public_key": data.ssh_public_key or "",
-                    "service_name": template["service_name"],
-                    "web_port": template["port"],
-                },
-                timeout=25.0
-            )
-            container_id = pod_res.get("container_id")
-            initial_logs.append(f"[{now_iso[:19]}] [tunnel] Successfully dispatched pod creation to host GPU node via reverse tunnel.")
-            initial_logs.append(f"[{now_iso[:19]}] [dockerd] Container {container_id or instance_id} allocated on physical GPU ({rental.get('gpu')}).")
-        except Exception as e:
-            logger.warning(f"Could not deploy pod via host tunnel immediately: {e}")
-            initial_logs.append(f"[{now_iso[:19]}] [tunnel] Physical node tunnel queued ({str(e)}). Container will attach upon agent sync.")
+    # Offline machines can't be rented, and nothing is created or billed unless the
+    # container actually started on the provider's machine (CLAUDE.md §5: machine health, metering).
+    if not host_tunnel_manager.is_connected(rental["id"]):
+        raise HTTPException(409, "This machine is offline right now. Choose another machine or try again later.")
+    try:
+        pod_res = await host_tunnel_manager.send_rpc(
+            rental["id"],
+            action="deploy_pod",
+            payload={
+                "instance_id": instance_id,
+                "template_id": template["id"],
+                "docker_image": template["docker_image"],
+                "disk_size_gb": data.disk_size_gb,
+                "service_name": template["service_name"],
+                "web_port": template["port"],
+            },
+            timeout=25.0
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Deploy failed on {rental['id']}: {e}")
+        raise HTTPException(502, "The machine couldn't start your container. You haven't been charged. Please try again.")
+    container_id = pod_res.get("container_id")
+    now_iso = datetime.now(timezone.utc).isoformat()  # billing starts once the container is up
+    tunnel_connected = True
+    initial_logs = [f"[{now_iso[:19]}] Container {container_id or instance_id} started on {rental.get('gpu')}."]
 
     doc = {
         "id": instance_id,
@@ -2905,10 +2882,10 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
         "docker_image": template["docker_image"],
         "service_name": template["service_name"],
         "web_port": template["port"],
-        "ssh_port": ssh_port,
-        "host_ip": host_ip,
+        "ssh_port": None,  # SSH access isn't supported yet
+        "host_ip": None,
         "direct_url": f"/instances/{instance_id}?tab=workspace",
-        "ssh_command": f"ssh -p {ssh_port} root@{host_ip}",
+        "ssh_command": None,
         "jupyter_token": uuid.uuid4().hex[:16],
         "disk_size_gb": data.disk_size_gb,
         "hourly_price": hourly_price,
@@ -2919,7 +2896,6 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
         "started_at": now_iso,
         "total_runtime_seconds": 0,
         "cost_accumulated": 0.0,
-        "ssh_public_key": data.ssh_public_key,
         "specs": rental.get("specs", {}),
         "tunnel_connected": tunnel_connected,
         "container_id": container_id,
@@ -2979,27 +2955,11 @@ async def get_instance(inst_id: str, user=Depends(current_user)):
     inst["live_runtime_seconds"] = total_sec
     inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
 
-    inst["telemetry"] = {
-        "gpu_utilization_pct": 74 + (hash(inst_id + str(int(now.timestamp()) // 10)) % 23),
-        "vram_used_gb": round(14.8 + ((hash(inst_id) % 50) / 10.0), 1),
-        "vram_total_gb": 24.0 if "24" in str(inst.get("vram", "24")) else 80.0,
-        "temperature_c": 62 + (hash(inst_id) % 8),
-        "power_draw_w": 280 + (hash(inst_id) % 45),
-        "fan_pct": 58 + (hash(inst_id) % 15),
-    }
-
-    port = inst.get("web_port", 8888)
-    image = inst.get("docker_image", "pytorch/pytorch")
-    inst["logs"] = [
-        f"[{inst['created_at'][:19]}] [dockerd] Pulling image manifest from registry: {image}",
-        f"[{inst['created_at'][:19]}] [dockerd] Digest: sha256:7f49a88e99b0c031c5123d46781290",
-        f"[{inst['created_at'][:19]}] [dockerd] Container allocated on node '{inst.get('rental_title')}'. GPU UUID: GPU-b83c21a4-9df0",
-        f"[{inst['created_at'][:19]}] [dockerd] Attaching NVMe scratch disk: {inst.get('disk_size_gb')}GB formatted ext4 at /workspace",
-        f"[{inst['created_at'][:19]}] [dockerd] Port forwarding configured: 0.0.0.0:{port} -> container:{port}",
-        f"[{inst['created_at'][:19]}] [dockerd] SSH daemon started on port {inst.get('ssh_port')}",
-        f"[{inst['created_at'][:19]}] [service] {inst.get('service_name')} service is listening at http://0.0.0.0:{port}",
-        f"[{inst['created_at'][:19]}] [system] Container status healthy. Ready for user workload.",
-    ]
+    # No live GPU telemetry from the agent yet, so none is shown (honesty rule 2: no unmeasured numbers).
+    inst["telemetry"] = None
+    inst["logs"] = inst.get("logs") or []
+    inst.pop("ssh_command", None)
+    inst.pop("host_ip", None)
 
     rental_id = inst.get("rental_id")
     inst["tunnel_connected"] = host_tunnel_manager.is_connected(rental_id)
