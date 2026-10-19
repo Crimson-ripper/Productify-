@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { api, getErrorMessage } from "@/lib/api";
 import { track } from "@/lib/analytics";
+import { getAttribution } from "@/lib/attribution";
 
 // Shared form for the renter waitlist and provider application (ROADMAP Task 4).
 // fields: [{ name, label, type: "text"|"email"|"select"|"textarea", required, options, hint, half }]
@@ -38,7 +39,7 @@ export default function LeadForm({ fields, endpoint, submitEvent, formName, subm
     setStatus("sending");
     setServerError("");
     try {
-      await api.post(endpoint, { ...values, consent, website: honeypot.current?.value || "" });
+      await api.post(endpoint, { ...values, ...getAttribution(), consent, website: honeypot.current?.value || "" });
       track("form_success", { form: formName });
       onSuccess();
     } catch (err) {

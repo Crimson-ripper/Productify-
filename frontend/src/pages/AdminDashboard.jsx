@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   LayoutDashboard,
+  Inbox,
   ShoppingBag,
   ShieldCheck,
   Users,
@@ -28,7 +29,7 @@ import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
 import AdminCleanup from "@/components/AdminCleanup";
-import { AdminActivity, AdminOrders, AdminMachines, AdminInstances } from "@/components/AdminData";
+import { AdminActivity, AdminOrders, AdminMachines, AdminInstances, AdminLeads } from "@/components/AdminData";
 import { toast } from "sonner";
 
 export default function AdminDashboard() {
@@ -453,6 +454,7 @@ export default function AdminDashboard() {
     { key: "reviews", label: "Review queue", icon: Package, count: stats.pending_reviews_count },
     { key: "payouts", label: "Payouts", icon: CreditCard, count: stats.pending_payouts_count },
     { key: "reports", label: "Reports", icon: Flag, count: stats.open_reports_count },
+    { key: "leads", label: "Leads", icon: Inbox },
     { key: "orders", label: "Orders", icon: ShoppingBag },
     { key: "machines", label: "Machines", icon: Server },
     { key: "instances", label: "GPU instances", icon: Layers },
@@ -1916,6 +1918,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {tab === "leads" && <AdminLeads />}
         {tab === "orders" && <AdminOrders />}
         {tab === "machines" && <AdminMachines />}
         {tab === "instances" && <AdminInstances />}

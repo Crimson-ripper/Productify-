@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { api, money, getErrorMessage } from "@/lib/api";
@@ -118,6 +118,135 @@ export function AdminOrders() {
                   <td><Pill s={o.status} /></td>
                   <td className="num">{money(o.total, o.currency)}</td>
                 </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+// ---------- Leads: renter waitlist + provider applications (ROADMAP Task 9) ----------
+const LEAD_STAGES = ["new", "contacted", "qualified", "onboarding", "active", "closed"];
+const LEAD_QUAL = [["unreviewed", "Unreviewed"], ["qualified", "Qualified"], ["not_a_fit", "Not a fit"]];
+const LEAD_OUTCOMES = [["", "—"], ["converted", "Converted"], ["not_interested", "Not interested"], ["no_response", "No response"], ["not_a_fit", "Not a fit"]];
+const STAGE_TONE = { new: "wait", contacted: "muted", qualified: "ok", onboarding: "ok", active: "ok", closed: "muted" };
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "—");
+
+function leadProfile(l) {
+  if (l.kind === "provider") return [l.gpu_model, l.vram, l.cpu, l.ram, l.os].filter(Boolean).join(" · ");
+  return [l.workload, l.gpu_needed && `needs ${l.gpu_needed}`, l.frequency].filter(Boolean).join(" · ");
+}
+
+function LeadEditor({ lead, onSaved }) {
+  const [f, setF] = useState({
+    stage: lead.stage, qualification: lead.qualification, owner: lead.owner || "",
+    last_contact: (lead.last_contact || "").slice(0, 10), next_action: lead.next_action || "",
+    outcome: lead.outcome || "", notes: lead.notes || "",
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api.patch(`/admin/leads/${lead.id}`, f);
+      toast.success("Lead updated");
+      onSaved(r.data);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't save"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const detail = lead.kind === "provider"
+    ? [["Contact", lead.contact], ["Applying as", lead.entity], ["Storage", lead.storage], ["Available", lead.available_hours], ["Power / internet", lead.power_notes], ["Security concerns", lead.security_concerns], ["Expected compensation", lead.expected_compensation]]
+    : [["Email", lead.email], ["Role", lead.role], ["Workload", lead.workload], ["GPU / VRAM", lead.gpu_needed], ["How often", lead.frequency], ["Uses now", lead.current_provider], ["Monthly spend", lead.monthly_spend]];
+  return (
+    <div className="lead-editor">
+      <dl className="lead-detail">
+        {detail.filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+        <div><dt>Source</dt><dd>{lead.source}{lead.campaign ? ` · ${lead.campaign}` : ""}</dd></div>
+      </dl>
+      <div className="lead-fields">
+        <label>Qualification<select value={f.qualification} onChange={set("qualification")}>{LEAD_QUAL.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <label>Stage<select value={f.stage} onChange={set("stage")}>{LEAD_STAGES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}</select></label>
+        <label>Owner<input value={f.owner} onChange={set("owner")} maxLength={120} /></label>
+        <label>Last contact<input type="date" value={f.last_contact} onChange={set("last_contact")} /></label>
+        <label className="wide">Next action<input value={f.next_action} onChange={set("next_action")} maxLength={500} /></label>
+        <label>Outcome<select value={f.outcome} onChange={set("outcome")}>{LEAD_OUTCOMES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <label className="wide">Notes<textarea rows={2} value={f.notes} onChange={set("notes")} maxLength={2000} /></label>
+      </div>
+      <button className="primary-button" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+    </div>
+  );
+}
+
+export function AdminLeads() {
+  const [kind, setKind] = useState("all");
+  const [stage, setStage] = useState("all");
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(null);
+  const query = `kind=${kind}&stage=${stage}&q=${encodeURIComponent(q)}`;
+  const [rows, loading, load] = useAdminData(`/admin/leads?${query}`);
+  const [list, setList] = useState(null);
+  useEffect(() => { setList(rows); }, [rows]);
+
+  const exportCsv = async () => {
+    try {
+      const r = await api.get(`/admin/leads/export.csv?${query}`, { responseType: "blob" });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `productify-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't export"));
+    }
+  };
+
+  const counts = (list || []).reduce((c, l) => ({ ...c, [l.kind]: (c[l.kind] || 0) + 1 }), {});
+  return (
+    <Panel
+      title={list ? `${list.length} lead${list.length === 1 ? "" : "s"} · ${counts.waitlist || 0} renters · ${counts.provider || 0} providers` : "Leads"}
+      flush
+      actions={<><button className="secondary-button" onClick={exportCsv} disabled={!list?.length}>Export CSV</button><Refresh onClick={load} loading={loading} /></>}
+    >
+      <div className="dash-search" style={{ padding: "14px 22px", borderBottom: "1px solid var(--line)" }}>
+        <input placeholder="Search name, email, GPU, region, notes" defaultValue={q} onKeyDown={(e) => e.key === "Enter" && setQ(e.currentTarget.value)} aria-label="Search leads" />
+        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Type">
+          <option value="all">Renters and providers</option><option value="waitlist">Renter waitlist</option><option value="provider">Provider applications</option>
+        </select>
+        <select value={stage} onChange={(e) => setStage(e.target.value)} aria-label="Stage">
+          <option value="all">All stages</option>{LEAD_STAGES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}
+        </select>
+      </div>
+      {!list?.length ? <Empty loading={loading}>No leads yet. Waitlist entries and provider applications will appear here.</Empty> : (
+        <div className="dash-table-wrap">
+          <table className="dash-table">
+            <thead><tr><th>Lead</th><th>Type</th><th>Region</th><th>Use case / hardware</th><th>Source</th><th>Stage</th><th>Next action</th></tr></thead>
+            <tbody>
+              {list.map((l) => (
+                <Fragment key={l.id}>
+                  <tr className="lead-row" onClick={() => setOpen(open === l.id ? null : l.id)}>
+                    <td>
+                      <button type="button" className="link-button" aria-expanded={open === l.id} onClick={(e) => { e.stopPropagation(); setOpen(open === l.id ? null : l.id); }}>
+                        <b>{l.name}</b>
+                      </button>
+                      <div><small>{l.email || l.contact} · {when(l.created_at)}</small></div>
+                    </td>
+                    <td>{l.kind === "provider" ? "Provider" : "Renter"}</td>
+                    <td>{l.region || "—"}</td>
+                    <td className="lead-profile">{leadProfile(l) || "—"}</td>
+                    <td>{l.source}</td>
+                    <td><span className={`dash-pill ${STAGE_TONE[l.stage] || "muted"}`}>{cap(l.stage)}</span>{l.qualification === "not_a_fit" && <div><small>Not a fit</small></div>}</td>
+                    <td>{l.next_action || "—"}{l.owner && <div><small>{l.owner}</small></div>}</td>
+                  </tr>
+                  {open === l.id && (
+                    <tr><td colSpan={7}><LeadEditor lead={l} onSaved={(u) => setList((s) => s.map((x) => (x.id === u.id ? u : x)))} /></td></tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

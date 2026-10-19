@@ -5,7 +5,9 @@ import { HelmetProvider } from "react-helmet-async";
 import "@/index.css";
 import App from "@/App";
 import { initAnalytics } from "@/lib/analytics";
+import { captureAttribution } from "@/lib/attribution";
 
+captureAttribution();
 initAnalytics();
 
 const queryClient = new QueryClient({
