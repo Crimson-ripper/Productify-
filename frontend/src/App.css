@@ -1539,3 +1539,52 @@ header.topbar,.footer-grid{border:0!important}
 }
 .gx-reply-say{grid-column:1/6!important;max-width:24ch}
 @media(max-width:900px){.gx-reply-say{grid-column:1/-1!important;max-width:none}}
+
+/* Hero: Rent now / Earn now either side of the photo, inside the first screen */
+.gx-hero-row{position:relative;z-index:1;width:100%;display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:clamp(16px,3vw,48px)}
+.gx-hero-row .gx-hero-fig{grid-column:2}
+.gx-big-btn{align-self:start;margin-top:clamp(28px,4vw,64px);display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:72px;padding:0 clamp(24px,2.6vw,44px);font:800 clamp(22px,2vw,32px) 'Archivo',sans-serif;font-stretch:75%;text-transform:uppercase;letter-spacing:.01em;transition:transform .2s cubic-bezier(.2,.7,.2,1),background-color .2s}
+.gx-big-rent{justify-self:end;background:var(--lime);color:#0a0a0b}
+.gx-big-rent:hover{background:#d9fb72;transform:translateY(-3px)}
+.gx-big-earn{justify-self:start;background:var(--fg);color:#0a0a0b}
+.gx-big-earn:hover{background:#ffffff;transform:translateY(-3px)}
+.gx-big-btn:active{transform:none}
+@media (prefers-reduced-motion:no-preference){.gx-big-btn{animation:gx-fade .7s .45s cubic-bezier(.2,.7,.2,1) both}}
+@media(max-width:900px){
+  .gx-hero-row{grid-template-columns:1fr 1fr;gap:10px}
+  .gx-hero-row .gx-hero-fig{grid-column:1/-1;grid-row:2;justify-self:center}
+  .gx-big-btn{grid-row:1;margin:20px 0 24px;min-height:60px;width:100%;font-size:22px}
+  .gx-big-rent,.gx-big-earn{justify-self:stretch}
+}
+.gx-hero-row{grid-template-columns:1fr auto 1fr}
+@media(max-width:900px){.gx-hero-row{grid-template-columns:1fr}.gx-big-rent{grid-column:1}}
+
+/* Images here and there: hero poster chip + "what GPUs power" strip */
+.gx-hero-chip{grid-column:3;justify-self:start;align-self:start;margin:clamp(28px,4vw,64px) 0 0;width:clamp(140px,12vw,220px);transform:rotate(4deg);position:relative;z-index:1}
+.gx-hero-chip img{display:block;width:100%;height:auto}
+.gx-hero-chip figcaption{margin-top:10px;font-size:14px;line-height:1.35;color:var(--fg2)}
+.gx-hero-chip:hover{transform:rotate(1deg) translateY(-4px);transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.gx-powers{background:var(--bk);padding:clamp(96px,12vh,160px) 0 clamp(96px,12vh,160px);overflow:hidden}
+.gx-powers-head{display:grid;grid-template-columns:1fr auto;align-items:end;gap:24px 48px;padding:0 var(--m) 48px}
+.gx-h2-s{font-size:clamp(36px,4.4vw,72px)}
+.gx-powers-note{margin:0;max-width:44ch;font-size:var(--body);line-height:1.5;color:var(--fg2)}
+.gx-strip{overflow-x:auto;scrollbar-width:none}
+.gx-strip::-webkit-scrollbar{display:none}
+.gx-strip-track{list-style:none;margin:0;padding:0 var(--m);display:flex;gap:12px;width:max-content}
+.gx-strip-track li{flex:none;margin:0;position:relative}
+.gx-strip-track img{display:block;height:clamp(220px,26vw,380px);width:auto}
+.gx-strip-track span{display:block;margin-top:10px;font-size:15px;color:var(--fg2)}
+.gx-strip-track b{color:var(--lime);font-weight:800;text-transform:uppercase;margin-right:6px}
+@keyframes gx-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:no-preference){
+  .gx-strip{overflow:hidden}
+  .gx-strip-track{animation:gx-marquee 48s linear infinite}
+  .gx-strip:hover .gx-strip-track{animation-play-state:paused}
+}
+@media(max-width:900px){
+  .gx-hero-chip{display:none}
+  .gx-powers-head{grid-template-columns:1fr}
+  .gx-strip-track img{height:200px}
+}
+.gx-credits summary{cursor:pointer;font-weight:700;font-size:15px}
+.gx-credits[open]{background:var(--lime);padding:8px 0;font-size:14px}

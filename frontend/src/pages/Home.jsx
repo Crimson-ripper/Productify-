@@ -11,6 +11,36 @@ import SEO from "@/components/SEO";
 // Idea: the real afternoon a provider's RTX 4060 laptop was rented out (19 Oct 2026) becomes the
 // launch page's spec sheet and timeline.
 
+const POWERS = [
+  { img: "/img/gx-stk.jpg", w: 1000, h: 537, label: "Games", name: "SuperTuxKart", alt: "SuperTuxKart: a go-kart on a sunny beach track at the start line" },
+  { img: "/img/gx-blender.jpg", w: 1000, h: 500, label: "3D", name: "Blender", alt: "Blender 3.0 splash art: an animated girl holding a small yellow bird" },
+  { img: "/img/gx-xonotic.jpg", w: 1000, h: 562, label: "Games", name: "Xonotic", alt: "Xonotic: a first-person arena shooter in a dim corridor" },
+  { img: "/img/gx-sprite.jpg", w: 700, h: 933, label: "Film", name: "Sprite Fright", alt: "Poster for Sprite Fright, a Blender open movie: teenagers in a forest of glowing mushrooms" },
+  { img: "/img/node-app.jpg", w: 1380, h: 560, label: "AI", name: "PyTorch on Productify", alt: "The Productify Node app running a renter's PyTorch job on an RTX 4060 laptop" },
+];
+
+function Powers() {
+  const row = [...POWERS, ...POWERS]; // doubled so the strip loops seamlessly
+  return (
+    <section className="gx-powers" aria-labelledby="gx-powers-h">
+      <div className="gx-powers-head">
+        <h2 id="gx-powers-h" className="gx-h2 gx-h2-s">What GPUs like these power</h2>
+        <p className="gx-powers-note">Games, 3D and film are what a provider's GPU is built for. On Productify, renters run AI work: PyTorch and Python today, Blender rendering later.</p>
+      </div>
+      <div className="gx-strip" aria-hidden="false">
+        <ul className="gx-strip-track">
+          {row.map((m, i) => (
+            <li key={m.name + i} aria-hidden={i >= POWERS.length ? "true" : undefined}>
+              <img src={m.img} width={m.w} height={m.h} alt={i >= POWERS.length ? "" : m.alt} loading="lazy" />
+              <span><b>{m.label}</b> {m.name}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 const CHAPTERS = [
   {
     title: ["This is a", "graphics card."],
@@ -111,16 +141,22 @@ function Hero({ online }) {
         <span className="gx-line"><span>Rent a GPU</span></span>
         <span className="gx-line"><span>by the hour</span></span>
       </h1>
-      <figure className="gx-hero-fig">
-        <img src="/img/gx-rgb-pc.jpg" width="1200" height="1600" alt="Inside a gaming PC lit in rainbow colours, with a white GeForce RTX graphics card across the middle" />
-      </figure>
+      <div className="gx-hero-row">
+        <Link to={ROUTES.rentals} className="gx-big-btn gx-big-rent" {...ctaProps("hero_rent_now")}>Rent now <ArrowRight size={22} /></Link>
+        <figure className="gx-hero-fig">
+          <img src="/img/gx-rgb-pc.jpg" width="1200" height="1600" alt="Inside a gaming PC lit in rainbow colours, with a white GeForce RTX graphics card across the middle" />
+        </figure>
+        <figure className="gx-hero-chip">
+          <img src="/img/gx-charge.jpg" width="700" height="933" alt="Poster for Charge, an animated short made in Blender: an old man and a robot in neon light" />
+          <figcaption>Rendered on GPUs: <i>Charge</i>, a Blender open movie</figcaption>
+        </figure>
+      </div>
       <p className="gx-hero-say">
         Run your AI code on real NVIDIA graphics cards in people's PCs. Pay by the second.
       </p>
       <div className="gx-hero-act">
         <p className="gx-hero-fact"><b>$5</b> free credit to start{online != null && <> · {online} online now</>}</p>
-        <Link to={ROUTES.waitlist} className="gx-btn" {...ctaProps("hero_join_waitlist")}>Join the waitlist <ArrowRight size={18} /></Link>
-        <Link to={ROUTES.earnWithHardware} className="gx-link" {...ctaProps("hero_have_gpu")}>Have a GPU? Earn with it</Link>
+        <Link to={ROUTES.waitlist} className="gx-link" {...ctaProps("hero_join_waitlist")}>Or join the waitlist</Link>
       </div>
     </section>
   );
@@ -246,11 +282,13 @@ function Reply() {
         <p>Tell us about your hardware. We review every application and help you pair your PC.</p>
         <Link to={ROUTES.apply} className="gx-card-btn" {...ctaProps("reply_apply_provider")}>Apply as a provider</Link>
       </div>
-      <p className="gx-credits">
+      <details className="gx-credits">
+        <summary>Photo credits</summary>
         Photographs via Wikimedia Commons: "2025 Wnętrze komputera PC" by Jacek Halicki (CC BY-SA 4.0);
         "MSI GeForce RTX 3070 VENTUS 3X OC" by TheStriker (CC BY 4.0); "Gaming-PC 20240426 HOF2514" and
-        "Gigabyte GeForce RTX 3090 Eagle OC" by PantheraLeo1359531 (CC BY 4.0). Screenshots and app photo: Productify test, 19 Oct 2026.
-      </p>
+        "Gigabyte GeForce RTX 3090 Eagle OC" by PantheraLeo1359531 (CC BY 4.0); "Charge" and "Sprite Fright" posters and Blender 3.0 splash by Blender Studio (CC BY 4.0);
+        SuperTuxKart screenshot by the STK dev team (CC BY 3.0); "Xonotic gameplay" by OliwierJaszczyszyn (CC BY-SA 4.0). Screenshots and app photo: Productify test, 19 Oct 2026.
+      </details>
     </section>
   );
 }
@@ -270,7 +308,9 @@ export default function Home() {
         jsonLd={{ "@context": "https://schema.org", "@type": "WebSite", name: "Productify", url: "https://www.productifynow.com" }}
       />
       <Hero online={online} />
-      {CHAPTERS.map((c) => <Chapter key={c.img} c={c} />)}
+      <Chapter c={CHAPTERS[0]} />
+      <Powers />
+      {CHAPTERS.slice(1).map((c) => <Chapter key={c.img} c={c} />)}
       <Board />
       <Plans />
       <Spec />
