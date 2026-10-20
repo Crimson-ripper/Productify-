@@ -32,6 +32,7 @@ export default function Waitlist() {
         path={ROUTES.waitlist}
       />
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/gx-rgb-pc.jpg" width="1200" height="1600" alt="Inside a gaming PC lit in rainbow colours, with a GeForce RTX graphics card" /></figure>
         <div className="eyebrow">Renter waitlist · closed beta</div>
         <h1>{done ? "You're on the waitlist" : "Join the renter waitlist"}</h1>
         <p>{done

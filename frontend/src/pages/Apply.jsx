@@ -33,6 +33,7 @@ export default function Apply() {
         path={ROUTES.apply}
       />
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/gx-pc-dark.jpg" width="1920" height="1280" alt="The inside of a black gaming PC, lit in white" /></figure>
         <div className="eyebrow">Provider application · closed beta</div>
         <h1>{done ? "Application received" : "Apply as a provider"}</h1>
         <p>{done

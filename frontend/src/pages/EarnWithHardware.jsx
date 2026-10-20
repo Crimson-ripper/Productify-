@@ -44,6 +44,7 @@ export default function EarnWithHardware() {
       />
 
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/gx-pc-dark.jpg" width="1920" height="1280" alt="The inside of a black gaming PC, lit in white" /></figure>
         <div className="eyebrow">Earn with hardware · closed beta</div>
         <h1>Make your idle GPU rentable</h1>
         <p>Rent out an NVIDIA GPU you already own to AI developers, on your terms. You decide when it's available.</p>
@@ -85,7 +86,7 @@ export default function EarnWithHardware() {
         <div className="lp-cols">
           <div>
             <div className="eyebrow">Security approach</div>
-            <h2 id="lp-sec">How renter jobs are kept apart from your computer</h2>
+            <h2 id="lp-sec">How renter jobs stay contained</h2>
           </div>
           <ul className="lp-bullets">{SECURITY.map((s, i) => <li key={s} className={i === SECURITY.length - 1 ? "warn" : undefined}>{s}</li>)}</ul>
         </div>

@@ -27,8 +27,9 @@ export default function Security() {
         path={ROUTES.security}
       />
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/node-app.jpg" width="1380" height="560" alt="The Productify Node app on a provider's laptop, paused, with the emergency stop" /></figure>
         <div className="eyebrow">Security</div>
-        <h1>How renters and providers are kept apart</h1>
+        <h1>How isolation works</h1>
         <p>What's in place today, and what's still being built. We'd rather tell you now than have you find out later.</p>
       </section>
 
