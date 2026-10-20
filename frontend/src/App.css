@@ -1603,3 +1603,19 @@ header.topbar,.footer-grid{border:0!important}
 }
 .mobile-drawer{background:#0a0a0b;color:#f2f2ee}
 .mobile-drawer a,.mobile-drawer>button{color:#f2f2ee}
+
+/* Nav alignment: same side margins as the page content; links next to the logo,
+   search + account + bag grouped on the right with even gaps. */
+.topbar{padding:0 clamp(20px,3.6vw,56px)!important;gap:clamp(20px,2.4vw,40px)!important}
+.topbar .header-search{flex:0 1 300px;max-width:300px;margin-left:auto}
+.topbar .header-actions{margin-left:0;gap:22px}
+.topbar .header-search+.header-actions{margin-left:0}
+@media(max-width:1280px){.topbar .header-actions{margin-left:auto}}
+
+/* Account dropdown: dark panel with light text, so it reads on the dark bar */
+.topbar .account-menu{background:#141416;border:0;box-shadow:0 18px 40px rgba(0,0,0,.45);padding:8px}
+.topbar .account-menu a,.topbar .account-menu button{color:#f2f2ee;font-size:14px;font-weight:600}
+.topbar .account-menu a:hover,.topbar .account-menu button:hover{background:#232427;color:var(--lime)}
+.topbar .account-menu .menu-admin{color:var(--lime)}
+.topbar .account-menu{top:100%;margin-top:0}
+.topbar .account-wrap{padding:8px 0}
