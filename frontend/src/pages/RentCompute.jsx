@@ -40,8 +40,9 @@ export default function RentCompute() {
       />
 
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/gx-rtx3070.jpg" width="1920" height="855" alt="An MSI GeForce RTX 3070 graphics card with three fans" /></figure>
         <div className="eyebrow">Rent compute · closed beta</div>
-        <h1>A GPU for your AI work, by the hour</h1>
+        <h1>A GPU for your AI work</h1>
         <p>For developers, researchers and students whose laptop can't train or test the model they're working on.</p>
         <div className="hero-actions">
           <Link to={ROUTES.waitlist} className="primary-button" {...ctaProps("rent_hero_waitlist")}>Join renter waitlist <ArrowRight size={17} /></Link>

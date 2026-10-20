@@ -32,6 +32,7 @@ export default function Pricing() {
         path={ROUTES.pricing}
       />
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/gx-rtx3090.jpg" width="1600" height="1067" alt="A Gigabyte GeForce RTX 3090 graphics card on a wooden desk" /></figure>
         <div className="eyebrow">Pricing</div>
         <h1>How billing works</h1>
         <p>There's no fixed price list: providers set their own hourly prices. This page explains how a rental is charged, and what providers receive.</p>

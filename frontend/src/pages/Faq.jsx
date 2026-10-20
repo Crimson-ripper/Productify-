@@ -41,6 +41,7 @@ export default function Faq() {
         jsonLd={jsonLd}
       />
       <section className="page-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/smi.jpg" width="1090" height="330" alt="nvidia-smi output in a terminal: NVIDIA GeForce RTX 4060" /></figure>
         <div className="eyebrow">FAQ</div>
         <h1>Questions and answers</h1>
         <p>Can't find your answer? Email <a className="lp-hero-link" href="mailto:support@productifynow.com">support@productifynow.com</a>.</p>
