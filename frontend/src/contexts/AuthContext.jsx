@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await api.get("/auth/me");
-      setUser(data);
+      setUser(data && typeof data === "object" && data.id ? data : null); // ignore non-API answers (e.g. an HTML page)
     } catch {
       setUser(null);
     } finally {

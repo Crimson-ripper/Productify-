@@ -52,6 +52,7 @@ export default function Footer() {
         <span>© {new Date().getFullYear()} Productify</span>
         <span>productifynow.com</span>
       </div>
+      <div className="footer-mark" aria-hidden="true">productify</div>
     </footer>
   );
 }
