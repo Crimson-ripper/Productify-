@@ -1578,7 +1578,7 @@ header.topbar,.footer-grid{border:0!important}
 @keyframes gx-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion:no-preference){
   .gx-strip{overflow:hidden}
-  .gx-strip-track{animation:gx-marquee 48s linear infinite}
+  .gx-strip-track{animation:gx-marquee 120s linear infinite}
   .gx-strip:hover .gx-strip-track{animation-play-state:paused}
 }
 @media(max-width:900px){

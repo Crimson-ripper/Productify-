@@ -12,11 +12,23 @@ import SEO from "@/components/SEO";
 // launch page's spec sheet and timeline.
 
 const POWERS = [
-  { img: "/img/gx-stk.jpg", w: 1000, h: 537, label: "Games", name: "SuperTuxKart", alt: "SuperTuxKart: a go-kart on a sunny beach track at the start line" },
+  { img: "/img/game-gta.jpg", w: 592, h: 334, label: "Games", name: "Grand Theft Auto VI", alt: "Grand Theft Auto VI key art" },
+  { img: "/img/game-wolverine.jpg", w: 603, h: 334, label: "Games", name: "Marvel's Wolverine", alt: "Marvel's Wolverine key art" },
+  { img: "/img/game-resident-evil.jpg", w: 584, h: 334, label: "Games", name: "Resident Evil Requiem", alt: "Resident Evil Requiem key art" },
+  { img: "/img/game-nioh-3.jpg", w: 592, h: 348, label: "Games", name: "Nioh 3", alt: "Nioh 3 key art" },
+  { img: "/img/game-007-first-light.jpg", w: 608, h: 348, label: "Games", name: "007 First Light", alt: "007 First Light key art" },
+  { img: "/img/game-forza-horizon-6.jpg", w: 563, h: 348, label: "Games", name: "Forza Horizon 6", alt: "Forza Horizon 6 key art" },
+  { img: "/img/game-halo.jpg", w: 592, h: 348, label: "Games", name: "Halo: Campaign Evolved", alt: "Halo: Campaign Evolved key art" },
+  { img: "/img/game-yakuza-kiwami-3.jpg", w: 608, h: 348, label: "Games", name: "Yakuza Kiwami 3 & Dark Ties", alt: "Yakuza Kiwami 3 & Dark Ties key art" },
+  { img: "/img/game-phantom-blade-0.jpg", w: 592, h: 348, label: "Games", name: "Phantom Blade Zero", alt: "Phantom Blade Zero key art" },
+  { img: "/img/game-tomb-raider.jpg", w: 592, h: 348, label: "Games", name: "Tomb Raider: Legacy of Atlantis", alt: "Tomb Raider: Legacy of Atlantis key art" },
+  { img: "/img/game-resonance.jpg", w: 586, h: 348, label: "Games", name: "Resonance: A Plague Tale Legacy", alt: "Resonance: A Plague Tale Legacy key art" },
+  { img: "/img/game-fable.jpg", w: 592, h: 348, label: "Games", name: "Fable", alt: "Fable key art" },
+  { img: "/img/game-onimusha.jpg", w: 592, h: 332, label: "Games", name: "Onimusha: Way of the Sword", alt: "Onimusha: Way of the Sword key art" },
+  { img: "/img/game-control-resonant.jpg", w: 608, h: 332, label: "Games", name: "Control Resonant", alt: "Control Resonant key art" },
+  { img: "/img/game-crimson-desert.jpg", w: 587, h: 332, label: "Games", name: "Crimson Desert", alt: "Crimson Desert key art" },
   { img: "/img/gx-blender.jpg", w: 1000, h: 500, label: "3D", name: "Blender", alt: "Blender 3.0 splash art: an animated girl holding a small yellow bird" },
-  { img: "/img/gx-xonotic.jpg", w: 1000, h: 562, label: "Games", name: "Xonotic", alt: "Xonotic: a first-person arena shooter in a dim corridor" },
   { img: "/img/gx-sprite.jpg", w: 700, h: 933, label: "Film", name: "Sprite Fright", alt: "Poster for Sprite Fright, a Blender open movie: teenagers in a forest of glowing mushrooms" },
-  { img: "/img/node-app.jpg", w: 1380, h: 560, label: "AI", name: "PyTorch on Productify", alt: "The Productify Node app running a renter's PyTorch job on an RTX 4060 laptop" },
 ];
 
 function Powers() {
@@ -287,7 +299,7 @@ function Reply() {
         Photographs via Wikimedia Commons: "2025 Wnętrze komputera PC" by Jacek Halicki (CC BY-SA 4.0);
         "MSI GeForce RTX 3070 VENTUS 3X OC" by TheStriker (CC BY 4.0); "Gaming-PC 20240426 HOF2514" and
         "Gigabyte GeForce RTX 3090 Eagle OC" by PantheraLeo1359531 (CC BY 4.0); "Charge" and "Sprite Fright" posters and Blender 3.0 splash by Blender Studio (CC BY 4.0);
-        SuperTuxKart screenshot by the STK dev team (CC BY 3.0); "Xonotic gameplay" by OliwierJaszczyszyn (CC BY-SA 4.0). Screenshots and app photo: Productify test, 19 Oct 2026.
+        Game key art belongs to its publishers. Screenshots and app photo: Productify test, 19 Oct 2026.
       </details>
     </section>
   );
