@@ -1,349 +1,281 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
-import { api, money } from "@/lib/api";
+import { api } from "@/lib/api";
 import { ctaProps } from "@/lib/analytics";
 import { ROUTES } from "@/lib/routes";
 import SEO from "@/components/SEO";
-import { availabilityOf } from "@/components/Availability";
 
-// Redesign prototype (branch redesign-prototype). Direction: "the sentence is the layout" —
-// the headline carries a live piece of the product (a real listed GPU) where a word would be.
+// Redesign prototype v2 (branch redesign-prototype).
+// Direction: "dressed as something else" — GPU rental art-directed like a graphics-card launch.
+// Idea: the real afternoon a provider's RTX 4060 laptop was rented out (19 Oct 2026) becomes the
+// launch page's spec sheet and timeline.
 
-// Real output recorded on a provider's RTX 4060 laptop during closed-beta testing, 19 Oct 2026.
-const RECORDED = [
+const CHAPTERS = [
   {
-    cmd: "nvidia-smi",
-    out: `NVIDIA-SMI 610.55        KMD Version: 610.78     CUDA UMD Version: 13.3
-GPU  Name                     Persistence-M | Bus-Id          Disp.A
- 0   NVIDIA GeForce RTX 4060 ...       On   | 00000000:01:00.0  On
-N/A  54C  P0   16W /  85W   |   754MiB /  8188MiB   |   0%   Default`,
-    note: "The renter's container sees the provider's GPU directly.",
+    title: ["This is a", "graphics card."],
+    text: "Gamers buy them to play. The same chips run modern AI: training models, fine-tuning them, testing them.",
+    img: "/img/gx-rtx3070.jpg", w: 1920, h: 855,
+    alt: "An MSI GeForce RTX 3070 graphics card with three fans, standing on a desk",
+    side: "wide",
   },
   {
-    cmd: `python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"`,
-    out: "True NVIDIA GeForce RTX 4060 Laptop GPU",
-    note: "PyTorch finds CUDA without any setup.",
+    title: ["Most days,", "it sits idle."],
+    text: "While its owner is at work or asleep, the GPU inside a gaming PC does nothing at all.",
+    img: "/img/gx-pc-dark.jpg", w: 1920, h: 1280,
+    alt: "The inside of a black gaming PC: cooler, memory and graphics card slots, lit in white",
+    side: "right",
   },
   {
-    cmd: `python -c "import torch; x=torch.rand(8000,8000,device='cuda'); print((x@x).sum())"`,
-    out: "tensor(1.2798e+11, device='cuda:0')\nProcess finished with exit code 0 in 1.703s",
-    note: "An 8000 × 8000 matrix multiply on the GPU.",
+    title: ["Your laptop", "can't train it."],
+    text: "AI work needs a GPU with enough memory. Buying one for a single project rarely makes sense.",
+    img: "/img/smi.jpg", w: 1090, h: 330,
+    alt: "nvidia-smi output in a terminal: NVIDIA GeForce RTX 4060, 54 degrees, 754 of 8188 MiB memory used",
+    side: "left", ui: true,
   },
   {
-    cmd: "whoami",
-    out: "whoami: cannot find name for user ID 1000",
-    note: "Jobs run as an unprivileged user, never as administrator.",
-  },
-  {
-    cmd: "ls -la /mnt",
-    out: "total 8\ndrwxr-xr-x 2 root root 4096 Jun 27  2024 .\ndrwxr-xr-x 1 root root 4096 Oct 19 11:10 ..",
-    note: "None of the provider's drives are visible.",
+    title: ["We connect", "the two."],
+    text: "The owner pairs their PC with our app and decides when it's available. You rent its GPU in a locked-down container, billed by the second.",
+    img: "/img/node-app.jpg", w: 1380, h: 560,
+    alt: "The Productify Node app on a provider's laptop: Docker running, GeForce RTX 4060, 52 °C, limits for renters, activity log",
+    side: "right", contain: true,
   },
 ];
 
-const STAGES = [
-  { name: "Choose", clause: "Choose a machine that fits" },
-  { name: "Start", clause: "Start PyTorch in a container" },
-  { name: "Run", clause: "Run your code from the browser" },
-  { name: "Stop", clause: "Stop, and billing stops too" },
+// The real test afternoon, 19 October 2026, from the app's activity log and the renter's terminal.
+const LOG = [
+  ["4:29 pm", "Agent started", "Productify Node on the provider's RTX 4060 laptop", "OK", "ok", "The app runs as a Windows service. It never opens a port: it connects out to Productify."],
+  ["4:29 pm", "Tunnel connected", "Machine shows online on productifynow.com", "OK", "ok", "From here the website can start, run and stop jobs on the laptop — only through the agent."],
+  ["4:40 pm", "Instance started", "PyTorch container, 50 GB disk", "Running", "go", "A renter clicked Start. The laptop pulled the PyTorch image and started a locked-down container."],
+  ["4:46 pm", "PyTorch sees CUDA", "True · NVIDIA GeForce RTX 4060 Laptop GPU", "OK", "ok", "torch.cuda.is_available() returned True on the first try. No drivers or setup on the renter's side."],
+  ["4:48 pm", "8000 × 8000 matrix multiply", "tensor(1.2798e+11) in 1.7 s", "OK", "ok", "Real work on the real GPU: the renter's code ran on the provider's card, and the GPU graph moved in Task Manager."],
+  ["4:48 pm", "whoami", "user ID 1000, not root", "OK", "ok", "Jobs run as an unprivileged user. ls /mnt showed an empty folder: none of the laptop's drives were visible."],
+  ["4:57 pm", "Network probe", "Laptop's file sharing reachable", "Fixed", "warn", "The container could reach port 445 on the laptop itself. Productify Node 2.1.0 now puts every job on a private network with a filtered way out to public websites only."],
+  ["5:09 pm", "Second renter started", "Same GPU, second account", "Fixed", "warn", "Two renters could share one GPU. Since 2.1.0 it's one renter per machine; a busy machine shows as in use."],
+  ["5:15 pm", "Emergency stop", "Both jobs removed from the laptop", "Done", "ok", "One click in the app removed every renter container. Since 2.1.0 the website stops the instance and its billing the same moment."],
 ];
 
-const PROVIDER_LINES = [
-  ["Renters never see your files.", "Jobs run in a container with no access to your folders, as user 1000 — not as administrator."],
-  ["Renters can't reach your network.", "Internet only through a filter: public sites on ports 80 and 443. Your PC and router are blocked."],
-  ["One renter uses your GPU at a time.", "A machine in use shows as busy; nobody else can start on it."],
-  ["You can stop everything, instantly.", "Pause or emergency-stop from the Productify Node app. Billing ends the same moment."],
-  ["Earnings aren't guaranteed.", "You get your hourly price minus a 10% fee, for the time your machine is rented."],
+const SPEC = [
+  ["What renters get", [
+    ["GPU", "Your NVIDIA card, via CUDA"],
+    ["Environments", "PyTorch or Python"],
+    ["Internet", "Public sites, ports 80 & 443"],
+  ]],
+  ["What renters can't do", [
+    ["See your files", "No access"],
+    ["Reach your PC or router", "Blocked"],
+    ["Run as administrator", "User 1000"],
+    ["Share your GPU", "One renter at a time"],
+  ]],
+  ["What you control", [
+    ["Availability", "Pause any time"],
+    ["Emergency stop", "One click"],
+    ["Hourly price", "You set it"],
+    ["Platform fee", "10% (Free plan)"],
+    ["Earnings", "Not guaranteed"],
+  ]],
+];
+
+const PLANS = [
+  { name: "Free", price: "$0", credit: "$5 credit, once", lines: ["About 10 hours on a $0.50/hr GPU", "PyTorch and Python environments"], cta: "Claim it on the pricing page", to: ROUTES.pricing, live: true },
+  { name: "Starter", price: "$20", credit: "$21 credit", lines: ["5% extra credit", "Credits don't expire", "Email support"], cta: "Coming soon" },
+  { name: "Builder", price: "$50", credit: "$53 credit", lines: ["6% extra credit", "Credits don't expire", "Priority email support", "For longer training runs"], cta: "Coming soon" },
 ];
 
 const FAQ = [
-  ["What can I run?", "Python and PyTorch on an NVIDIA GPU, from a browser terminal. JupyterLab is on the way; Blender rendering is a future pilot. Gaming and full remote desktops aren't supported."],
+  ["What can I run?", "Python and PyTorch on an NVIDIA GPU, from a browser terminal. JupyterLab is on the way. Gaming and full remote desktops aren't supported."],
   ["How am I charged?", "The machine's hourly price, metered by the second while the instance runs, plus $0.0002 per GB of disk per hour. Instances stop automatically when your credits run out."],
-  ["Is it live?", "It's a closed beta. Some machines are listed, they go online and offline, and payments are in test mode."],
   ["Can the provider see my work?", "Your job runs in an isolated container without access to the provider's files, but the provider owns the hardware. Don't upload secrets you can't afford to expose."],
-  ["What happens to my files when I stop?", "The container and its files are deleted. Download anything you need before stopping."],
+  ["Is it live?", "It's a closed beta: some machines are listed, they go online and offline, and payments are in test mode."],
   ["What does a provider need?", "An NVIDIA GPU, Windows 10 or 11, Docker Desktop, a current NVIDIA driver and a steady internet connection."],
 ];
-
 
 function useReveal() {
   useEffect(() => {
     const els = document.querySelectorAll("[data-reveal]");
     if (!("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-    document.documentElement.classList.add("hp-motion");
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) {
-          e.target.classList.add("is-in");
-          io.unobserve(e.target);
-        }
-      });
-    }, { rootMargin: "0px 0px -10% 0px" });
+    document.documentElement.classList.add("gx-motion");
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); }
+    }), { rootMargin: "0px 0px -8% 0px" });
     els.forEach((el) => io.observe(el));
-    // Never leave content hidden: reveal everything after a moment even if the observer misses it.
     const t = setTimeout(() => els.forEach((el) => el.classList.add("is-in")), 2500);
     return () => { io.disconnect(); clearTimeout(t); };
   }, []);
 }
 
-/* ---------- Hero: the GPU sits in the sentence ---------- */
-// The word "GPU" is shown, not said: a crop of the real nvidia-smi output from a provider's RTX 4060.
-function HeroSlot() {
+function Hero({ online }) {
   return (
-    <span className="hp-slot">
-      <img src="/img/smi-gpu.jpg" width="904" height="158" alt="GPU" />
-    </span>
-  );
-}
-
-function Hero({ machines }) {
-  const online = machines.filter((m) => m.is_online).length;
-  return (
-    <section className="hp-hero" aria-labelledby="hp-title">
-      <h1 id="hp-title" className="hp-title">
-        <span className="hp-line"><span>Rent a <HeroSlot /></span></span>
-        <span className="hp-line"><span>by the hour.</span></span>
+    <section className="gx-hero" aria-labelledby="gx-title">
+      <h1 id="gx-title" className="gx-shout">
+        <span className="gx-line"><span>Rent a GPU</span></span>
+        <span className="gx-line"><span>by the hour</span></span>
       </h1>
-      <p className="hp-lead">
-        Productify connects AI developers with people who have an idle NVIDIA GPU at home. Run PyTorch on it,
-        billed by the second. We're in closed beta.
-      </p>
-      <div className="hp-actions">
-        <Link to={ROUTES.waitlist} className="hp-btn" {...ctaProps("hero_join_waitlist")}>Join the renter waitlist <ArrowRight size={18} /></Link>
-        <Link to={ROUTES.apply} className="hp-link-on-ink" {...ctaProps("hero_apply_provider")}>Apply as a provider</Link>
-      </div>
-      <p className="hp-live" data-ui>
-        {machines.length
-          ? <><b>{machines.length}</b> machine{machines.length === 1 ? "" : "s"} listed · <b>{online}</b> online right now · <Link to={ROUTES.rentals}>see them all</Link></>
-          : "Checking which machines are online…"}
-      </p>
-    </section>
-  );
-}
-
-/* ---------- Showcase: type a command, see the real output ---------- */
-function Showcase() {
-  const [cmd, setCmd] = useState(RECORDED[1].cmd);
-  const hit = RECORDED.find((r) => r.cmd.trim() === cmd.trim());
-  return (
-    <section className="hp-show" aria-labelledby="hp-show-h">
-      <h2 id="hp-show-h" className="hp-h2" data-reveal>This ran on a rented GPU.</h2>
-      <p className="hp-body" data-reveal>
-        These are real commands and their real output, recorded on a provider's RTX 4060 laptop during closed-beta
-        testing on 19 October 2026. Pick one, or type it yourself.
-      </p>
-      <label className="hp-show-field" data-ui data-reveal>
-        <span className="hp-sr">Command</span>
-        <span className="hp-prompt" aria-hidden="true">$</span>
-        <input value={cmd} onChange={(e) => setCmd(e.target.value)} spellCheck={false} autoCapitalize="off" autoComplete="off" />
-      </label>
-      <div className="hp-show-out" data-ui data-reveal aria-live="polite">
-        {hit ? (
-          <>
-            {hit.cmd === "nvidia-smi"
-              ? <img className="hp-show-img" src="/img/smi.jpg" width="1090" height="330" alt="nvidia-smi output: NVIDIA GeForce RTX 4060, 54°C, 16 W of 85 W, 754 MiB of 8188 MiB memory used" />
-              : <pre>{hit.out}</pre>}
-            <p>{hit.note}</p>
-          </>
-        ) : (
-          <p>That command isn't in this recording. Start an instance to run your own — any command, two minutes each.</p>
-        )}
-      </div>
-      <div className="hp-show-try" data-reveal>
-        {RECORDED.map((r) => (
-          <button type="button" key={r.cmd} onClick={() => setCmd(r.cmd)} aria-pressed={r.cmd === cmd}>
-            {r.cmd.startsWith("python") ? (r.cmd.includes("rand") ? "a GPU matrix multiply" : "PyTorch sees CUDA") : r.cmd}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ---------- How it works: drag through the stages ---------- */
-function StageFragment({ stage, machine }) {
-  if (stage === 0) {
-    return (
-      <div className="hp-frag" data-ui>
-        <div className="hp-frag-row"><b>{machine ? machine.gpu : "NVIDIA GeForce RTX 4060 Laptop GPU"}</b></div>
-        <dl className="hp-frag-dl">
-          <div><dt>VRAM</dt><dd>{machine?.vram || "8 GB"}</dd></div>
-          <div><dt>Region</dt><dd>{machine?.location || "—"}</dd></div>
-          <div><dt>Price</dt><dd>{money(machine?.price ?? 0.4)}/hr</dd></div>
-          <div><dt>Status</dt><dd>{machine ? (availabilityOf(machine) === "available" ? "Available now" : availabilityOf(machine) === "offline" ? "Offline" : "In use") : "Available now"}</dd></div>
-        </dl>
-        <span className="hp-frag-btn">Start instance</span>
-      </div>
-    );
-  }
-  if (stage === 1) {
-    return (
-      <div className="hp-frag" data-ui>
-        <div className="hp-frag-row"><b>Environment</b></div>
-        <div className="hp-frag-opt is-on"><b>PyTorch (CUDA)</b><span>Python with PyTorch and CUDA on the machine's GPU.</span></div>
-        <div className="hp-frag-opt"><b>Python</b><span>A plain Python environment for scripts and tools.</span></div>
-        <div className="hp-frag-row hp-frag-sub">Disk 50 GB · +$0.01/hr</div>
-      </div>
-    );
-  }
-  if (stage === 2) {
-    return (
-      <div className="hp-frag hp-frag-term" data-ui>
-        <pre>{`$ python -c "import torch; print(torch.cuda.is_available())"
-True
-Process finished with exit code 0 in 1.863s`}</pre>
-      </div>
-    );
-  }
-  return (
-    <div className="hp-frag" data-ui>
-      <div className="hp-frag-row"><b>Instance stopped</b></div>
-      <dl className="hp-frag-dl">
-        <div><dt>Runtime</dt><dd>00:11:06</dd></div>
-        <div><dt>Rate</dt><dd>$0.41/hr</dd></div>
-        <div><dt>Charged</dt><dd>$0.0759</dd></div>
-        <div><dt>Files</dt><dd>Deleted</dd></div>
-      </dl>
-      <div className="hp-frag-row hp-frag-sub">From the 19 Oct test: $0.40 compute + $0.01 disk, billed by the second.</div>
-    </div>
-  );
-}
-
-function HowItWorks({ machine }) {
-  const [stage, setStage] = useState(0);
-  return (
-    <section className="hp-how" aria-labelledby="hp-how-h">
-      <div className="hp-how-text">
-        <h2 id="hp-how-h" className="hp-h2" key={stage}>{STAGES[stage].clause}</h2>
-        <ol className="hp-how-names">
-          {STAGES.map((s, i) => <li key={s.name} className={i === stage ? "is-on" : ""}>{s.name}</li>)}
-        </ol>
-      </div>
-      <div className="hp-how-frag"><StageFragment stage={stage} machine={machine} /></div>
-      <label className="hp-how-range" data-ui>
-        <span className="hp-sr">How it works, step {stage + 1} of 4</span>
-        <input type="range" min="0" max="3" step="1" value={stage} onChange={(e) => setStage(Number(e.target.value))}
-          aria-valuetext={STAGES[stage].clause} style={{ "--p": `${(stage / 3) * 100}%` }} />
-      </label>
-    </section>
-  );
-}
-
-/* ---------- Pricing as one sentence ---------- */
-function Pricing() {
-  return (
-    <section className="hp-price" aria-labelledby="hp-price-h">
-      <h2 id="hp-price-h" className="hp-display" data-reveal>Start with <span className="hp-price-chip">$5</span> free.</h2>
-      <figure className="hp-price-fig" data-reveal>
-        <img src="/img/instance-meter.jpg" width="1600" height="252" loading="lazy"
-          alt="An instance page: runtime 00:11:06, accrued cost $0.0759 at $0.41 an hour, NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB, machine connected" />
-        <figcaption>The cost meter on a test instance, 19 October 2026: eleven minutes on an RTX 4060 came to under 8 cents.</figcaption>
+      <figure className="gx-hero-fig">
+        <img src="/img/gx-rgb-pc.jpg" width="1200" height="1600" alt="Inside a gaming PC lit in rainbow colours, with a white GeForce RTX graphics card across the middle" />
       </figure>
-      <div className="hp-price-foot" data-reveal>
-        <p className="hp-body">
-          Every account gets $5 of credit once — about 10 hours on a $0.50/hr GPU. After that you pay the machine's
-          hourly price, by the second. Payments are in test mode during the closed beta.
-        </p>
-        <Link to={ROUTES.pricing} className="hp-btn hp-btn-ink" {...ctaProps("home_pricing")}>See how pricing works</Link>
+      <p className="gx-hero-say">
+        Run your AI code on real NVIDIA graphics cards in people's PCs. Pay by the second.
+      </p>
+      <div className="gx-hero-act">
+        <p className="gx-hero-fact"><b>$5</b> free credit to start{online != null && <> · {online} online now</>}</p>
+        <Link to={ROUTES.waitlist} className="gx-btn" {...ctaProps("hero_join_waitlist")}>Join the waitlist <ArrowRight size={18} /></Link>
+        <Link to={ROUTES.earnWithHardware} className="gx-link" {...ctaProps("hero_have_gpu")}>Have a GPU? Earn with it</Link>
       </div>
     </section>
   );
 }
 
-/* ---------- For providers: sentences that open ---------- */
-function Providers() {
-  const [open, setOpen] = useState(() => new Set([0, 1]));
-  const toggle = (i) => setOpen((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
+function Chapter({ c }) {
   return (
-    <section className="hp-prov" aria-labelledby="hp-prov-h">
-      <div className="hp-prov-head">
-        <h2 id="hp-prov-h" className="hp-h2" data-reveal>Have an idle NVIDIA GPU?</h2>
-        <p className="hp-body" data-reveal>
-          Make it rentable while you're not using it. You install Productify Node, pair it with your listing, and
-          decide when renters can connect. Here's what keeps your computer safe.
-        </p>
-        <div className="hp-actions" data-reveal>
-          <Link to={ROUTES.apply} className="hp-btn" {...ctaProps("providers_apply")}>Apply as a provider <ArrowRight size={18} /></Link>
-          <Link to={ROUTES.earnWithHardware} className="hp-link" {...ctaProps("providers_learn_more")}>How providing works</Link>
-        </div>
+    <section className={`gx-ch gx-ch-${c.side}`} aria-label={c.title.join(" ")}>
+      <div className="gx-ch-text">
+        <h2 className="gx-h2" data-reveal>{c.title[0]}<br />{c.title[1]}</h2>
+        <p className="gx-say" data-reveal>{c.text}</p>
       </div>
-      <figure className="hp-prov-fig" data-reveal>
-        <img src="/img/node-app.jpg" width="1380" height="560" loading="lazy"
-          alt="The Productify Node app on a provider's laptop: paused, Docker running, NVIDIA GeForce RTX 4060 Laptop GPU, 52 °C, limits for renters, and an activity log" />
-        <figcaption>Productify Node on a provider's RTX 4060 laptop during testing: paused, with the emergency stop one click away.</figcaption>
+      <figure className="gx-ch-fig" data-reveal {...(c.ui ? { "data-ui": "" } : {})}>
+        <img src={c.img} width={c.w} height={c.h} alt={c.alt} loading="lazy" className={c.contain ? "is-app" : undefined} />
       </figure>
-      <ul className="hp-bands">
-        {PROVIDER_LINES.map(([line, more], i) => (
-          <li key={line} className={open.has(i) ? `is-on tone-${i % 3}` : ""}>
-            <button type="button" onClick={() => toggle(i)} aria-expanded={open.has(i)}>
-              <span className="hp-band-line">{line}</span>
-              <span className="hp-switch" aria-hidden="true"><span /></span>
+    </section>
+  );
+}
+
+function Board() {
+  const [open, setOpen] = useState(4);
+  return (
+    <section className="gx-board" aria-labelledby="gx-board-h">
+      <div className="gx-board-head">
+        <h2 id="gx-board-h" className="gx-h2" data-reveal>One afternoon,<br />one RTX 4060.</h2>
+        <p className="gx-say" data-reveal>
+          On 19 October 2026 we rented out a provider's gaming laptop end to end. This is the log — including the
+          two things we found and fixed. Tap a row.
+        </p>
+      </div>
+      <ol className="gx-rows" data-ui>
+        {LOG.map(([time, name, fact, status, tone, more], i) => (
+          <li key={time + name} className={i === open ? "is-open" : ""}>
+            <button type="button" onClick={() => setOpen(i)} aria-expanded={i === open}>
+              <span className="gx-r-time">{time}</span>
+              <span className="gx-r-name">{name}</span>
+              <span className="gx-r-fact">{fact}</span>
+              <span className={`gx-r-status s-${tone}`}>{status}</span>
             </button>
-            {open.has(i) && <p>{more}</p>}
+            {i === open && <p className="gx-r-more">{more}</p>}
           </li>
         ))}
-      </ul>
+      </ol>
+    </section>
+  );
+}
+
+function Plans() {
+  return (
+    <section className="gx-plans" aria-labelledby="gx-plans-h">
+      <div className="gx-plans-head">
+        <h2 id="gx-plans-h" className="gx-h2" data-reveal>Start free.</h2>
+        <p className="gx-say" data-reveal>
+          1 credit is US$1. Instances use it at the machine's hourly price, by the second, and stop when it runs out.
+          Paid packs open when payments go live — we're in test mode during the beta.
+        </p>
+      </div>
+      <div className="gx-tiles">
+        {PLANS.map((p, i) => (
+          <div key={p.name} className={`gx-tile t-${i}`} data-reveal>
+            <div className="gx-tile-body">
+              <h3>{p.name}</h3>
+              <p className="gx-tile-price">{p.price}</p>
+              <p className="gx-tile-credit">{p.credit}</p>
+              <ul>{p.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+            </div>
+            {p.live
+              ? <Link to={p.to} className="gx-tile-btn" {...ctaProps("plans_free")}>{p.cta} <ArrowRight size={16} /></Link>
+              : <span className="gx-tile-btn is-off" aria-disabled="true">{p.cta}</span>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Spec() {
+  return (
+    <section className="gx-spec" aria-labelledby="gx-spec-h">
+      <figure className="gx-spec-fig">
+        <img src="/img/gx-rtx3090.jpg" width="1600" height="1067" loading="lazy" alt="A Gigabyte GeForce RTX 3090 graphics card on a wooden desk" />
+      </figure>
+      <div className="gx-sheet" data-reveal>
+        <h2 id="gx-spec-h">Provider spec sheet</h2>
+        {SPEC.map(([group, items]) => (
+          <div className="gx-sheet-group" key={group}>
+            <h3>{group}</h3>
+            <dl>
+              {items.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+            </dl>
+          </div>
+        ))}
+        <Link to={ROUTES.earnWithHardware} className="gx-sheet-link" {...ctaProps("spec_learn_more")}>How providing works <ArrowRight size={16} /></Link>
+      </div>
     </section>
   );
 }
 
 function Faq() {
   return (
-    <section className="hp-faq" aria-labelledby="hp-faq-h">
-      <h2 id="hp-faq-h" className="hp-display-s" data-reveal>Questions, answered.</h2>
-      <div className="hp-faq-list">
-        {FAQ.map(([q, a]) => (
-          <details key={q} data-reveal>
-            <summary>{q}<span className="hp-chev" aria-hidden="true" /></summary>
-            <p>{a}</p>
-          </details>
-        ))}
-        <p className="hp-body hp-faq-more">More in the <Link to={ROUTES.faq}>full FAQ</Link>, the <Link to={ROUTES.security}>security page</Link> and the <Link to={ROUTES.privacy}>privacy notice</Link>.</p>
+    <section className="gx-faq" aria-labelledby="gx-faq-h">
+      <div className="gx-faq-title"><h2 id="gx-faq-h" className="gx-shout gx-shout-s">Questions</h2></div>
+      {FAQ.map(([q, a]) => (
+        <div className="gx-faq-band" key={q} data-reveal>
+          <h3>{q}</h3>
+          <p>{a}</p>
+        </div>
+      ))}
+      <div className="gx-faq-band gx-faq-more">
+        <h3>Still curious?</h3>
+        <p>Read the <Link to={ROUTES.faq}>full FAQ</Link>, how isolation works on the <Link to={ROUTES.security}>security page</Link>, or <Link to={ROUTES.contact}>contact us</Link>.</p>
       </div>
     </section>
   );
 }
 
-function Close() {
+function Reply() {
   return (
-    <section className="hp-close" aria-labelledby="hp-close-h">
-      <h2 id="hp-close-h" className="hp-display" data-reveal>Or rent out<br />your own GPU.</h2>
-      <div className="hp-close-foot" data-reveal>
-        <p>Your machine, your hours, your price. Renters only get a locked-down container, one at a time.</p>
-        <Link to={ROUTES.apply} className="hp-btn" {...ctaProps("close_apply_provider")}>Apply as a provider</Link>
+    <section className="gx-reply" aria-labelledby="gx-reply-h">
+      <p className="gx-reply-say">Have an NVIDIA GPU at home? Make it rentable while you're not using it — on your hours, at your price.</p>
+      <div className="gx-card">
+        <h2 id="gx-reply-h">Become a provider</h2>
+        <p>Tell us about your hardware. We review every application and help you pair your PC.</p>
+        <Link to={ROUTES.apply} className="gx-card-btn" {...ctaProps("reply_apply_provider")}>Apply as a provider</Link>
       </div>
+      <p className="gx-credits">
+        Photographs via Wikimedia Commons: "2025 Wnętrze komputera PC" by Jacek Halicki (CC BY-SA 4.0);
+        "MSI GeForce RTX 3070 VENTUS 3X OC" by TheStriker (CC BY 4.0); "Gaming-PC 20240426 HOF2514" and
+        "Gigabyte GeForce RTX 3090 Eagle OC" by PantheraLeo1359531 (CC BY 4.0). Screenshots and app photo: Productify test, 19 Oct 2026.
+      </p>
     </section>
   );
 }
 
 export default function Home() {
-  const [machines, setMachines] = useState([]);
+  const [online, setOnline] = useState(null);
   useReveal();
   useEffect(() => {
-    api.get("/rentals")
-      .then((res) => setMachines([...res.data].sort((a, b) =>
-        Number(availabilityOf(b) === "available") - Number(availabilityOf(a) === "available") || a.price - b.price)))
-      .catch(() => setMachines([]));
+    api.get("/rentals").then((r) => setOnline(r.data.filter((m) => m.is_online).length)).catch(() => {});
   }, []);
-  const first = useMemo(() => machines[0], [machines]);
-  const ref = useRef(null);
-
   return (
-    <div className="hp" ref={ref}>
+    <div className="gx">
       <SEO
-        title="Productify — Rent GPU compute · Earn with your hardware"
-        description="Rent an NVIDIA GPU by the hour for AI development, billed by the second, or make your own idle GPU rentable. Start with $5 of free credit. Closed beta."
+        title="Productify — Rent a GPU by the hour · Earn with your hardware"
+        description="Run AI code on real NVIDIA GPUs in people's PCs, billed by the second, with $5 of free credit — or make your idle gaming GPU rentable. Closed beta."
         path="/"
         jsonLd={{ "@context": "https://schema.org", "@type": "WebSite", name: "Productify", url: "https://www.productifynow.com" }}
       />
-      <Hero machines={machines} />
-      <Showcase />
-      <HowItWorks machine={first} />
-      <Pricing />
-      <Providers />
+      <Hero online={online} />
+      {CHAPTERS.map((c) => <Chapter key={c.img} c={c} />)}
+      <Board />
+      <Plans />
+      <Spec />
       <Faq />
-      <Close />
+      <Reply />
     </div>
   );
 }
