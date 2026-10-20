@@ -52,7 +52,7 @@ export default function Navbar() {
           <div className="account-wrap" onMouseLeave={() => setAccountOpen(false)}>
             <button className="icon-text" onClick={() => (user ? setAccountOpen((s) => !s) : navigate("/login"))} data-testid="account-button">
               {user?.avatar_url ? <img src={user.avatar_url} alt="" className="avatar-xs" /> : <UserRound size={18} />}
-              <span>{user ? user.name.split(" ")[0] : "Sign in"}</span>
+              <span>{user?.name ? user.name.split(" ")[0] : user ? "Account" : "Sign in"}</span>
             </button>
             {user && accountOpen && (
               <div className="account-menu" data-testid="account-menu">
