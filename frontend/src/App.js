@@ -52,7 +52,7 @@ import PolicyBumpModal from "@/components/PolicyBumpModal";
 
 export function AppRouter() {
   const location = useLocation();
-  // Every new page starts at the top (React Router keeps the old scroll position otherwise).
+  // Every new page starts at the top (React Router would otherwise keep the old scroll position).
   // Links to a #section still jump to that section. Instant, not smooth, so pages don't slide.
   useEffect(() => {
     if (location.hash) return;
