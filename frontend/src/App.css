@@ -1795,3 +1795,136 @@ header.topbar,.footer-grid{border:0!important}
 .lp-section .cp-plan li,.lp-section .cp-note{font-size:16px!important}
 .lp-hero .text-button{font-size:17px!important}
 .lp-small{max-width:70ch}
+
+/* ==========================================================================
+   Prototype: renter journey (GPU rentals, machine page, Start instance,
+   instance page, sign in / register) in the launch look.
+   ========================================================================== */
+.rental-hero,.rental-hero~.shop-toolbar,.rental-hero~.rental-section,.rx-detail,.rs-page,.ix,.auth-page{--x-bk:#0a0a0b;--x-bk2:#131416;--x-bk3:#1c1d20;--x-bk4:#26282b;--x-fg:#f2f2ee;--x-fg2:#b9bbb5;--x-m:clamp(20px,3.6vw,56px)}
+.rx-head{font:800 clamp(52px,7vw,124px)/.88 'Archivo',sans-serif;font-stretch:62%;text-transform:uppercase;letter-spacing:-.01em}
+
+/* --- GPU rentals list --- */
+.rental-hero{background:var(--x-bk)!important;color:var(--x-fg)!important;padding:clamp(56px,9vh,110px) var(--x-m) 40px!important}
+.rental-hero .eyebrow{display:none!important}
+.rental-hero h1{margin:0 0 20px!important;font:800 clamp(52px,7vw,124px)/.88 'Archivo',sans-serif!important;font-stretch:62%!important;letter-spacing:-.01em!important;text-transform:uppercase;color:var(--x-fg)}
+.rental-hero p{color:var(--x-fg)!important;font-size:clamp(18px,1.5vw,22px)!important;max-width:none!important}
+.rental-hero~.shop-toolbar{background:var(--x-bk)!important;border:0!important;padding:0 var(--x-m) 32px!important;gap:12px!important;flex-wrap:wrap}
+.rental-hero~.shop-toolbar .shop-search{background:var(--x-bk3)!important;border:2px solid var(--x-bk3)!important;color:var(--x-fg2);flex:1 1 320px;max-width:520px;padding:12px 16px!important}
+.rental-hero~.shop-toolbar .shop-search:focus-within{border-color:var(--lime)!important}
+.rental-hero~.shop-toolbar .shop-search input{color:var(--x-fg)!important;font-size:16px!important;background:transparent}
+.rental-hero~.shop-toolbar .check-toggle{background:var(--x-bk3);color:var(--x-fg);padding:13px 16px;font-size:15px!important}
+.rental-hero~.shop-toolbar .check-toggle input{accent-color:var(--lime)}
+.rental-hero~.shop-toolbar .sort-wrap{color:var(--x-fg2);font-size:15px!important}
+.rental-hero~.shop-toolbar .sort-wrap select{background:var(--x-bk3)!important;border:0!important;color:var(--x-fg)!important;font-size:15px!important;padding:13px 14px!important}
+.rental-hero~.rental-section{background:var(--x-bk)!important;padding:0 var(--x-m) clamp(96px,14vh,160px)!important}
+.rental-hero~.rental-section .loading-block,.rental-hero~.rental-section .empty-block{background:var(--x-bk3);color:var(--x-fg2);border:0;padding:40px;font-size:17px}
+.rental-grid{gap:8px!important}
+.rental-hero~.rental-section .rental-card{background:var(--x-bk3)!important;border:0!important;color:var(--x-fg);transition:background-color .25s,transform .25s}
+.rental-hero~.rental-section .rental-card:hover{background:var(--x-bk4)!important;transform:translateY(-3px)}
+.rental-hero~.rental-section .rental-info h3{font:800 clamp(24px,2vw,32px)/1.05 'Archivo',sans-serif;font-stretch:75%;text-transform:uppercase;color:var(--x-fg)}
+.rental-hero~.rental-section .rental-info h3 a:hover{color:var(--lime)}
+.rental-hero~.rental-section .spec-row{border:0!important;color:var(--x-fg2)!important;font:600 15px 'Archivo',sans-serif!important;padding-bottom:0!important}
+.rental-hero~.rental-section .rental-bottom strong{color:var(--x-fg);font:800 28px 'Archivo',sans-serif;font-stretch:75%}
+.rental-hero~.rental-section .rental-bottom small{color:var(--x-fg2);font:500 14px 'Archivo',sans-serif}
+.rental-hero~.rental-section .dark-button,.rx-detail .dark-button{background:var(--lime)!important;color:#0a0a0b!important;font:700 15px 'Archivo',sans-serif!important;padding:12px 18px!important}
+.rental-hero~.rental-section .dark-button:hover{background:#d9fb72!important}
+.rental-hero~.rental-section .node-status,.rx-detail .node-status,.rs-page .node-status{font:700 13px 'Archivo',sans-serif!important;letter-spacing:.02em}
+
+/* --- Machine page --- */
+.rx-detail{background:var(--x-bk)!important;color:var(--x-fg);padding:clamp(56px,8vh,100px) var(--x-m) clamp(96px,14vh,160px)!important;gap:clamp(24px,4vw,64px)!important}
+.rx-detail .crumb a{color:var(--x-fg2);font-size:15px}
+.rx-detail .crumb a:hover{color:var(--lime)}
+.rx-detail .detail-info h1{font:800 clamp(44px,5.4vw,92px)/.9 'Archivo',sans-serif!important;font-stretch:62%!important;text-transform:uppercase;letter-spacing:-.005em!important;color:var(--x-fg);margin:12px 0 18px!important}
+.rx-detail .detail-seller{color:var(--x-fg2)!important;font-size:16px!important}
+.rx-detail .detail-seller b{color:var(--x-fg)}
+.rx-detail .detail-price{color:var(--lime);font:800 clamp(48px,4.4vw,72px)/1 'Archivo',sans-serif!important;font-stretch:62%}
+.rx-detail .detail-price small{color:var(--x-fg2)!important;font:600 16px 'Archivo',sans-serif!important;font-stretch:100%}
+.rx-detail .detail-desc{color:var(--x-fg2)!important;font-size:17px!important}
+.rx-detail .specs-grid{border:0!important;gap:4px!important;padding:0!important;margin:0 0 28px}
+.rx-detail .specs-grid div{background:var(--x-bk3);padding:16px 18px}
+.rx-detail .specs-grid dt{color:var(--x-fg2)!important;font:600 14px 'Archivo',sans-serif!important;text-transform:none!important;letter-spacing:0!important}
+.rx-detail .specs-grid dd{color:var(--x-fg)!important;font:800 20px 'Archivo',sans-serif!important;font-stretch:75%}
+.rx-detail .primary-button{background:var(--lime)!important;color:#0a0a0b!important;min-height:56px;padding:0 26px!important;font:700 17px 'Archivo',sans-serif!important}
+.rx-detail .primary-button:hover{background:#d9fb72!important}
+.rx-detail .text-button{color:var(--x-fg)!important;font-size:16px!important;text-decoration:underline;text-underline-offset:5px}
+.rx-detail .detail-note{background:#2a2410!important;color:#ffe2a8!important;font-size:16px!important;padding:16px 18px!important}
+.rx-detail .detail-note a{color:var(--lime)}
+.rx-detail .detail-report button,.rx-detail .detail-report a{color:var(--x-fg2)}
+
+/* --- Start instance --- */
+.rs-page{max-width:none!important;background:var(--x-bk);color:var(--x-fg);padding:clamp(48px,7vh,90px) var(--x-m) clamp(96px,14vh,160px)!important}
+.rs-crumbs,.rs-crumbs a{color:var(--x-fg2)!important;font-size:15px!important}
+.rs-head,.rs-card{background:var(--x-bk2)!important;border:0!important}
+.rs-head h1{font:800 clamp(44px,5vw,88px)/.9 'Archivo',sans-serif!important;font-stretch:62%!important;text-transform:uppercase;letter-spacing:-.005em!important;color:var(--x-fg)}
+.rs-desc,.rs-facts,.rs-card p,.rs-note,.rs-price p{color:var(--x-fg2)!important}
+.rs-facts b,.rs-label{color:var(--x-fg2)!important;font:700 13px 'Archivo',sans-serif!important}
+.rs-price{background:var(--x-bk3)!important;border:0!important}
+.rs-big{color:var(--lime);font:800 clamp(40px,3.6vw,60px)/1 'Archivo',sans-serif!important;font-stretch:62%}
+.rs-big small{color:var(--x-fg2)!important;font:600 16px 'Archivo',sans-serif!important;font-stretch:100%}
+.rs-card h2{color:var(--x-fg);font:800 clamp(26px,2.2vw,36px) 'Archivo',sans-serif!important;font-stretch:75%;text-transform:uppercase}
+.rs-tpl{background:var(--x-bk3)!important;border:2px solid var(--x-bk3)!important;color:var(--x-fg)!important}
+.rs-tpl.active{border-color:var(--lime)!important;background:#1f2416!important}
+.rs-tpl span:last-child{color:var(--x-fg2)!important}
+.rs-disk{background:var(--x-bk3)!important;border:0!important}
+.rs-disk label{color:var(--x-fg)}
+.rs-disk input{accent-color:var(--lime)}
+.rs-range{color:var(--x-fg2)!important}
+.rs-launch{background:var(--lime)!important;color:#0a0a0b!important}
+.rs-launch .rs-big{color:#0a0a0b}
+.rs-launch .rs-big small,.rs-launch p,.rs-why{color:#0a0a0b!important}
+.rs-launch .primary-button{background:#0a0a0b!important;color:var(--lime)!important;min-height:60px;padding:0 28px!important;font:700 18px 'Archivo',sans-serif!important}
+.rs-launch .primary-button:disabled{opacity:.4}
+.rs-page .cp-plan{background:var(--x-bk3);border:0;color:var(--x-fg)}
+.rs-page .cp-free{background:var(--lime);color:#0a0a0b}
+.rs-page .cp-free *{color:#0a0a0b!important}
+.rs-page .cp-plan li{color:var(--x-fg2)}
+.rs-page .cp-note{color:var(--x-fg2)}
+.rs-page .cp-free .primary-button{background:#0a0a0b!important;color:var(--lime)!important}
+.rs-page .cp-plan .secondary-button{background:#2a2c30;color:#8f918d;border:0}
+
+/* --- Instance page: theme variables used by its inline styles --- */
+.ix{--ix-bk:#0a0a0b;--ix-card:#1c1d20;--ix-card2:#131416;--ix-fg:#f2f2ee;--ix-fg2:#b9bbb5;--ix-ok:#9be27a;--ix-ok-bg:#16241a;--ix-warn-bg:#2a2410;--ix-bad-bg:#3a1714;background:var(--ix-bk);color:var(--ix-fg);min-height:calc(100svh - 72px)}
+.ix h1,.ix h2,.ix h3{color:var(--ix-fg)}
+.ix h1{font-family:'Archivo',sans-serif!important;font-stretch:62%;text-transform:uppercase;font-weight:800!important;font-size:clamp(36px,4vw,64px)!important;line-height:.95!important;letter-spacing:-.005em!important}
+.ix p,.ix span,.ix small{border-color:transparent}
+.ix .secondary-button{background:#26282b;color:var(--ix-fg);border:0}
+.ix .primary-button{background:var(--lime);color:#0a0a0b}
+.ix a{color:inherit}
+.ix input,.ix textarea,.ix select{color:var(--ix-fg)}
+
+/* --- Sign in / register: photo half + dark card --- */
+.auth-page{min-height:calc(100svh - 72px)!important;display:grid!important;grid-template-columns:1fr 1fr;place-items:center end!important;padding:clamp(40px,6vh,80px) var(--x-m)!important;background-color:var(--x-bk)!important;background-position:left center!important;background-size:50% 100%!important;background-repeat:no-repeat!important}
+.auth-card{grid-column:2;justify-self:center;width:min(460px,100%)!important;background:var(--x-bk2)!important;color:var(--x-fg);padding:clamp(32px,4vw,52px)!important}
+.auth-card .eyebrow{display:none!important}
+.auth-mark{background:var(--lime)!important;color:#0a0a0b!important}
+.auth-card h1,.auth-card h2{font:800 clamp(44px,4.4vw,68px)/.9 'Archivo',sans-serif!important;font-stretch:62%!important;text-transform:uppercase;letter-spacing:-.005em!important;color:var(--x-fg);margin:18px 0 12px!important}
+.auth-card>p{color:var(--x-fg2)!important;font-size:16px!important;margin-bottom:28px!important}
+.auth-card input{background:var(--x-bk3)!important;border:2px solid var(--x-bk3)!important;color:var(--x-fg)!important;font-size:16px!important;padding:14px 16px!important}
+.auth-card input:focus{border-color:var(--lime)!important}
+.auth-card input::placeholder{color:#8f918d}
+.auth-card .or{color:#8f918d!important;font:600 14px 'Archivo',sans-serif!important}
+.auth-card .or span{background:var(--x-bk4)!important}
+.auth-card .primary-button{background:var(--lime)!important;color:#0a0a0b!important;min-height:56px;font:700 17px 'Archivo',sans-serif!important;justify-content:center}
+.auth-card .primary-button:hover{background:#d9fb72!important}
+.auth-card .switch-auth{color:var(--x-fg2)!important;font-size:15px!important}
+.auth-card .switch-auth:hover{color:var(--lime)!important}
+.auth-card .form-error{background:#3a1714;color:#ffb4a8;border:0;font-size:15px}
+.auth-card label,.auth-card small{color:var(--x-fg2)}
+
+@media(max-width:900px){
+  .auth-page{grid-template-columns:1fr;place-items:start center!important;background:var(--x-bk)!important}
+  .auth-card{grid-column:1}
+  .rx-detail{grid-template-columns:1fr!important}
+}
+@media(max-width:900px){.auth-page{background-image:none!important}}
+/* renter journey, round 2 */
+.rx-detail{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;align-items:start}
+.rx-detail .detail-image{min-width:0;overflow:hidden;position:sticky;top:96px}
+.rx-detail .detail-image .gpu-visual.large{aspect-ratio:4/3;min-height:0}
+.rx-detail .detail-info{min-width:0}
+.rx-detail .detail-info h1{font-size:clamp(38px,4vw,72px)!important;overflow-wrap:anywhere}
+.rental-hero~.rental-section .node-status,.rx-detail .node-status,.rs-page .node-status,.rental-hero~.rental-section .node-verified{color:#a9aba6!important}
+.rental-hero~.rental-section .node-status.online,.rx-detail .node-status.online,.rs-page .node-status.online{color:#9be27a!important}
+.rental-hero~.rental-section .live-dot.off,.rx-detail .live-dot.off{background:#8f918d}
+@media(max-width:900px){.rx-detail{grid-template-columns:1fr!important}.rx-detail .detail-image{position:static}}
+.rx-detail .detail-price small{font-stretch:100%!important;font-size:17px!important}

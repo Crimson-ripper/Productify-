@@ -287,13 +287,14 @@ export default function InstanceDetail() {
         path={`/instances/${instance.id}`}
       />
 
+      <div className="ix">
       <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "36px 5% 80px" }}>
         {/* Navigation Breadcrumb */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <div style={{ fontSize: "0.82rem", color: "var(--muted, #777)", display: "flex", gap: "6px", alignItems: "center" }}>
-            <Link to="/rentals" style={{ color: "var(--ink, #101112)", textDecoration: "none" }}>GPU Rentals</Link>
+          <div style={{ fontSize: "0.82rem", color: "var(--ix-fg2)", display: "flex", gap: "6px", alignItems: "center" }}>
+            <Link to="/rentals" style={{ color: "var(--ix-fg)", textDecoration: "none" }}>GPU Rentals</Link>
             <span>/</span>
-            <Link to="/instances" style={{ color: "var(--ink, #101112)", textDecoration: "none" }}>My Instances</Link>
+            <Link to="/instances" style={{ color: "var(--ix-fg)", textDecoration: "none" }}>My Instances</Link>
             <span>/</span>
             <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{instance.id}</span>
           </div>
@@ -310,8 +311,8 @@ export default function InstanceDetail() {
         {/* Top Control Header */}
         <div
           style={{
-            background: "#ffffff",
-            border: "1px solid var(--line, #e2e2dc)",
+            background: "var(--ix-card)",
+            border: "0",
             borderRadius: 0,
             padding: "24px 28px",
             display: "flex",
@@ -328,10 +329,10 @@ export default function InstanceDetail() {
                 width: "48px",
                 height: "48px",
                 borderRadius: 0,
-                background: "#f0f2eb",
+                background: "var(--ix-card2)",
                 display: "grid",
                 placeItems: "center",
-                color: "var(--ink, #101112)",
+                color: "var(--ix-fg)",
                 fontSize: "1.4rem",
               }}
             >
@@ -380,9 +381,9 @@ export default function InstanceDetail() {
                       fontSize: "0.72rem",
                       fontWeight: 700,
                       fontFamily: "var(--font-mono, monospace)",
-                      background: "#e9f3e5",
-                      color: "var(--ok)",
-                      border: "1px solid #c8e0d0",
+                      background: "var(--ix-ok-bg)",
+                      color: "var(--ix-ok)",
+                      border: "0",
                     }}
                     title="The host machine is connected"
                   >
@@ -400,9 +401,9 @@ export default function InstanceDetail() {
                       fontSize: "0.72rem",
                       fontWeight: 700,
                       fontFamily: "var(--font-mono, monospace)",
-                      background: "#fff2ea",
+                      background: "var(--ix-warn-bg)",
                       color: "#8a3a10",
-                      border: "1px solid #f0c9b2",
+                      border: "0",
                     }}
                     title="The host machine is offline. Commands can't run until it reconnects."
                   >
@@ -410,7 +411,7 @@ export default function InstanceDetail() {
                   </span>
                 )}
               </div>
-              <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--muted, #666)" }}>
+              <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--ix-fg2)" }}>
                 Node: <b>{instance.rental_title}</b> ({instance.gpu}, {instance.vram}) · Host: {instance.seller_name} · {instance.location}
               </p>
             </div>
@@ -442,9 +443,9 @@ export default function InstanceDetail() {
                   padding: "10px 18px",
                   fontSize: "0.85rem",
                   fontWeight: 700,
-                  background: "#fdeaea",
+                  background: "var(--ix-bad-bg)",
                   color: "var(--danger)",
-                  border: "1px solid #fecaca",
+                  border: "0",
                   borderRadius: 0,
                   cursor: "pointer",
                 }}
@@ -458,40 +459,40 @@ export default function InstanceDetail() {
         {/* Real-time Metering Cards Grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginBottom: "24px" }}>
           {/* Runtime Clock */}
-          <div style={{ background: "#ffffff", padding: "20px", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted, #777)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
+          <div style={{ background: "var(--ix-card)", padding: "20px", borderRadius: 0, border: "0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-fg2)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
               <Clock size={15} /> Active Runtime
             </div>
-            <div style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "var(--font-mono, monospace)", color: "var(--ink, #101112)", margin: "8px 0 2px" }}>
+            <div style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "var(--font-mono, monospace)", color: "var(--ix-fg)", margin: "8px 0 2px" }}>
               {formatRuntime(runtimeSeconds)}
             </div>
-            <span style={{ fontSize: "0.75rem", color: "#666" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)" }}>
               Started at {new Date(instance.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           </div>
 
           {/* Accrued Cost Ticker */}
-          <div style={{ background: "#ffffff", padding: "20px", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ok)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
+          <div style={{ background: "var(--ix-card)", padding: "20px", borderRadius: 0, border: "0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-ok)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
               <Activity size={15} /> Current Accrued Cost
             </div>
-            <div style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "var(--font-mono, monospace)", color: "var(--ok)", margin: "8px 0 2px" }}>
+            <div style={{ fontSize: "1.8rem", fontWeight: 800, fontFamily: "var(--font-mono, monospace)", color: "var(--ix-ok)", margin: "8px 0 2px" }}>
               ${currentCost.toFixed(4)}
             </div>
-            <span style={{ fontSize: "0.75rem", color: "#666" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)" }}>
               Rate: {money(instance.hourly_price)}/hr ({money(instance.base_price)} compute + {money(instance.storage_price)} disk)
             </span>
           </div>
 
           {/* GPU Telemetry */}
-          <div style={{ background: "#ffffff", padding: "20px", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted, #777)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
+          <div style={{ background: "var(--ix-card)", padding: "20px", borderRadius: 0, border: "0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-fg2)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
               <Gauge size={15} /> GPU
             </div>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink, #101112)", margin: "10px 0 4px" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ix-fg)", margin: "10px 0 4px" }}>
               {instance.gpu}{instance.vram ? ` · ${instance.vram}` : ""}
             </div>
-            <span style={{ fontSize: "0.75rem", color: "#666" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)" }}>
               {instance.telemetry
                 ? `Utilisation ${instance.telemetry.gpu_utilization_pct}% · VRAM ${instance.telemetry.vram_used_gb} GB used`
                 : "Live GPU usage isn't reported yet. Run nvidia-smi in the terminal to check."}
@@ -499,14 +500,14 @@ export default function InstanceDetail() {
           </div>
 
           {/* Host Node Specs */}
-          <div style={{ background: "#ffffff", padding: "20px", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted, #777)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
+          <div style={{ background: "var(--ix-card)", padding: "20px", borderRadius: 0, border: "0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-fg2)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
               <Server size={15} /> Machine connection
             </div>
             <div style={{ fontSize: "1.1rem", fontWeight: 700, color: instance.tunnel_connected ? "var(--ok)" : "var(--danger)", margin: "10px 0 4px" }}>
               {instance.tunnel_connected ? "Connected" : "Machine offline"}
             </div>
-            <span style={{ fontSize: "0.75rem", color: "#666" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)" }}>
               Disk: {instance.disk_size_gb} GB
             </span>
           </div>
@@ -549,7 +550,7 @@ export default function InstanceDetail() {
                 alignItems: "center",
                 gap: "8px",
                 background: "var(--lime, #c8f04c)",
-                color: "var(--ink, #101112)",
+                color: "var(--ix-fg)",
                 padding: "10px 20px",
                 fontSize: "0.85rem",
                 fontWeight: 800,
@@ -564,8 +565,8 @@ export default function InstanceDetail() {
         {/* Security, Isolation & Ephemeral Wipe Shield */}
         <div
           style={{
-            background: "#e9f3e5",
-            border: "1px solid #bbf7d0",
+            background: "var(--ix-ok-bg)",
+            border: "0",
             borderRadius: 0,
             padding: "14px 20px",
             marginBottom: "24px",
@@ -579,21 +580,21 @@ export default function InstanceDetail() {
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <ShieldCheck size={20} color="var(--ok)" />
             <div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#166534" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--ix-ok)" }}>
                 Isolated container
               </div>
-              <div style={{ fontSize: "0.78rem", color: "var(--ok)", marginTop: "2px" }}>
+              <div style={{ fontSize: "0.78rem", color: "var(--ix-ok)", marginTop: "2px" }}>
                 Your job runs in a container without access to the provider's files. When you stop the instance, the container and its files are deleted. <a href="/security" style={{ color: "inherit", textDecoration: "underline" }}>How isolation works</a>
               </div>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.76rem", color: "#166534", fontFamily: "var(--font-mono, monospace)" }}>
-            <span style={{ background: "#e9f3e5", padding: "4px 8px", borderRadius: 0, border: "1px solid #86efac", fontWeight: 600 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.76rem", color: "var(--ix-ok)", fontFamily: "var(--font-mono, monospace)" }}>
+            <span style={{ background: "var(--ix-ok-bg)", padding: "4px 8px", borderRadius: 0, border: "0", fontWeight: 600 }}>
               {instance.tunnel_connected ? "MACHINE: ONLINE" : "MACHINE: OFFLINE"}
             </span>
             {instance.host_meta?.docker_available && (
-              <span style={{ background: "#e9f3e5", padding: "4px 8px", borderRadius: 0, border: "1px solid #86efac", fontWeight: 600 }}>
+              <span style={{ background: "var(--ix-ok-bg)", padding: "4px 8px", borderRadius: 0, border: "0", fontWeight: 600 }}>
                 DOCKER: {instance.host_meta?.docker_gpu_support ? "GPU_PASSTHROUGH" : "ISOLATED"}
               </span>
             )}
@@ -601,9 +602,9 @@ export default function InstanceDetail() {
         </div>
 
         {/* Tabbed Interactive Console Area */}
-        <div style={{ background: "#ffffff", borderRadius: 0, border: "1px solid var(--line, #e2e2dc)", overflow: "hidden" }}>
+        <div style={{ background: "var(--ix-card)", borderRadius: 0, border: "0", overflow: "hidden" }}>
           {/* Tab Selector */}
-          <div style={{ display: "flex", borderBottom: "1px solid var(--line, #e2e2dc)", background: "#fafaf7" }}>
+          <div style={{ display: "flex", borderBottom: "2px solid var(--ix-bk)", background: "var(--ix-card2)" }}>
             <button
               type="button"
               onClick={() => setActiveTab("terminal")}
@@ -667,7 +668,7 @@ export default function InstanceDetail() {
             <div style={{ background: "#0c0e12", color: "#e2e8f0", padding: "20px", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.6, minHeight: "440px" }}>
               {/* Header Bar */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1e2430", paddingBottom: "10px", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--muted)", fontSize: "0.78rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-fg2)", fontSize: "0.78rem" }}>
                   <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: instance.status === "running" ? "var(--ok)" : "#a56b1a", display: "inline-block" }} />
                   <span>Browser terminal · <b>{instance.id}</b> ({instance.gpu})</span>
                 </div>
@@ -675,7 +676,7 @@ export default function InstanceDetail() {
                   <button
                     type="button"
                     onClick={() => setTerminalLines([])}
-                    style={{ background: "#1a1f2c", color: "var(--muted)", border: "1px solid #2d3748", borderRadius: 0, padding: "4px 8px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    style={{ background: "#1a1f2c", color: "var(--ix-fg2)", border: "1px solid #2d3748", borderRadius: 0, padding: "4px 8px", fontSize: "0.72rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
                     title="Clear terminal output"
                   >
                     <Trash2 size={12} /> Clear
@@ -688,7 +689,7 @@ export default function InstanceDetail() {
                 <div style={{ marginBottom: "14px", opacity: 0.85, borderLeft: "2px solid #334155", paddingLeft: "10px" }}>
                   {instance.logs.slice(-10).map((log, idx) => (
                     <div key={idx} style={{ marginBottom: "2px", fontSize: "0.78rem" }}>
-                      <span style={{ color: "var(--muted)" }}>{log.split("]")[0]}]</span>
+                      <span style={{ color: "var(--ix-fg2)" }}>{log.split("]")[0]}]</span>
                       <span style={{ color: log.includes("healthy") || log.includes("registered") ? "var(--ok)" : log.includes("service") ? "var(--violet)" : "var(--muted)" }}>
                         {log.substring(log.indexOf("]") + 1)}
                       </span>
@@ -707,7 +708,7 @@ export default function InstanceDetail() {
                       </div>
                     )}
                     {line.type === "command" && (
-                      <div style={{ color: "var(--violet)", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ color: "var(--lime)", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
                         <span>$</span>
                         <span style={{ color: "#ffffff" }}>{line.text}</span>
                         {line.time && <span style={{ color: "#4a4a45", fontSize: "0.72rem", marginLeft: "auto" }}>{line.time}</span>}
@@ -716,7 +717,7 @@ export default function InstanceDetail() {
                     {line.type === "output" && (
                       <div style={{ marginTop: "4px" }}>
                         {line.stdout && (
-                          <pre style={{ margin: 0, color: "var(--ok)", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.80rem" }}>
+                          <pre style={{ margin: 0, color: "var(--ix-ok)", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.80rem" }}>
                             {line.stdout}
                           </pre>
                         )}
@@ -726,7 +727,7 @@ export default function InstanceDetail() {
                           </pre>
                         )}
                         {line.duration !== undefined && (
-                          <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: "3px" }}>
+                          <div style={{ fontSize: "0.7rem", color: "var(--ix-fg2)", marginTop: "3px" }}>
                             Process finished with exit code {line.exitCode} in {line.duration}s
                           </div>
                         )}
@@ -735,7 +736,7 @@ export default function InstanceDetail() {
                   </div>
                 ))}
                 {termExecuting && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--violet)", marginTop: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--lime)", marginTop: "6px" }}>
                     <Loader2 size={14} className="animate-spin" />
                     <span>Executing on node container...</span>
                   </div>
@@ -745,7 +746,7 @@ export default function InstanceDetail() {
 
               {/* Quick Command Chips */}
               <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginBottom: "10px", borderTop: "1px solid #1e2430", paddingTop: "12px" }}>
-                <span style={{ fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: "4px" }}>Quick:</span>
+                <span style={{ fontSize: "0.72rem", color: "var(--ix-fg2)", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: "4px" }}>Quick:</span>
                 {[
                   "nvidia-smi",
                   "python -c \"import sys; print(f'Python {sys.version.split()[0]}')\"",
@@ -786,7 +787,7 @@ export default function InstanceDetail() {
                   border: "1px solid #283346",
                 }}
               >
-                <span style={{ color: "var(--violet)", fontWeight: 700, whiteSpace: "nowrap", fontSize: "0.82rem" }}>
+                <span style={{ color: "var(--lime)", fontWeight: 700, whiteSpace: "nowrap", fontSize: "0.82rem" }}>
                   $
                 </span>
                 <input
@@ -843,21 +844,21 @@ export default function InstanceDetail() {
                       right: 0,
                       bottom: 0,
                       zIndex: 9999,
-                      background: "#ffffff",
+                      background: "var(--ix-card)",
                       overflowY: "auto",
                       padding: "0",
                     }
-                  : { background: "#ffffff", padding: "0" }
+                  : { background: "var(--ix-card)", padding: "0" }
               }
             >
               {/* Workspace Top Toolbar */}
-              <div style={{ background: "#f8f9fa", borderBottom: "1px solid #e5e7eb", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ background: "var(--ix-card2)", borderBottom: "2px solid var(--ix-bk)", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: 700, color: "var(--ink, #101112)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: 700, color: "var(--ix-fg)" }}>
                     <Sparkles size={16} color="var(--ok)" />
                     <span>In-Browser GPU Execution Engine</span>
                   </div>
-                  <span style={{ fontSize: "0.74rem", background: "#e9f3e5", color: "var(--ok)", padding: "2px 8px", borderRadius: "100px", fontWeight: 600, border: "1px solid #a7f3d0" }}>
+                  <span style={{ fontSize: "0.74rem", background: "var(--ix-ok-bg)", color: "var(--ix-ok)", padding: "2px 8px", borderRadius: "100px", fontWeight: 600, border: "1px solid #a7f3d0" }}>
                     Node: {instance.gpu} ({instance.vram})
                   </span>
                 </div>
@@ -869,7 +870,7 @@ export default function InstanceDetail() {
                       setCodeOutput(null);
                       toast.success("Workspace state synchronized with host container");
                     }}
-                    style={{ background: "#ffffff", border: "1px solid #d1d5db", padding: "5px 12px", borderRadius: 0, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}
+                    style={{ background: "var(--ix-card)", border: "0", padding: "5px 12px", borderRadius: 0, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}
                   >
                     Sync State
                   </button>
@@ -912,7 +913,7 @@ export default function InstanceDetail() {
               <div style={{ padding: "24px" }}>
                 {/* Preset Selector */}
                 <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)", marginBottom: "8px" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--ix-fg2)", marginBottom: "8px" }}>
                     Execution Presets:
                   </div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -945,7 +946,7 @@ export default function InstanceDetail() {
 
                 {/* Code Editor Box */}
                 <div style={{ border: "1px solid #1a1b1d", borderRadius: 0, overflow: "hidden", background: "var(--ink)", marginBottom: "20px" }}>
-                  <div style={{ background: "#1a1b1d", padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--muted)", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)" }}>
+                  <div style={{ background: "#1a1b1d", padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--ix-fg2)", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--danger)", display: "inline-block" }} />
                       <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#a56b1a", display: "inline-block" }} />
@@ -984,7 +985,7 @@ export default function InstanceDetail() {
 
                   {/* Editor Actions Footer */}
                   <div style={{ background: "#1a1b1d", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-                    <div style={{ fontSize: "0.76rem", color: "var(--muted)" }}>
+                    <div style={{ fontSize: "0.76rem", color: "var(--ix-fg2)" }}>
                       Executed securely inside host container on <b>{instance.gpu}</b>
                     </div>
 
@@ -1016,7 +1017,7 @@ export default function InstanceDetail() {
                 </div>
 
                 {/* Output Console Box */}
-                <div style={{ border: "1px solid #e2e8f0", borderRadius: 0, overflow: "hidden", background: "#0a0d12" }}>
+                <div style={{ border: "0", borderRadius: 0, overflow: "hidden", background: "#0a0d12" }}>
                   <div style={{ background: "#161b22", padding: "10px 16px", borderBottom: "1px solid #21262d", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Terminal size={14} color="var(--violet)" />
@@ -1056,14 +1057,14 @@ export default function InstanceDetail() {
 
                   <div style={{ padding: "16px", minHeight: "140px", maxHeight: "280px", overflowY: "auto", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.5 }}>
                     {codeOutput?.status === "running" ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--violet)", padding: "20px 0" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--lime)", padding: "20px 0" }}>
                         <Loader2 size={16} className="animate-spin" />
                         <span>Sending job to GPU node container & executing Python runtime...</span>
                       </div>
                     ) : codeOutput ? (
                       <>
                         {codeOutput.stdout && (
-                          <pre style={{ margin: 0, color: "var(--ok)", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                          <pre style={{ margin: 0, color: "var(--ix-ok)", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
                             {codeOutput.stdout}
                           </pre>
                         )}
@@ -1073,13 +1074,13 @@ export default function InstanceDetail() {
                           </pre>
                         )}
                         {!codeOutput.stdout && !codeOutput.stderr && (
-                          <div style={{ color: "var(--muted)", fontStyle: "italic" }}>
+                          <div style={{ color: "var(--ix-fg2)", fontStyle: "italic" }}>
                             Execution completed with empty output.
                           </div>
                         )}
                       </>
                     ) : (
-                      <div style={{ color: "var(--muted)", fontStyle: "italic", padding: "20px 0", textAlign: "center" }}>
+                      <div style={{ color: "var(--ix-fg2)", fontStyle: "italic", padding: "20px 0", textAlign: "center" }}>
                         Click "▶ Run Code on GPU" or press Shift + Enter to run this workload on {instance.gpu}.
                       </div>
                     )}
@@ -1094,33 +1095,34 @@ export default function InstanceDetail() {
             <div style={{ padding: "28px" }}>
               <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Node Hardware Specs</h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-                <div style={{ padding: "16px", borderRadius: 0, background: "#fafaf7", border: "1px solid var(--line, #e2e2dc)" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#666", textTransform: "uppercase" }}>GPU Acceleration</span>
+                <div style={{ padding: "16px", borderRadius: 0, background: "var(--ix-card2)", border: "0" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)", textTransform: "uppercase" }}>GPU Acceleration</span>
                   <div style={{ fontSize: "1rem", fontWeight: 700, margin: "4px 0" }}>{instance.gpu} ({instance.vram})</div>
-                  <span style={{ fontSize: "0.78rem", color: "#444" }}>PCIe 4.0 x16 · 16,384 CUDA Cores</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--ix-fg2)" }}>PCIe 4.0 x16 · 16,384 CUDA Cores</span>
                 </div>
 
-                <div style={{ padding: "16px", borderRadius: 0, background: "#fafaf7", border: "1px solid var(--line, #e2e2dc)" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#666", textTransform: "uppercase" }}>Host CPU</span>
+                <div style={{ padding: "16px", borderRadius: 0, background: "var(--ix-card2)", border: "0" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)", textTransform: "uppercase" }}>Host CPU</span>
                   <div style={{ fontSize: "1rem", fontWeight: 700, margin: "4px 0" }}>{instance.specs?.cpu || "AMD Ryzen 9 7950X / EPYC"}</div>
-                  <span style={{ fontSize: "0.78rem", color: "#444" }}>Dedicated compute threads</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--ix-fg2)" }}>Dedicated compute threads</span>
                 </div>
 
-                <div style={{ padding: "16px", borderRadius: 0, background: "#fafaf7", border: "1px solid var(--line, #e2e2dc)" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#666", textTransform: "uppercase" }}>System RAM</span>
+                <div style={{ padding: "16px", borderRadius: 0, background: "var(--ix-card2)", border: "0" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)", textTransform: "uppercase" }}>System RAM</span>
                   <div style={{ fontSize: "1rem", fontWeight: 700, margin: "4px 0" }}>{instance.specs?.ram || "128 GB DDR5 ECC"}</div>
-                  <span style={{ fontSize: "0.78rem", color: "#444" }}>High-speed memory bandwidth</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--ix-fg2)" }}>High-speed memory bandwidth</span>
                 </div>
 
-                <div style={{ padding: "16px", borderRadius: 0, background: "#fafaf7", border: "1px solid var(--line, #e2e2dc)" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#666", textTransform: "uppercase" }}>Internet Uplink</span>
+                <div style={{ padding: "16px", borderRadius: 0, background: "var(--ix-card2)", border: "0" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)", textTransform: "uppercase" }}>Internet Uplink</span>
                   <div style={{ fontSize: "1rem", fontWeight: 700, margin: "4px 0" }}>{instance.specs?.bandwidth || "1 Gbps Symmetrical"}</div>
-                  <span style={{ fontSize: "0.78rem", color: "#444" }}>Data center fiber low-latency pipe</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--ix-fg2)" }}>Data center fiber low-latency pipe</span>
                 </div>
               </div>
             </div>
           )}
         </div>
+      </div>
       </div>
     </>
   );

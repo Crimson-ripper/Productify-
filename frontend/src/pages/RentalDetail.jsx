@@ -32,7 +32,7 @@ export default function RentalDetail() {
   return (
     <>
       <SEO title={`${r.title} — GPU rental · Productify`} description={r.description || `Rent ${r.gpu} with ${r.vram} VRAM at ${money(r.price)}/hour.`} path={`/rental/${r.id}`} />
-      <section className="detail-page" data-testid={`rental-detail-${r.id}`}>
+      <section className="detail-page rx-detail" data-testid={`rental-detail-${r.id}`}>
         <div className="detail-image"><GpuVisual rental={r} large /></div>
         <div className="detail-info">
           <div className="crumb"><Link to="/rentals">GPU rentals</Link></div>
