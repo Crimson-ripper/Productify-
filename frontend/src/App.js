@@ -52,6 +52,18 @@ import PolicyBumpModal from "@/components/PolicyBumpModal";
 
 export function AppRouter() {
   const location = useLocation();
+  // Every new page starts at the top (React Router keeps the old scroll position otherwise).
+  // Links to a #section still jump to that section. Instant, not smooth, so pages don't slide.
+  useEffect(() => {
+    if (location.hash) return;
+    const root = document.documentElement;
+    const prev = root.style.scrollBehavior;
+    const toTop = () => { root.style.scrollBehavior = "auto"; window.scrollTo(0, 0); };
+    toTop(); // also cancels a smooth scroll still in progress from the previous page
+    const raf = requestAnimationFrame(() => { toTop(); root.style.scrollBehavior = prev; }); // after the new page paints
+    return () => { cancelAnimationFrame(raf); root.style.scrollBehavior = prev; };
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     // small delay so react-helmet has set the new page title first
     const t = setTimeout(() => track("page_view"), 150);
