@@ -43,7 +43,7 @@ export default function Login() {
   return (
     <>
       <SEO title="Sign in — Productify" description="Sign in to Productify to shop, sell and manage rentals." path="/login" />
-      <section className="auth-page">
+      <section className="auth-page" style={{ backgroundImage: "url(/img/gx-rgb-pc.jpg)" }}>
         <div className="auth-card" data-testid="login-card">
           <div className="auth-mark">P</div>
           <div className="eyebrow">WELCOME BACK</div>

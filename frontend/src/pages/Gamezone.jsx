@@ -269,7 +269,8 @@ export default function Gamezone() {
         path="/gamezone"
       />
 
-      <section className="page-hero gz-hero">
+      <section className="page-hero gz-hero lp-hero">
+        <figure className="lp-hero-fig"><img src="/img/og-veloren-horizon.jpg" width="1000" height="562" alt="Veloren, an open-source game: a voxel character overlooking mountains and a forest" /></figure>
         <div className="eyebrow">Gamezone</div>
         <h1>Play on someone else's GPU</h1>
         <p>

@@ -58,7 +58,7 @@ export default function Register() {
     return (
       <>
         <SEO title="Activate Seller Studio — Productify" description="Verify your identity and upgrade your Productify account to start selling." path="/register" />
-        <section className="auth-page">
+        <section className="auth-page" style={{ backgroundImage: "url(/img/gx-rgb-pc.jpg)" }}>
           <div className="auth-card" data-testid="register-upgrade-card">
             <div className="auth-mark">P</div>
             <div className="eyebrow">SELLER IDENTITY VERIFICATION</div>
@@ -79,7 +79,7 @@ export default function Register() {
   return (
     <>
       <SEO title="Create your Productify account" description="Sign up for Productify — buy, sell and rent GPUs." path="/register" />
-      <section className="auth-page">
+      <section className="auth-page" style={{ backgroundImage: "url(/img/gx-rgb-pc.jpg)" }}>
         <div className="auth-card" data-testid="register-card">
           <div className="auth-mark">P</div>
           <div className="eyebrow">JOIN PRODUCTIFY</div>
