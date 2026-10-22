@@ -10,7 +10,7 @@ export default function SEO({
 }) {
   const site = "https://www.productifynow.com";
   const url = site + path;
-  const img = image || `${site}/og-cover.png`;
+  const img = image || `${site}/og-cover-v2.jpg`;
   return (
     <Helmet>
       <title>{title}</title>

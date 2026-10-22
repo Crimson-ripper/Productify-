@@ -7,6 +7,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import GamePackageUploader from "@/components/GamePackageUploader";
 import { toast } from "sonner";
+import { track } from "@/lib/analytics";
+
+// PG Connect (Productify Game Connect): GPLv3 fork of Moonlight, published on GitHub Releases
+// like Productify Node. Direct file link so the browser downloads instead of opening GitHub.
+const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.1.0/PGConnect-Setup-0.1.0-x64.msi";
+const PG_CONNECT_SOURCE_URL = "https://github.com/Crimson-ripper/PG-Connect";
 
 export default function Gamezone() {
   const { user } = useAuth();
@@ -277,6 +283,39 @@ export default function Gamezone() {
           Pick a game, pick a machine, and play it streamed to your browser. You pay
           by the hour in credits, only while the session runs.
         </p>
+      </section>
+
+      <section className="gz-client-wrap" aria-labelledby="gz-client-title">
+        <div className="gz-client">
+        <div className="gz-client-mark" aria-hidden="true">P</div>
+        <div className="gz-client-text">
+          <div className="gz-client-eyebrow">Pilot · Windows 10/11 (64-bit)</div>
+          <h2 id="gz-client-title">PG Connect</h2>
+          <p>
+            Our game-streaming app for Gamezone sessions. Gamezone is in a closed pilot: you need a
+            session code from Productify to connect, and it is not open to the public yet.
+          </p>
+        </div>
+        <div className="gz-client-actions">
+          <a
+            className="primary-button"
+            href={PG_CONNECT_DOWNLOAD_URL}
+            download
+            onClick={() => track("cta_click", { cta_name: "pg_connect_download" })}
+          >
+            Download for Windows
+          </a>
+          <a
+            className="gz-client-link"
+            href={PG_CONNECT_SOURCE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("cta_click", { cta_name: "pg_connect_source" })}
+          >
+            Source code (GPLv3)
+          </a>
+        </div>
+        </div>
       </section>
 
       <nav className="gz-tabs" aria-label="Gamezone sections">

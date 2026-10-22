@@ -269,6 +269,19 @@ h1 em,h2 em{font-style:normal;color:var(--lime)}
 .gz-hero{background:#1c1838;color:#efedfb}
 .gz-hero .eyebrow{color:#a9a3d8}
 .gz-hero p{color:#bdb8e0}
+.gz-client-wrap{background:#0a0a0b;padding:0 clamp(20px,3.6vw,56px) 24px}
+.gz-client{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:20px 22px;background:#1c1d20;color:#f2f2ee}
+.gz-client-mark{display:grid;place-items:center;width:48px;height:48px;flex-shrink:0;background:var(--lime);color:#0a0a0b;font:800 24px 'Archivo',sans-serif}
+.gz-client-text{flex:1 1 320px;min-width:0}
+.gz-client-eyebrow{font:700 12px 'Archivo',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--lime)}
+.gz-client-text h2{font:800 28px/1 'Archivo',sans-serif;font-stretch:75%;text-transform:uppercase;margin:6px 0 8px;color:#f2f2ee}
+.gz-client-text p{margin:0;font-size:15px;line-height:1.55;color:#b9bbb5;max-width:62ch}
+.gz-client-actions{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.gz-client-actions .primary-button{font:700 15px 'Archivo',sans-serif;padding:13px 18px}
+.gz-client-actions .primary-button:hover{background:#d9fb72}
+.gz-client-link{font:600 14px 'Archivo',sans-serif;color:#f2f2ee;text-decoration:underline;text-underline-offset:3px}
+.gz-client-link:hover{color:var(--lime)}
+@media (max-width:640px){.gz-client-wrap{padding:0 16px 20px}.gz-client{padding:18px}.gz-client-actions{width:100%}.gz-client-actions .primary-button{flex:1}}
 .gz-tabs{display:flex;gap:4px;padding:0 8%;border-bottom:1px solid var(--line);background:var(--surface);overflow-x:auto}
 .gz-tab{display:inline-flex;align-items:center;gap:8px;padding:16px 14px;background:transparent;font-size:13px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
 .gz-tab:hover{color:var(--ink)}
