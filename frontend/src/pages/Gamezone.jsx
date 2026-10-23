@@ -12,7 +12,6 @@ import { track } from "@/lib/analytics";
 // PG Connect (Productify Game Connect): GPLv3 fork of Moonlight, published on GitHub Releases
 // like Productify Node. Direct file link so the browser downloads instead of opening GitHub.
 const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.1.0/PGConnect-Setup-0.1.0-x64.msi";
-const PG_CONNECT_SOURCE_URL = "https://github.com/Crimson-ripper/PG-Connect";
 
 export default function Gamezone() {
   const { user } = useAuth();
@@ -304,15 +303,6 @@ export default function Gamezone() {
             onClick={() => track("cta_click", { cta_name: "pg_connect_download" })}
           >
             Download for Windows
-          </a>
-          <a
-            className="gz-client-link"
-            href={PG_CONNECT_SOURCE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track("cta_click", { cta_name: "pg_connect_source" })}
-          >
-            Source code (GPLv3)
           </a>
         </div>
         </div>
