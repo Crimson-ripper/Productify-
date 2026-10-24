@@ -28,12 +28,12 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[?]` waiti
 - [x] 1.1 Check terms of current providers (Vast.ai, Productify Node, others in setup): reselling allowed?
       game streaming allowed? API for live stock + location? Notes: done, see PROVIDERS_REVIEW.md.
 - [x] 1.2 Web search for other GPU providers that allow game streaming; same three questions. Notes: done 2026-10-24, results in PROVIDERS_REVIEW.md.
-- [?] 1.3 Write `PROVIDERS_REVIEW.md` (sources + dates) and get the user's pick of providers. `[?]` Notes: review written; waiting for the user to pick providers.
+- [x] 1.3 Write `PROVIDERS_REVIEW.md` (sources + dates) and get the user's pick of providers. `[?]` Notes: user picked Productify Node + Vast.ai for preview (2026-10-24). Emails to TensorDock + Vast.ai drafted in PROVIDER_EMAILS.md for the user to send.
 
 ## Phase 2 — Cover art
-- [ ] 2.1 Pick the starting game list (open-source/free-to-play first, plus popular games users own). Notes: —
-- [ ] 2.2 Find open-licence cover art, save to `Desktop\images001\game cover art\<game>.jpg`. Notes: —
-- [ ] 2.3 Write `CREDITS.md` in that folder (file, game, source URL, author, licence). User reviews. `[?]` Notes: —
+- [x] 2.1 Pick the starting game list (open-source/free-to-play first, plus popular games users own). Notes: 14 open-source games + Blender. Commercial games: no open art (decide text-only cards or publisher permission).
+- [x] 2.2 Find open-licence cover art, save to `Desktop\images001\game cover art\<game>.jpg`. Notes: 15 images saved.
+- [?] 2.3 Write `CREDITS.md` in that folder (file, game, source URL, author, licence). User reviews. `[?]` Notes: CREDITS.md written; 7 source links marked TODO; waiting for user review.
 
 ## Phase 3 — Live inventory backend
 - [ ] 3.1 Common machine format (GPU model/VRAM/cores, CPU model/cores, RAM, disk, location, provider, status). Notes: —
