@@ -1343,6 +1343,16 @@ async def record_machine_hardware(rental_id: str, hello: dict):
         "hardware_reported_at": datetime.now(timezone.utc).isoformat(),
         "is_verified": True,  # reported by the paired agent, not typed by the seller
     }
+    gz = hello.get("gamezone")
+    if isinstance(gz, dict):  # Node 2.2+: Gamezone needs Windows Pro/Enterprise/Education + Hyper-V + GPU partitioning
+        update["gamezone"] = {
+            "eligible": gz.get("eligible") is True,
+            "edition": str(gz.get("edition") or "")[:60],
+            "hyperv": gz.get("hyperv") is True,
+            "gpu_partition": gz.get("gpu_partition") is True,
+            "reasons": [str(x)[:300] for x in (gz.get("reasons") or [])][:5] if isinstance(gz.get("reasons"), list) else [],
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
     if r.get("status") == "awaiting_pairing":
         update["status"] = "paired"
     if not r.get("title"):
@@ -2696,7 +2706,7 @@ async def node_v1_websocket(websocket: WebSocket):
             frame = await websocket.receive_json()
             kind = frame.get("type")
             if kind == "hello":
-                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live", "isolation")
+                allowed = ("agent_version", "node_id", "os", "gpu", "vram_mb", "cpu", "cpu_cores", "ram_mb", "docker", "gpu_in_docker", "live", "isolation", "gamezone")
                 prev_seen = (node_hub.meta.get(rental_id) or {}).get("job_seen", {})  # keep across reconnects
                 node_hub.meta[rental_id] = {**{k: frame.get(k) for k in allowed}, "last_seen": time.time(), "transport": "node-v1", "job_seen": prev_seen}
                 await node_manager.record_heartbeat(rental_id, node_hub.meta[rental_id], transport="node-v1")
