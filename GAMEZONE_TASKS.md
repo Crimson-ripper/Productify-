@@ -5,6 +5,8 @@ read its "Notes / state" line, and continue from there. Update the checkbox and 
 after every step, so this file is always the true state of the work.
 Rule from the user: **ask before doing anything** — each phase starts only after the user says go.
 
+**PAUSED 2026-10-24 by the user** to work on Productify Node + PG Connect. Next step when resumed: decide the preview backend (separate Render service with its own DB_NAME, explained in chat), then Phase 4.
+
 Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[?]` waiting for the user
 
 ## Decisions (2026-10-24)
