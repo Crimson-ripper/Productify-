@@ -25,10 +25,10 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[?]` waiti
 - [x] 0.2 Update CLAUDE.md decisions log (streaming test passed; library plan; prices pending). Notes: two rows added locally; pushed to the branch with GAMEZONE_TASKS.md.
 
 ## Phase 1 — Research (no code)
-- [ ] 1.1 Check terms of current providers (Vast.ai, Productify Node, others in setup): reselling allowed?
-      game streaming allowed? API for live stock + location? Notes: —
-- [ ] 1.2 Web search for other GPU providers that allow game streaming; same three questions. Notes: —
-- [ ] 1.3 Write `PROVIDERS_REVIEW.md` (sources + dates) and get the user's pick of providers. `[?]` Notes: —
+- [x] 1.1 Check terms of current providers (Vast.ai, Productify Node, others in setup): reselling allowed?
+      game streaming allowed? API for live stock + location? Notes: done, see PROVIDERS_REVIEW.md.
+- [x] 1.2 Web search for other GPU providers that allow game streaming; same three questions. Notes: done 2026-10-24, results in PROVIDERS_REVIEW.md.
+- [?] 1.3 Write `PROVIDERS_REVIEW.md` (sources + dates) and get the user's pick of providers. `[?]` Notes: review written; waiting for the user to pick providers.
 
 ## Phase 2 — Cover art
 - [ ] 2.1 Pick the starting game list (open-source/free-to-play first, plus popular games users own). Notes: —
