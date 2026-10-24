@@ -33,10 +33,10 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[?]` waiti
 ## Phase 2 — Cover art
 - [x] 2.1 Pick the starting game list (open-source/free-to-play first, plus popular games users own). Notes: 14 open-source games + Blender. Commercial games: no open art (decide text-only cards or publisher permission).
 - [x] 2.2 Find open-licence cover art, save to `Desktop\images001\game cover art\<game>.jpg`. Notes: 15 images saved.
-- [?] 2.3 Write `CREDITS.md` in that folder (file, game, source URL, author, licence). User reviews. `[?]` Notes: CREDITS.md written; 7 source links marked TODO; waiting for user review.
+- [x] 2.3 Write `CREDITS.md` in that folder (file, game, source URL, author, licence). User reviews. `[?]` Notes: all 15 sources confirmed 2026-10-24. Commercial games = text-only cards. Site credits line has 2 wrong licences (OpenTTD GPLv2, Xonotic GPL) — fix in Phase 4.
 
 ## Phase 3 — Live inventory backend
-- [ ] 3.1 Common machine format (GPU model/VRAM/cores, CPU model/cores, RAM, disk, location, provider, status). Notes: —
+- [?] 3.1 Common machine format (GPU model/VRAM/cores, CPU model/cores, RAM, disk, location, provider, status). Notes: waiting for the user's go on Phase 3.
 - [ ] 3.2 One adapter per approved provider; poll into a central inventory store. Notes: —
 - [ ] 3.3 API: `GET /gamezone/inventory` grouped by GPU model, sorted by distance (IP-based location,
       not stored); `GET /gamezone/machines` with filters. Notes: —
