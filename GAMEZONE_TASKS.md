@@ -36,11 +36,11 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[?]` waiti
 - [x] 2.3 Write `CREDITS.md` in that folder (file, game, source URL, author, licence). User reviews. `[?]` Notes: all 15 sources confirmed 2026-10-24. Commercial games = text-only cards. Site credits line has 2 wrong licences (OpenTTD GPLv2, Xonotic GPL) — fix in Phase 4.
 
 ## Phase 3 — Live inventory backend
-- [?] 3.1 Common machine format (GPU model/VRAM/cores, CPU model/cores, RAM, disk, location, provider, status). Notes: waiting for the user's go on Phase 3.
-- [ ] 3.2 One adapter per approved provider; poll into a central inventory store. Notes: —
-- [ ] 3.3 API: `GET /gamezone/inventory` grouped by GPU model, sorted by distance (IP-based location,
-      not stored); `GET /gamezone/machines` with filters. Notes: —
-- [ ] 3.4 Tests: stale/offline machines never shown; provider outage does not break the list. Notes: —
+- [x] 3.1 Common machine format (GPU model/VRAM/cores, CPU model/cores, RAM, disk, location, provider, status). Notes: backend/gamezone/inventory.py (common fields in module docstring).
+- [x] 3.2 One adapter per approved provider; poll into a central inventory store. Notes: vast_machines() + node_machines(); collector_loop refreshes Node every 30 s, Vast every 120 s; in-memory store.
+- [x] 3.3 API: `GET /gamezone/inventory` grouped by GPU model, sorted by distance (IP-based location,
+      not stored); `GET /gamezone/machines` with filters. Notes: done; location from browser lat/lon or a country code (no IP lookup yet — needs a decision).
+- [x] 3.4 Tests: stale/offline machines never shown; provider outage does not break the list. Notes: tests/test_gamezone_inventory.py, 10 tests pass; live Vast smoke test OK (391 machines).
 
 ## Phase 4 — Frontend (preview branch)
 - [ ] 4.1 "Bring your own games" notice: banner + FAQ entry. Notes: —

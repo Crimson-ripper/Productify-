@@ -47,6 +47,7 @@ from gamezone import (
     calculate_session_metered_cost,
     CURATED_GAMES,
 )
+from gamezone import geo as gz_geo, inventory as gz_inventory
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
@@ -4473,6 +4474,50 @@ async def admin_list_active_game_sessions(user=Depends(current_user)):
     }
 
 
+# ============== GAMEZONE LIVE INVENTORY ==============
+# Read-only: free machines across providers, nearest first. No prices yet (pricing not decided).
+
+async def _inventory_node_rows():
+    rows = await db.rentals.find({"status": "approved"}, {"_id": 0, "pairing_token": 0}).to_list(1000)
+    busy = {i["rental_id"] for i in await db.instances.find({"status": {"$in": ["running", "paused"]}}, {"_id": 0, "rental_id": 1}).to_list(5000)}
+    for r in rows:
+        add_availability(r, busy)
+    return rows, node_hub.meta
+
+
+def _inventory_origin(lat: Optional[float], lon: Optional[float], country: str):
+    """Where the user is: browser coordinates if given, else their country's centre. Never stored."""
+    if lat is not None and lon is not None and -90 <= lat <= 90 and -180 <= lon <= 180:
+        return (lat, lon)
+    return gz_geo.COUNTRIES.get((country or "").strip().upper()[:2])
+
+
+@api.get("/gamezone/inventory")
+async def gamezone_inventory(lat: Optional[float] = None, lon: Optional[float] = None, country: str = "",
+                             min_vram_gb: float = Query(0, ge=0, le=200)):
+    """Free GPUs grouped by model (e.g. 'RTX 3060 · 20 available'), nearest first, one marked recommended."""
+    origin = _inventory_origin(lat, lon, country)
+    return {"groups": gz_inventory.group_by_gpu(gz_inventory.store.machines(), origin, min_vram_gb),
+            "located": origin is not None, "providers": gz_inventory.store.status()}
+
+
+@api.get("/gamezone/machines")
+async def gamezone_machines(lat: Optional[float] = None, lon: Optional[float] = None, country: str = "",
+                            gpu_model: str = Query("", max_length=40), cpu_model: str = Query("", max_length=60),
+                            min_vram_gb: float = Query(0, ge=0, le=200), min_ram_gb: float = Query(0, ge=0, le=4096),
+                            min_cpu_cores: int = Query(0, ge=0, le=512), min_gpu_cores: int = Query(0, ge=0, le=100000),
+                            max_km: float = Query(0, ge=0, le=25000), provider: str = Query("", max_length=20),
+                            streaming_only: bool = False, limit: int = Query(100, ge=1, le=500)):
+    """Machine/GPU search with filters (distance, RAM, CPU cores/model, GPU cores/VRAM/model), nearest first."""
+    origin = _inventory_origin(lat, lon, country)
+    return {"machines": gz_inventory.search(
+                gz_inventory.store.machines(), origin, gpu_model=gpu_model, cpu_model=cpu_model,
+                min_vram_gb=min_vram_gb, min_ram_gb=min_ram_gb, min_cpu_cores=min_cpu_cores,
+                min_gpu_cores=min_gpu_cores, max_km=max_km, provider=provider,
+                streaming_only=streaming_only, limit=limit),
+            "located": origin is not None}
+
+
 app.include_router(api)
 DEFAULT_ORIGINS = [
     "http://localhost:3000",
@@ -4539,6 +4584,7 @@ async def startup():
     asyncio.create_task(node_watchdog_loop())
     asyncio.create_task(currency_sync_loop())
     asyncio.create_task(credit_limit_loop())
+    asyncio.create_task(gz_inventory.collector_loop(_inventory_node_rows))
 
 
 @app.on_event("shutdown")
