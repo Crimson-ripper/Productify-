@@ -129,6 +129,9 @@ Answers the user has already given. Don't ask these again; ask if circumstances 
 | 2026-10-19 | Self-serve GPU flows vs. waitlist/application | **Keep both public.** Existing self-serve renting and seller pairing stay open; the waitlist and provider application are added alongside. |
 | 2026-10-19 | Crawlability fix | **Decide at Task 6.** Options A–D are in the Task 0 audit (recommendation: A, build-time pre-render). |
 | 2026-10-19 | Gamezone (advertised but unsupported, rule 4) | **Leave it until later.** Don't change Gamezone during this roadmap. |
+| 2026-10-21 | Gamezone hosting experiments | **Test on rented Vast.ai machines.** Backend scripts and test plan only (`backend/gamezone/vast_*.py`, `STREAMING_TEST_PLAN.md`); the live site stays paused and nothing is advertised until tests pass. `VAST_API_KEY` lives only in `backend/.env` / Render env. |
+| 2026-10-24 | Gamezone streaming test | **Basic streaming test passed.** Gamezone library work starts on preview branch `gamezone-library`; nothing goes live without the user's review. Plan and progress: `GAMEZONE_TASKS.md`. |
+| 2026-10-24 | Gamezone library scope | Bring-your-own games only (users sign in to their own store accounts); we supply no games or paid software. Free/open-source software (e.g. Blender) as pre-configured containers. Availability only from verified live stock (rule 3.1 stays). Prices not shown until pricing is decided. |
 
 ## 9. Codebase notes (from the Task 0 audit)
 
