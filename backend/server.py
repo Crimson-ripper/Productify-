@@ -2710,12 +2710,12 @@ async def node_v1_websocket(websocket: WebSocket):
                 node_hub.meta[rental_id] = {**{k: frame.get(k) for k in allowed}, "last_seen": time.time(), "transport": "node-v1", "job_seen": prev_seen}
                 await node_manager.record_heartbeat(rental_id, node_hub.meta[rental_id], transport="node-v1")
                 await record_machine_hardware(rental_id, node_hub.meta[rental_id])
-                spawn(reconcile_machine_jobs(rental_id, frame.get("job_ids")))
+                spawn(reconcile_machine_jobs(rental_id, reported_job_ids(frame)))
             elif kind == "heartbeat":
                 m = node_hub.meta.setdefault(rental_id, {"transport": "node-v1"})
                 m.update({k: frame.get(k) for k in ("live", "jobs", "gpu_temp_c", "paused_reason")}, last_seen=time.time())
                 await node_manager.record_heartbeat(rental_id, m, transport="node-v1")
-                spawn(reconcile_machine_jobs(rental_id, frame.get("job_ids")))
+                spawn(reconcile_machine_jobs(rental_id, reported_job_ids(frame)))
             elif kind == "result":
                 node_hub.resolve(rental_id, frame)
             elif kind == "event":
@@ -2769,6 +2769,15 @@ async def end_instance_on_machine(rental_id: str, inst_id: str, reason: str, end
     await finish_instance(inst, total_sec, cost, end.isoformat(), reason=f"ended on machine: {reason}", destroy=False)
     logger.warning(f"Instance {inst_id} on {rental_id} ended on the machine ({reason}); billing stopped")
     return True
+
+
+def reported_job_ids(frame: dict):
+    """Container jobs plus the Gamezone session (Node 2.2+ reports it as game_id)."""
+    ids = frame.get("job_ids")
+    if not isinstance(ids, list):
+        return None
+    gid = frame.get("game_id")
+    return ids + [gid] if isinstance(gid, str) and gid else ids
 
 
 async def reconcile_machine_jobs(rental_id: str, job_ids):
@@ -3208,6 +3217,9 @@ async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(
     now_iso = now.isoformat()
     action = data.action.lower()
 
+    if inst.get("kind") == "game" and action != "terminate":
+        raise HTTPException(400, "Gamezone sessions can only be stopped.")
+
     current_status = inst.get("status")
     total_sec = inst.get("total_runtime_seconds", 0)
     accum_cost = inst.get("cost_accumulated", 0.0)
@@ -3279,7 +3291,12 @@ async def finish_instance(inst: dict, total_sec: int, accum_cost: float, now_iso
     if not getattr(res, "modified_count", 1):
         return final_cost
     rental_id = inst.get("rental_id")
-    if destroy and rental_id and host_tunnel_manager.is_connected(rental_id):
+    if destroy and rental_id and inst.get("kind") == "game" and node_hub.is_connected(rental_id):
+        try:
+            await node_hub.request(rental_id, {"type": "game.stop", "job_id": inst["id"]}, 120)
+        except Exception as e:
+            logger.warning(f"Could not remove the Gamezone VM on host: {e}")
+    elif destroy and rental_id and host_tunnel_manager.is_connected(rental_id):
         try:
             await host_tunnel_manager.send_rpc(rental_id, action="destroy_pod", payload={"instance_id": inst["id"]}, timeout=10.0)
         except Exception as e:
@@ -3321,6 +3338,75 @@ async def credit_limit_loop():
             await enforce_credit_limits()
         except Exception as e:
             logger.warning(f"credit limit loop: {e}")
+
+
+# ---------- Gamezone sessions on Productify Node machines ----------
+# A session is an instance with kind="game": same billing, credit limits and end-of-job handling.
+JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
+
+
+class GameSessionInput(BaseModel):
+    rental_id: str = Field(min_length=3, max_length=40)
+
+
+@api.post("/gamezone/node-sessions")
+async def start_node_game_session(data: GameSessionInput, user=Depends(current_user)):
+    """Start a Gamezone VM on an eligible Productify Node machine and return a PG Connect join code.
+    Nothing is billed unless the VM actually started."""
+    rental = await db.rentals.find_one({"id": data.rental_id, "status": "approved"}, {"_id": 0})
+    if not rental:
+        raise HTTPException(404, "Machine not found")
+    gz = rental.get("gamezone") or {}
+    if not gz.get("eligible"):
+        raise HTTPException(409, "This machine can't host Gamezone sessions (it needs Windows Pro with Hyper-V and GPU sharing).")
+    if not node_hub.is_connected(rental["id"]):
+        raise HTTPException(409, "This machine is offline right now. Choose another machine or try again later.")
+    if await db.instances.find_one({"rental_id": rental["id"], "status": {"$in": ["running", "paused"]}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "This machine is in use by another renter. Try another machine, or try again later.")
+    renter = await db.users.find_one({"id": user["id"]}) or {}
+    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+        raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of credits to start a session.")
+
+    session_id = f"gs-{uuid.uuid4().hex[:10]}"
+    try:
+        res = await node_hub.request(rental["id"], {"type": "game.start", "job_id": session_id}, 360)
+    except HTTPException as e:
+        raise HTTPException(e.status_code, f"{e.detail} You haven't been charged.")
+    join_code = "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(8))
+    now_iso = datetime.now(timezone.utc).isoformat()  # billing starts once the VM is up
+    price = float(rental.get("price", 0.60))  # TODO(pricing): Gamezone prices not decided; listing price for now
+    doc = {
+        "id": session_id, "kind": "game", "join_code": join_code,
+        "rental_id": rental["id"], "rental_title": rental.get("title", "Gamezone machine"),
+        "gpu": rental.get("gpu"), "vram": rental.get("vram"), "location": rental.get("location"),
+        "user_id": user["id"], "renter_name": user.get("name", "User"), "renter_email": user.get("email"),
+        "seller_id": rental.get("owner_id", "platform"), "seller_name": rental.get("owner", "Host"),
+        "template_id": "gamezone-vm", "template_name": "Gamezone (Windows VM)",
+        "hourly_price": price, "base_price": price, "storage_price": 0.0,
+        "status": "running", "created_at": now_iso, "started_at": now_iso,
+        "total_runtime_seconds": 0, "cost_accumulated": 0.0, "specs": rental.get("specs", {}),
+        "vm": {k: v for k, v in (res.get("vm") or {}).items() if k in ("vm", "gpu", "cpus", "memory_gb")},
+        "logs": [f"[{now_iso[:19]}] Gamezone VM started on {rental.get('gpu')}."],
+    }
+    await db.instances.insert_one(doc)
+    return {"id": session_id, "join_code": join_code, "status": "running", "hourly_price": price,
+            "connect_url": f"productify://connect?code={join_code}"}
+
+
+@api.post("/gamezone/sessions/{code}/connect")
+async def gamezone_connect(code: str):
+    """PG Connect's join call (contract in productify-connect DESIGN.md)."""
+    code = code.strip().upper().replace("-", "")
+    if not re.fullmatch(r"[A-Z0-9]{6,16}", code):
+        raise HTTPException(404, "unknown session code")
+    inst = await db.instances.find_one({"join_code": code, "kind": "game"}, {"_id": 0, "status": 1})
+    if not inst:
+        raise HTTPException(404, "unknown session code")
+    if inst.get("status") != "running":
+        raise HTTPException(410, "This session has ended.")
+    # TODO(Phase 3): return host address, Sunshine pairing PIN and network config once the VM
+    # runs Sunshine and is reachable (GAMEZONE_NODE_TASKS.md 3.1-3.3).
+    raise HTTPException(503, "Streaming from Productify Node machines isn't ready yet. Your session is running and you can stop it from the website.")
 
 
 @api.post("/instances/{inst_id}/exec")
