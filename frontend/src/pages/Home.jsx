@@ -295,7 +295,7 @@ function Reply() {
         Photographs via Wikimedia Commons: "2025 Wnętrze komputera PC" by Jacek Halicki (CC BY-SA 4.0);
         "MSI GeForce RTX 3070 VENTUS 3X OC" by TheStriker (CC BY 4.0); "Gaming-PC 20240426 HOF2514" and
         "Gigabyte GeForce RTX 3090 Eagle OC" by PantheraLeo1359531 (CC BY 4.0); "Charge" and "Sprite Fright" posters and Blender 3.0 splash by Blender Studio (CC BY 4.0);
-        Game screenshots via Wikimedia Commons: Veloren by Antimundo (CC0); 0 A.D. by Wildfire Games (CC BY-SA 3.0); SuperTuxKart by the SuperTuxKart contributors (CC BY 1.0, CC BY 3.0); Red Eclipse 2 by TucanHolmes (CC BY-SA 4.0); Luanti (Minetest) by cisoun (CC BY-SA 4.0); Unvanquished by the Unvanquished developers (CC BY-SA 2.5); OpenTTD by the OpenTTD contributors (CC BY-SA 4.0); Xonotic by OliwierJaszczyszyn (CC BY-SA 4.0); Battle for Wesnoth by the Wesnoth developers (CC BY-SA 3.0). Screenshots and app photo: Productify test, 19 Oct 2026.
+        Game screenshots via Wikimedia Commons: Veloren by Antimundo (CC0); 0 A.D. by Wildfire Games (CC BY-SA 3.0); SuperTuxKart by the SuperTuxKart contributors (CC BY 1.0, CC BY 3.0); Red Eclipse 2 by TucanHolmes (CC BY-SA 4.0); Luanti (Minetest) by cisoun (CC BY-SA 4.0); Unvanquished by the Unvanquished developers (CC BY-SA 2.5); OpenTTD by the OpenTTD contributors (GPLv2); Xonotic by OliwierJaszczyszyn (GPL); Battle for Wesnoth by the Wesnoth developers (CC BY-SA 3.0). Screenshots and app photo: Productify test, 19 Oct 2026.
       </details>
     </section>
   );
