@@ -7,13 +7,13 @@ const DONE = [
   ["No administrator rights", "Containers run as a non-root user with extra privileges removed."],
   ["No access to the provider's files", "No folders from the provider's computer are shared into the container."],
   ["No open ports", "The Productify Node app connects out to Productify over an encrypted connection. Providers don't open ports on their router."],
+  ["Blocked from the home network", "Since Productify Node 2.1, each job runs on its own sealed network. Its only way out is a filter that allows public internet addresses on ports 80 and 443, so jobs can't reach the provider's computer, router or other devices at home."],
   ["Wiped after each job", "When a rental stops, its container and files are deleted."],
   ["Machine checks", "Hardware is reported by the app on the machine itself, and every machine is reviewed before renters can see it. Offline machines can't start new rentals."],
   ["Paired machines only", "Each machine has its own pairing token. Only paired, approved machines receive jobs."],
 ];
 
 const NOT_YET = [
-  ["Blocking home-network access", "Stopping renter jobs from reaching other devices on the provider's local network is still being built. Providers should keep sensitive devices on a separate network for now."],
   ["Signed installer", "The Productify Node installer isn't code-signed yet, so Windows may show a warning when you install it."],
   ["Independent review", "Productify's isolation hasn't had an external security audit yet."],
 ];

@@ -7,7 +7,7 @@ export default function Contact() {
       description="Reach the right team quickly: support, hosts, billing, privacy, legal, security, grievance officer, DPO and DMCA."
       path="/legal/contact"
     >
-      <p>Productify is in closed beta. Questions about renting go to support, and questions about providing a machine go to hosts; many are answered in the <a href="/faq">FAQ</a>. Response times: [TODO: confirm support hours and response time].</p>
+      <p>Productify is in closed beta. Questions about renting go to support, and questions about providing a machine go to hosts; many are answered in the <a href="/faq">FAQ</a>. Support hours: Monday to Friday, 8:00 AM to 8:00 PM IST. We reply within 24 hours.</p>
       <h2>General contacts</h2>
       <div className="contact-grid">
         <div className="contact-card">

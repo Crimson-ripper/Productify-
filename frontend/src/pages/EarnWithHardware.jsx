@@ -31,7 +31,7 @@ const SECURITY = [
   "Containers can't see your folders or files — no host folders are shared with them.",
   "No ports are opened on your network; the app connects out to Productify.",
   "Each container and its files are deleted when the job ends.",
-  "Blocking renter jobs from reaching other devices on your home network is still being built. Until it ships, keep sensitive devices on a separate network.",
+  "Renter jobs can't reach your computer or other devices on your home network. Each job gets its own sealed network and can only connect to public internet addresses (Productify Node 2.1 or later).",
 ];
 
 export default function EarnWithHardware() {
