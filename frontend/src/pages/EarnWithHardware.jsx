@@ -23,7 +23,7 @@ const CONTROL = [
   ["Pause or go live", "Take the machine off the market whenever you want to use it yourself."],
   ["Limits", "Set limits on what renters can use."],
   ["Emergency stop", "Stop every running job from the app straight away."],
-  ["Removing a machine", "You can delete a listing yourself before it's reviewed. After review, contact support to remove it."],
+  ["Removing a machine", "You can delete a listing yourself before it's reviewed. After review, email hosts@productifynow.com to remove it."],
 ];
 
 const SECURITY = [

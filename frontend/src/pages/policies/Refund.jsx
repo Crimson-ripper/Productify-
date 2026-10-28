@@ -15,7 +15,7 @@ export default function Refund() {
         <li>You receive a duplicate purchase due to a technical error;</li>
         <li>Or your local consumer-protection law grants a stronger right (see §4).</li>
       </ul>
-      <p>Eligible refund window: <b>30 days</b> from purchase. Contact <a href="mailto:support@productifynow.com">support@productifynow.com</a> with your order ID.</p>
+      <p>Eligible refund window: <b>30 days</b> from purchase. Contact <a href="mailto:billing@productifynow.com">billing@productifynow.com</a> with your order ID.</p>
 
       <h2>2. GPU / system rentals</h2>
       <ul>
@@ -28,7 +28,7 @@ export default function Refund() {
       <h2>3. How to request a refund</h2>
       <ol>
         <li>Go to <a href="/orders">Orders</a> and open the order.</li>
-        <li>Email <a href="mailto:support@productifynow.com">support@productifynow.com</a> with the order ID and reason.</li>
+        <li>Email <a href="mailto:billing@productifynow.com">billing@productifynow.com</a> with the order ID and reason.</li>
         <li>We will acknowledge within 24 hours and resolve within 7 business days.</li>
         <li>Approved refunds are returned to your original payment method within the payment provider's settlement window (Stripe/PayPal 5–10 business days; Razorpay 5–7 business days).</li>
       </ol>

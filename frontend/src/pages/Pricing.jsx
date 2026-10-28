@@ -53,6 +53,7 @@ export default function Pricing() {
         <div className="eyebrow">Credits</div>
         <h2 id="pr-credits">Start free, top up later</h2>
         <CreditPlans />
+        <p className="lp-small">Questions about credits or a charge? Email <a href="mailto:billing@productifynow.com">billing@productifynow.com</a>.</p>
       </section>
 
       <section className="lp-section lp-tint" aria-labelledby="pr-provider">

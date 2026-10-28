@@ -52,7 +52,7 @@ export default function Terms() {
       <p>You agree to indemnify, defend and hold harmless the Productify Parties from and against any claim, demand, investigation, proceeding, penalty, fine, cost or expense (including reasonable attorneys' fees) arising out of or connected with (a) your listing, purchase, upload, transfer or use of any item on the platform, or (b) your breach of this section.</p>
 
       <h2>8B. Reporting illegal trade & enforcement</h2>
-      <p>If you become aware of any listing, transaction, uploaded file, or workspace transfer that you reasonably believe is illegal, report it immediately to <a href="mailto:abuse@productifynow.com">abuse@productifynow.com</a> (or via the Grievance Officer channels in the Privacy Policy). Include the URL, order ID, or file reference and a short description.</p>
+      <p>If you become aware of any listing, transaction, uploaded file, or workspace transfer that you reasonably believe is illegal, report it immediately to <a href="mailto:security@productifynow.com">security@productifynow.com</a> (or via the Grievance Officer channels in the Privacy Policy). Include the URL, order ID, or file reference and a short description.</p>
       <p>On receipt of a credible report — or on becoming aware through any other means — Productify reserves the right, at its sole discretion and <b>without prior notice</b>, to:</p>
       <ul>
         <li>remove or disable access to the listing, file or transaction;</li>

@@ -66,8 +66,8 @@ export default function PrivacyPolicy() {
 
       <h2>10. Grievance & Data Protection Officer</h2>
       <p>Under India's DPDP Act 2023 and IT Rules 2011, you may contact our Grievance Officer:</p>
-      <p><b>Grievance Officer</b>: To be appointed on launch.<br/>Email: <a href="mailto:grievance@productifynow.com">grievance@productifynow.com</a>. Response within 24 hours; resolution within 15 days.</p>
-      <p><b>Data Protection Officer (EU/UK GDPR)</b>: <a href="mailto:dpo@productifynow.com">dpo@productifynow.com</a>.</p>
+      <p><b>Grievance Officer</b>: To be appointed on launch.<br/>Email: <a href="mailto:legal@productifynow.com">legal@productifynow.com</a> (subject: "Grievance"). Response within 24 hours; resolution within 15 days.</p>
+      <p><b>Data Protection Officer (EU/UK GDPR)</b>: <a href="mailto:privacy@productifynow.com">privacy@productifynow.com</a>.</p>
 
       <h2>11. Changes</h2>
       <p>We will post any material changes here and, where required, notify you by email. Continued use of Productify after a change constitutes acceptance.</p>

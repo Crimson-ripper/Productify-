@@ -51,7 +51,7 @@ export default function Security() {
           <ul className="lp-bullets">
             <li>Renters: the provider owns the hardware. Don't upload secrets or data you can't afford to expose.</li>
             <li>Providers: don't run Productify Node on a computer that holds sensitive work data.</li>
-            <li>Found a problem? Email <a href="mailto:abuse@productifynow.com">abuse@productifynow.com</a>. See <Link to={ROUTES.contact}>contact</Link> for other addresses.</li>
+            <li>Found a problem? Email <a href="mailto:security@productifynow.com">security@productifynow.com</a>. See <Link to={ROUTES.contact}>contact</Link> for other addresses.</li>
           </ul>
         </div>
       </section>
