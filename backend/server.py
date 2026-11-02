@@ -3340,6 +3340,42 @@ async def credit_limit_loop():
             logger.warning(f"credit limit loop: {e}")
 
 
+# ---------- Productify OS: update / rollback reports (developer feed) ----------
+OS_REPORT_EVENTS = {"updated", "rolled_back", "health_failed"}
+
+
+class OsReportInput(BaseModel):
+    rental_id: str = Field(min_length=3, max_length=40)
+    event: str = Field(max_length=30)
+    version: str = Field("", max_length=60)
+    from_version: str = Field("", max_length=60)
+    detail: str = Field("", max_length=500)
+    at: str = Field("", max_length=40)
+
+
+@api.post("/os/reports")
+async def os_report(data: OsReportInput, x_node_token: Optional[str] = Header(None)):
+    """A Productify OS machine reports an update result. Authenticated with its pairing token."""
+    if data.event not in OS_REPORT_EVENTS:
+        raise HTTPException(400, "Unknown event")
+    if not await is_valid_node_token(data.rental_id, x_node_token):
+        raise HTTPException(401, "Invalid or missing node pairing token")
+    doc = data.model_dump() | {"id": f"osr-{uuid.uuid4().hex[:10]}", "received_at": datetime.now(timezone.utc).isoformat()}
+    await db.os_reports.insert_one(doc)
+    if data.event != "updated":
+        logger.warning(f"Productify OS {data.event} on {data.rental_id}: {data.version} ({data.detail})")
+    return {"ok": True}
+
+
+@api.get("/admin/os-reports")
+async def admin_os_reports(event: str = "", limit: int = Query(100, ge=1, le=500), user=Depends(current_user)):
+    """Developer feed: recent Productify OS update/rollback reports, newest first."""
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+    q = {"event": event} if event else {}
+    return await db.os_reports.find(q, {"_id": 0}).sort("received_at", -1).to_list(limit)
+
+
 # ---------- Gamezone sessions on Productify Node machines ----------
 # A session is an instance with kind="game": same billing, credit limits and end-of-job handling.
 JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
