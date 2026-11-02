@@ -5,7 +5,7 @@ export const DEFAULT_TEMPLATES = [
     id: "jupyter-pytorch",
     name: "PyTorch (CUDA)",
     category: "AI development",
-    description: "Python with PyTorch and CUDA on the machine's NVIDIA GPU. Run commands from the browser terminal. JupyterLab is on the way.",
+    description: "Python with PyTorch and CUDA on the machine's NVIDIA GPU. Run commands from the browser terminal. JupyterLab: join the waitlist.",
     service_name: "Browser terminal",
   },
   {

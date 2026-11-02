@@ -2019,3 +2019,11 @@ header.topbar,.footer-grid{border:0!important}
 .hs-table td{color:#b9bbb5}
 .lp-section .lp-small svg{vertical-align:-3px;color:#ffe2a8}
 @media (max-width:600px){.hs-pick{flex:1 1 100%;text-align:left}.hs-card{padding:20px}}
+
+/* ===== Rentals: live toolbar ===== */
+.rental-hero~.shop-toolbar>select{background:var(--x-bk3)!important;border:0!important;color:var(--x-fg)!important;font-size:15px!important;padding:13px 14px!important;border-radius:0}
+.rx-refresh{display:inline-flex;align-items:center;gap:6px;background:transparent;border:0;color:var(--x-fg2,#b9bbb5);font-size:14px;cursor:pointer;padding:8px 4px}
+.rx-refresh:hover{color:var(--lime)}
+.rx-live-count{color:var(--lime);font-weight:700}
+.rx-link{background:none;border:0;color:var(--lime);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+@media (max-width:600px){.rental-hero~.shop-toolbar>select{flex:1 1 45%}}

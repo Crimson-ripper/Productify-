@@ -11,7 +11,7 @@ const GROUPS = [
     ["Where are the machines?", "Each machine shows its region. [TODO: confirm supported regions]"],
   ]],
   ["Renting", [
-    ["What can I run?", "Python and PyTorch on an NVIDIA GPU. JupyterLab is on the way and Blender rendering is a future pilot. Gaming, full remote desktops and Adobe or Autodesk apps aren't supported."],
+    ["What can I run?", "Python and PyTorch on an NVIDIA GPU. JupyterLab has a waitlist (join it from the Waitlist page) and Blender rendering is a future pilot. Gaming, full remote desktops and Adobe or Autodesk apps aren't supported."],
     ["How am I charged?", "By the provider's hourly price, metered per second while the instance runs, plus a small storage charge. See Pricing."],
     ["What happens to my files when I stop?", "The container and its files are deleted. Download anything you need before stopping."],
     ["Can the provider see my work?", "Jobs run in isolated containers without access to the provider's files, but the provider owns the hardware. Don't upload secrets. See Security."],

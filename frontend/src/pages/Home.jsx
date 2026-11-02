@@ -121,7 +121,7 @@ const PLANS = [
 ];
 
 const FAQ = [
-  ["What can I run?", "Python and PyTorch on an NVIDIA GPU, from a browser terminal. JupyterLab is on the way. Gaming and full remote desktops aren't supported."],
+  ["What can I run?", "Python and PyTorch on an NVIDIA GPU, from a browser terminal. JupyterLab has a waitlist. Gaming and full remote desktops aren't supported."],
   ["How am I charged?", "The machine's hourly price, metered by the second while the instance runs, plus $0.0002 per GB of disk per hour. Instances stop automatically when your credits run out."],
   ["Can the provider see my work?", "Your job runs in an isolated container without access to the provider's files, but the provider owns the hardware. Don't upload secrets you can't afford to expose."],
   ["Is it live?", "It's a closed beta: some machines are listed, they go online and offline, and payments are in test mode."],

@@ -533,7 +533,7 @@ export default function InstanceDetail() {
               How to connect
             </div>
             <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--on-ink-muted)", maxWidth: 520 }}>
-              Use the browser terminal below to run Python and PyTorch commands in your container. SSH and JupyterLab access aren't available yet.
+              Use the browser terminal below to run Python and PyTorch commands in your container. SSH isn't available yet, and JupyterLab has a <a href="/waitlist" style={{ color: "inherit", textDecoration: "underline" }}>waitlist</a>.
             </p>
           </div>
 

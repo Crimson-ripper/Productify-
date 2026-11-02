@@ -138,7 +138,7 @@ export default function GpuRentalSpace() {
             <input id="rs-disk" type="range" min="20" max="500" step="10" value={diskSize} onChange={(e) => setDiskSize(Number(e.target.value))} />
             <div className="rs-range"><span>20 GB</span><span>500 GB</span></div>
           </div>
-          <p className="rs-note">You'll work in a browser terminal. SSH and JupyterLab aren't available yet. When you stop, the container and its files are deleted.</p>
+          <p className="rs-note">You'll work in a browser terminal. SSH isn't available yet, and JupyterLab has a waitlist. When you stop, the container and its files are deleted.</p>
         </section>
 
         <section className="rs-launch">

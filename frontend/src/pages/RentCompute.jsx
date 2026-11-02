@@ -10,7 +10,7 @@ const SUPPORTED = [
   "Running your own scripts and notebooks-style code from the browser",
 ];
 const NOT_YET = [
-  ["JupyterLab", "on the way"],
+  ["JupyterLab", "waitlist open"],
   ["Blender / 3D rendering", "future pilot"],
   ["Gaming, full remote desktops, Adobe or Autodesk apps", "not supported"],
 ];

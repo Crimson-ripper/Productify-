@@ -15,7 +15,7 @@ const FIELDS = [
   { name: "frequency", label: "How often would you need a GPU?", type: "select", half: true, options: [
     ["once", "Once / one project"], ["monthly", "A few times a month"], ["weekly", "Weekly"], ["daily", "Most days"],
   ] },
-  { name: "workload", label: "What do you want to run?", type: "textarea", required: true, max: 500, hint: "For example: fine-tune a 7B model with LoRA, PyTorch training, model testing." },
+  { name: "workload", label: "What do you want to run?", type: "textarea", required: true, max: 500, hint: "For example: fine-tune a 7B model with LoRA, PyTorch training, model testing. Want JupyterLab? Say so here." },
   { name: "gpu_needed", label: "GPU / VRAM needed", half: true, hint: "For example: 24 GB VRAM, RTX 4090" },
   { name: "region", label: "Your region", half: true, autoComplete: "country-name" },
   { name: "current_provider", label: "What do you use now?", half: true, hint: "Your laptop, a cloud provider, nothing yet…" },
