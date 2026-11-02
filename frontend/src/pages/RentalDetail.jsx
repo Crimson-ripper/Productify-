@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Availability, { availabilityOf, UNAVAILABLE_REASON } from "@/components/Availability";
+import NotifyButton from "@/components/NotifyButton";
 import { Link, useParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { api, money } from "@/lib/api";
@@ -61,7 +62,10 @@ export default function RentalDetail() {
               </button>
             </div>
           ) : (
-            <p className="detail-note">{UNAVAILABLE_REASON[availabilityOf(r)]} <Link to="/rentals">See other machines</Link></p>
+            <>
+              <p className="detail-note">{UNAVAILABLE_REASON[availabilityOf(r)]} <Link to="/rentals">See other machines</Link></p>
+              <NotifyButton rentalId={r.id} />
+            </>
           )}
           <div className="detail-report"><ReportButton listingId={r.id} listingKind="rental" /></div>
         </div>

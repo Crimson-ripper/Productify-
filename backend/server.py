@@ -1174,6 +1174,65 @@ async def rentals(q: str = "", sort: str = "recent"):
     return rows
 
 
+# ---------- "Notify me when a GPU is free" ----------
+# rental_id is a listing id, or "any" for the first approved machine that becomes available.
+MAX_WATCHES_PER_USER = 10
+
+
+@api.post("/rentals/{rid}/notify")
+async def watch_rental(rid: str, user=Depends(current_user)):
+    if rid != "any" and not await db.rentals.find_one({"id": rid, "status": "approved"}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Machine not found")
+    if not user.get("email"):
+        raise HTTPException(400, "Your account has no email address")
+    if await db.gpu_watches.find_one({"user_id": user["id"], "rental_id": rid}, {"_id": 0, "id": 1}):
+        return {"ok": True, "already": True}
+    mine = await db.gpu_watches.find({"user_id": user["id"]}, {"_id": 0, "id": 1}).to_list(MAX_WATCHES_PER_USER + 1)
+    if len(mine) >= MAX_WATCHES_PER_USER:
+        raise HTTPException(429, f"You can ask to be notified about up to {MAX_WATCHES_PER_USER} machines at a time.")
+    await db.gpu_watches.insert_one({"id": f"gw-{uuid.uuid4().hex[:10]}", "user_id": user["id"], "email": user["email"],
+                                     "rental_id": rid, "created_at": datetime.now(timezone.utc).isoformat()})
+    return {"ok": True}
+
+
+@api.delete("/rentals/{rid}/notify")
+async def unwatch_rental(rid: str, user=Depends(current_user)):
+    await db.gpu_watches.delete_many({"user_id": user["id"], "rental_id": rid})
+    return {"ok": True}
+
+
+async def notify_available_gpus():
+    """Email each waiting user once when the machine they asked about (or any machine) is available."""
+    watches = await db.gpu_watches.find({}, {"_id": 0}).to_list(5000)
+    if not watches:
+        return
+    rows = await db.rentals.find({"status": "approved"}, {"_id": 0, "pairing_token": 0}).to_list(1000)
+    busy = {i["rental_id"] for i in await db.instances.find({"status": {"$in": ["running", "paused"]}}, {"_id": 0, "rental_id": 1}).to_list(5000)}
+    free = {}
+    for r in rows:
+        add_availability(r, busy)
+        if r.get("availability") == "available":
+            free[r["id"]] = r
+    if not free:
+        return
+    first_free = next(iter(free.values()))
+    for w in watches:
+        r = first_free if w["rental_id"] == "any" else free.get(w["rental_id"])
+        if not r:
+            continue
+        await db.gpu_watches.delete_many({"id": w["id"]})
+        spawn(emailer.gpu_available(w["email"], r.get("gpu") or "GPU", r["id"]))
+
+
+async def gpu_watch_loop():
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await notify_available_gpus()
+        except Exception as e:
+            logger.warning(f"gpu watch loop: {e}")
+
+
 @api.get("/rentals/{rid}")
 async def rental_detail(rid: str):
     r = await db.rentals.find_one({"id": rid}, {"_id": 0, "pairing_token": 0})
@@ -4726,6 +4785,7 @@ async def startup():
     asyncio.create_task(node_watchdog_loop())
     asyncio.create_task(currency_sync_loop())
     asyncio.create_task(credit_limit_loop())
+    asyncio.create_task(gpu_watch_loop())
 
 
 @app.on_event("shutdown")

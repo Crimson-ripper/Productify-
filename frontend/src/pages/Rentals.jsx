@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import SEO from "@/components/SEO";
 import RentalCard from "@/components/RentalCard";
 import { availabilityOf } from "@/components/Availability";
+import NotifyButton from "@/components/NotifyButton";
 
 const REFRESH_MS = 30_000;
 const STATUS_ORDER = { available: 0, in_use: 1, paused: 2, offline: 3 };
@@ -87,6 +88,7 @@ export default function Rentals() {
               ? <><b className="rx-live-count">{availableCount} GPU{availableCount === 1 ? "" : "s"} available now</b> · {rows.length} listed</>
               : `No GPUs are available right now · ${rows.length} listed. This page updates by itself.`}
         </p>
+        {!loading && availableCount === 0 && <NotifyButton rentalId="any" label="Email me when any GPU is free" />}
       </section>
 
       <section className="shop-toolbar rx-toolbar">
