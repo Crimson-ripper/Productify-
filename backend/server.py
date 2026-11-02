@@ -3274,6 +3274,16 @@ def partners_enabled() -> bool:
     return os.environ.get("PARTNERS_ENABLED", "").strip() == "1"
 
 
+@api.get("/partners/status")
+async def partners_status():
+    """Health of the partner-machine list (no secrets): is the key set, how many machines, how fresh."""
+    c = vast_market.cache
+    err = c.error.lower()
+    kind = "" if not err else "no_key" if "isn't set" in err else "auth" if "401" in err or "403" in err else "network" if "reach" in err else "other"
+    return {"enabled": partners_enabled(), "key_set": bool(vast_market._key()), "machines": len(c.fresh()),
+            "age_s": round(time.time() - c.at) if c.at else None, "error": kind}
+
+
 async def deploy_partner(data: InstanceDeployInput, user):
     if not partners_enabled() and user.get("role") not in ["admin", "sub-admin"]:
         raise HTTPException(404, "GPU rental node not found")
