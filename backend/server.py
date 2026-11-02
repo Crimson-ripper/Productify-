@@ -37,6 +37,7 @@ from currency_engine import (
     get_commission_rate,
 )
 import emailer
+import vast_market
 from gamezone import (
     GameCreateInput,
     GameUpdatePriceInput,
@@ -1160,11 +1161,13 @@ async def create_product(data: ProductInput, user=Depends(current_user)):
 
 
 @api.get("/rentals")
-async def rentals(q: str = "", sort: str = "recent"):
+async def rentals(q: str = "", sort: str = "recent", partners: bool = True):
     rows = await db.rentals.find({"status": "approved"}, {"_id": 0, "pairing_token": 0}).to_list(200)
     busy = {i["rental_id"] for i in await db.instances.find({"status": {"$in": ["running", "paused"]}}, {"_id": 0, "rental_id": 1}).to_list(1000)}
     for r in rows:
         add_availability(r, busy)
+    if partners and partners_enabled():
+        rows += [{k: v for k, v in r.items() if k not in ("offer_id", "cost")} for r in vast_market.cache.fresh()]
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in (r.get("title", "") + " " + r.get("gpu", "") + " " + r.get("description", "")).lower()]
@@ -1236,6 +1239,11 @@ async def gpu_watch_loop():
 
 @api.get("/rentals/{rid}")
 async def rental_detail(rid: str):
+    if rid.startswith("vast-"):
+        row = vast_market.cache.get(rid)
+        if not row:
+            raise HTTPException(404, "This partner machine was just rented by someone else. Pick another one.")
+        return {k: v for k, v in row.items() if k not in ("offer_id", "cost")}
     r = await db.rentals.find_one({"id": rid}, {"_id": 0, "pairing_token": 0})
     if not r:
         raise HTTPException(404, "Rental not found")
@@ -3152,6 +3160,8 @@ async def list_instance_templates():
 
 @api.post("/instances/deploy")
 async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user)):
+    if data.rental_id.startswith("vast-"):
+        return await deploy_partner(data, user)
     rental = await db.rentals.find_one({"id": data.rental_id}, {"_id": 0})
     if not rental:
         raise HTTPException(404, "GPU rental node not found")
@@ -3241,6 +3251,135 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
         spawn(emailer.instance_started(user["email"], user.get("name", "there"), doc["gpu"], hourly_price, instance_id))
     doc_out = {k: v for k, v in doc.items() if k != "_id"}
     return doc_out
+
+
+# ---------- Partner machines (Vast.ai) ----------
+# The renter rents through Productify; the machine is created on Productify's Vast account.
+# A Productify agent starts inside it in direct mode and connects back, so the Workspace and
+# Terminal work as on Productify Node machines. Billing starts only once it's connected.
+PARTNER_IMAGES = {"jupyter-pytorch": "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime", "ubuntu-base": "python:3.12"}
+PARTNER_DISK_GB = 40
+PARTNER_START_TIMEOUT_S = 600
+AGENT_URL = os.environ.get("PFY_AGENT_URL", "https://github.com/Crimson-ripper/Productify-Node/releases/download/v2.2.0-beta.1/productify-agent-linux-amd64")
+BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL", "https://productify-backend-65tj.onrender.com")
+PARTNER_ONSTART = (
+    "mkdir -p /workspace && cd /workspace && "
+    "python3 -c \"import urllib.request;urllib.request.urlretrieve('{url}','/usr/local/bin/productify-agent')\" && "
+    "chmod +x /usr/local/bin/productify-agent && "
+    "nohup /usr/local/bin/productify-agent run --direct > /var/log/productify-agent.log 2>&1 &"
+)
+
+
+def partners_enabled() -> bool:
+    """Partner machines are shown to renters only once PARTNERS_ENABLED=1 (after an end-to-end test)."""
+    return os.environ.get("PARTNERS_ENABLED", "").strip() == "1"
+
+
+async def deploy_partner(data: InstanceDeployInput, user):
+    if not partners_enabled() and user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(404, "GPU rental node not found")
+    row = vast_market.cache.get(data.rental_id)
+    if not row:
+        raise HTTPException(409, "This partner machine was just rented by someone else. Pick another one.")
+    renter = await db.users.find_one({"id": user["id"]}) or {}
+    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+        raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
+    if await db.instances.find_one({"user_id": user["id"], "status": "starting"}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "You already have a machine starting. Wait for it to finish starting first.")
+    image = PARTNER_IMAGES.get(data.template_id, PARTNER_IMAGES["jupyter-pytorch"])
+    rid = f"r-{uuid.uuid4().hex[:10]}"
+    token = f"ptok_{secrets.token_hex(8)}"
+    instance_id = f"inst-{uuid.uuid4().hex[:10]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.rentals.insert_one({
+        "id": rid, "status": "partner", "provider": "vast", "pairing_token": token, "title": row["title"],
+        "gpu": row["gpu"], "vram": row["vram"], "location": row["location"], "price": row["price"],
+        "owner_id": "platform", "owner": "Vast.ai partner", "specs": row.get("specs", {}), "created_at": now_iso,
+    })
+    env = {"PFY_RENTAL_ID": rid, "PFY_TOKEN": token, "PFY_BACKEND": BACKEND_PUBLIC_URL}
+    try:
+        vast_id = await asyncio.to_thread(vast_market.rent, row["offer_id"], image, PARTNER_DISK_GB, env,
+                                          PARTNER_ONSTART.format(url=AGENT_URL), f"pfy-{instance_id}")
+    except Exception as e:
+        await db.rentals.update_one({"id": rid}, {"$set": {"status": "partner_failed"}})
+        logger.warning(f"Vast rent failed for offer {row['offer_id']}: {e}")
+        raise HTTPException(502, "That partner machine couldn't be started (it may have just been taken). You haven't been charged. Pick another one.")
+    tmpl = next((t for t in INSTANCE_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
+    doc = {
+        "id": instance_id, "kind": "partner", "provider": "vast", "vast_instance_id": vast_id, "vast_cost": row["cost"],
+        "rental_id": rid, "rental_title": row["title"], "gpu": row["gpu"], "vram": row["vram"], "location": row["location"],
+        "user_id": user["id"], "renter_name": user.get("name", "User"), "renter_email": user.get("email"),
+        "seller_id": "platform", "seller_name": "Vast.ai partner",
+        "template_id": tmpl["id"], "template_name": tmpl["name"], "service_name": tmpl.get("service_name"),
+        "hourly_price": row["price"], "base_price": row["price"], "storage_price": 0.0, "disk_size_gb": PARTNER_DISK_GB,
+        "status": "starting", "created_at": now_iso, "started_at": None,
+        "total_runtime_seconds": 0, "cost_accumulated": 0.0, "specs": row.get("specs", {}),
+        "logs": [f"[{now_iso[:19]}] Starting a {row['gpu']} partner machine. This usually takes 2-5 minutes; billing starts when it's ready."],
+    }
+    await db.instances.insert_one(doc)
+    spawn(bring_up_partner(instance_id))
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+async def bring_up_partner(instance_id: str):
+    """Wait for the agent inside the partner machine to connect, then start billing.
+    If it never connects, destroy the machine and charge nothing."""
+    inst = await db.instances.find_one({"id": instance_id}, {"_id": 0})
+    if not inst:
+        return
+    rid, deadline = inst["rental_id"], time.time() + PARTNER_START_TIMEOUT_S
+    while time.time() < deadline:
+        cur = await db.instances.find_one({"id": instance_id}, {"_id": 0, "status": 1})
+        if not cur or cur.get("status") != "starting":
+            return  # stopped by the renter meanwhile
+        if node_hub.is_connected(rid):
+            try:
+                await node_hub.request(rid, {"type": "job.start", "job_id": instance_id, "template": "direct"}, 60)
+                now_iso = datetime.now(timezone.utc).isoformat()
+                await db.instances.update_one({"id": instance_id, "status": "starting"}, {"$set": {
+                    "status": "running", "started_at": now_iso, "tunnel_connected": True},
+                    "$push": {"logs": f"[{now_iso[:19]}] Machine ready. Billing started."}})
+                if inst.get("renter_email"):
+                    spawn(emailer.instance_started(inst["renter_email"], inst.get("renter_name", "there"), inst["gpu"],
+                                                   inst["hourly_price"], instance_id))
+                return
+            except Exception as e:
+                logger.warning(f"partner {instance_id}: job.start failed: {e}")
+        await asyncio.sleep(10)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    res = await db.instances.update_one({"id": instance_id, "status": "starting"}, {"$set": {
+        "status": "terminated", "terminated_at": now_iso, "end_reason": "couldn't start",
+        "cost_accumulated": 0.0},
+        "$push": {"logs": f"[{now_iso[:19]}] The partner machine didn't start in time. You haven't been charged."}})
+    if getattr(res, "modified_count", 1):
+        await destroy_partner_machine(inst)
+
+
+async def destroy_partner_machine(inst: dict):
+    vid = inst.get("vast_instance_id")
+    if not vid:
+        return
+    try:
+        await asyncio.to_thread(vast_market.destroy, vid)
+    except Exception as e:
+        logger.warning(f"couldn't destroy Vast instance {vid} ({inst.get('id')}); the reaper will retry: {e}")
+    await db.rentals.update_one({"id": inst.get("rental_id")}, {"$set": {"status": "partner_ended"}})
+
+
+async def vast_reaper_loop():
+    """Every 10 minutes destroy any Vast machine of ours that no running instance needs (no leaks)."""
+    while True:
+        await asyncio.sleep(600)
+        try:
+            ours = await asyncio.to_thread(vast_market.list_ours)
+            for v in ours:
+                iid = (v.get("label") or "")[len("pfy-"):]
+                inst = await db.instances.find_one({"id": iid}, {"_id": 0, "status": 1})
+                if not inst or inst.get("status") in ("terminated", "failed"):
+                    logger.warning(f"reaper: destroying leftover Vast instance {v.get('id')} ({iid})")
+                    await asyncio.to_thread(vast_market.destroy, v["id"])
+        except Exception as e:
+            logger.warning(f"vast reaper: {e}")
 
 
 @api.get("/instances")
@@ -3395,6 +3534,8 @@ async def finish_instance(inst: dict, total_sec: int, accum_cost: float, now_iso
     if not getattr(res, "modified_count", 1):
         return final_cost
     rental_id = inst.get("rental_id")
+    if inst.get("kind") == "partner":
+        spawn(destroy_partner_machine(inst))
     if destroy and rental_id and inst.get("kind") == "game" and node_hub.is_connected(rental_id):
         try:
             await node_hub.request(rental_id, {"type": "game.stop", "job_id": inst["id"]}, 120)
@@ -4831,6 +4972,8 @@ async def startup():
     asyncio.create_task(currency_sync_loop())
     asyncio.create_task(credit_limit_loop())
     asyncio.create_task(gpu_watch_loop())
+    asyncio.create_task(vast_market.cache.loop())
+    asyncio.create_task(vast_reaper_loop())
     asyncio.create_task(gz_inventory.collector_loop(_inventory_node_rows))
 
 
