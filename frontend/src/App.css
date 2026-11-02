@@ -2027,3 +2027,10 @@ header.topbar,.footer-grid{border:0!important}
 .rx-live-count{color:var(--lime);font-weight:700}
 .rx-link{background:none;border:0;color:var(--lime);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
 @media (max-width:600px){.rental-hero~.shop-toolbar>select{flex:1 1 45%}}
+
+/* ===== Confirm-your-email bar ===== */
+.ve-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#2a2410;color:#ffe2a8;padding:10px var(--x-m,20px);font-size:14px}
+.ve-bar span{flex:1 1 260px}
+.ve-bar button{background:#c8f04c;color:#0a0a0b;border:0;padding:8px 14px;font-weight:700;cursor:pointer}
+.ve-bar button:disabled{opacity:.6;cursor:default}
+.ve-bar .ve-x{background:transparent;color:#ffe2a8;font-size:20px;padding:0 6px}

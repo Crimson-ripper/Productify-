@@ -48,6 +48,8 @@ import Cookies from "@/pages/policies/Cookies";
 import AcceptableUse from "@/pages/policies/AcceptableUse";
 import Contact from "@/pages/policies/Contact";
 import CookieBanner from "@/components/CookieBanner";
+import VerifyEmailBar from "@/components/VerifyEmailBar";
+import VerifyEmail from "@/pages/VerifyEmail";
 import PolicyBumpModal from "@/components/PolicyBumpModal";
 
 export function AppRouter() {
@@ -74,6 +76,7 @@ export function AppRouter() {
   return (
     <div className="app-shell">
       <Navbar />
+      <VerifyEmailBar />
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Home />} />
@@ -100,6 +103,7 @@ export function AppRouter() {
           <Route path="/payment/success" element={<PaymentSuccess />} />
           <Route path="/payment/cancel" element={<PaymentCancel />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/register" element={<Register />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />

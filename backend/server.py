@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
+import hashlib
 import os, re, sys, time, subprocess, uuid, jwt, bcrypt, httpx, requests, logging, secrets, random, asyncio
 
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,7 @@ from currency_engine import (
     estimate_payout,
     get_commission_rate,
 )
+import emailer
 from gamezone import (
     GameCreateInput,
     GameUpdatePriceInput,
@@ -395,6 +397,7 @@ def public_user(u):
         "avatar_url": u.get("avatar_url"),
         "phone": u.get("phone"),
         "phone_verified": u.get("phone_verified", False),
+        "email_verified": bool(u.get("email_verified")) or "password_hash" not in u,
         "email_verified": u.get("email_verified", True if u.get("auth_provider") == "google" else False),
         "seller_verified": u.get("seller_verified", False),
         "seller_tier": u.get("seller_tier", "free"),
@@ -489,7 +492,13 @@ async def register(data: AuthInput, request: Request):
         "password_hash": bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    u["email_verified"] = False
+    token = secrets.token_urlsafe(32)
+    u["email_verify"] = {"hash": hashlib.sha256(token.encode()).hexdigest(),
+                         "expires": (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()}
     await db.users.insert_one(u)
+    spawn(emailer.verify_email(email, u["name"], token))
+    spawn(emailer.welcome(email, u["name"]))
     # Registration implies acceptance of all currently-published policies.
     for ct in POLICY_TYPES:
         try:
@@ -497,6 +506,38 @@ async def register(data: AuthInput, request: Request):
         except Exception:
             pass
     return {"user": public_user(u), "token": jwt_token(u)}
+
+
+class VerifyEmailInput(BaseModel):
+    token: str = Field(min_length=20, max_length=100)
+
+
+@api.post("/auth/verify-email")
+async def verify_email(data: VerifyEmailInput):
+    h = hashlib.sha256(data.token.encode()).hexdigest()
+    u = await db.users.find_one({"email_verify.hash": h})
+    if not u:
+        raise HTTPException(400, "This link isn't valid or was already used. Sign in and ask for a new one.")
+    if (u.get("email_verify") or {}).get("expires", "") < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(410, "This link has expired. Sign in and ask for a new one.")
+    await db.users.update_one({"id": u["id"]}, {"$set": {"email_verified": True}, "$unset": {"email_verify": ""}})
+    return {"ok": True, "email": u["email"]}
+
+
+@api.post("/auth/resend-verification")
+async def resend_verification(user=Depends(current_user)):
+    if user.get("email_verified") or "password_hash" not in user:
+        return {"ok": True, "already_verified": True}
+    last = (user.get("email_verify") or {}).get("sent_at", "")
+    if last and last > (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat():
+        raise HTTPException(429, "We just sent one. Wait a couple of minutes, and check your spam folder.")
+    token = secrets.token_urlsafe(32)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verify": {
+        "hash": hashlib.sha256(token.encode()).hexdigest(),
+        "expires": (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat(),
+        "sent_at": datetime.now(timezone.utc).isoformat()}}})
+    spawn(emailer.verify_email(user["email"], user.get("name", "there"), token))
+    return {"ok": True}
 
 
 @api.post("/auth/login")
@@ -3136,6 +3177,8 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
     }
 
     await db.instances.insert_one(doc)
+    if user.get("email"):
+        spawn(emailer.instance_started(user["email"], user.get("name", "there"), doc["gpu"], hourly_price, instance_id))
     doc_out = {k: v for k, v in doc.items() if k != "_id"}
     return doc_out
 
@@ -3310,6 +3353,10 @@ async def finish_instance(inst: dict, total_sec: int, accum_cost: float, now_iso
             from currency_engine import get_commission_rate
             fee_rate = get_commission_rate(seller.get("seller_tier"))
             await db.users.update_one({"id": seller_id}, {"$inc": {"balance": round(final_cost * (1.0 - fee_rate), 4)}})
+    renter = await db.users.find_one({"id": inst.get("user_id")}, {"_id": 0, "email": 1, "name": 1, "compute_credits": 1})
+    if renter and renter.get("email"):
+        spawn(emailer.instance_stopped(renter["email"], renter.get("name", "there"), inst.get("gpu") or "GPU",
+                                       total_sec, final_cost, reason, renter.get("compute_credits")))
     return final_cost
 
 
@@ -3328,6 +3375,13 @@ async def enforce_credit_limits():
             renter = await db.users.find_one({"id": inst.get("user_id")}) or {}
             if cost >= float(renter.get("compute_credits", 0.0)):
                 await finish_instance(inst, total_sec, cost, now.isoformat(), reason="credits ran out")
+            elif not inst.get("low_credit_warned") and renter.get("email"):
+                rate = float(inst.get("hourly_price", 0.5)) or 0.5
+                remaining = float(renter.get("compute_credits", 0.0)) - cost
+                minutes_left = int(remaining / rate * 60)
+                if minutes_left <= 10:
+                    await db.instances.update_one({"id": inst["id"]}, {"$set": {"low_credit_warned": True}})
+                    spawn(emailer.credits_low(renter["email"], renter.get("name", "there"), remaining, max(minutes_left, 0)))
         except Exception as e:
             logger.warning(f"credit check failed for {inst.get('id')}: {e}")
 
