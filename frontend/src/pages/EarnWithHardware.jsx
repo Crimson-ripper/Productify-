@@ -13,7 +13,7 @@ const ELIGIBILITY = [
 ];
 
 const VERIFY = [
-  ["Apply or pair", "Apply with the form, or — if you already have a seller account — create a pairing code in Seller Studio."],
+  ["Choose a method and register", "Pick how you want to host on the Start hosting page and register, or — if you already have a seller account — create a pairing code in Seller Studio."],
   ["Install Productify Node", "Install the Windows app on the machine and enter the pairing code."],
   ["Hardware report", "The app reports GPU, VRAM, CPU and memory directly from the machine. You don't type specs in by hand."],
   ["Review", "Productify reviews the machine before it appears to renters."],
@@ -49,7 +49,7 @@ export default function EarnWithHardware() {
         <h1>Make your idle GPU rentable</h1>
         <p>Rent out an NVIDIA GPU you already own to AI developers, on your terms. You decide when it's available.</p>
         <div className="hero-actions">
-          <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_hero_apply")}>Apply as a provider <ArrowRight size={17} /></Link>
+          <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_hero_apply")}>Start hosting <ArrowRight size={17} /></Link>
         </div>
       </section>
 
@@ -110,7 +110,7 @@ export default function EarnWithHardware() {
       <section className="lp-cta">
         <h2>Have an NVIDIA GPU sitting idle?</h2>
         <p>Tell us about your hardware. We'll get back to you about the closed beta.</p>
-        <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_footer_apply")}>Apply as a provider <ArrowRight size={17} /></Link>
+        <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_footer_apply")}>Start hosting <ArrowRight size={17} /></Link>
       </section>
     </>
   );
