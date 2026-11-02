@@ -1715,6 +1715,7 @@ class ProviderApplicationInput(BaseModel):
     entity: str = Field(default="individual", max_length=20)
     security_concerns: str = Field(default="", max_length=1000)
     expected_compensation: str = Field(default="", max_length=200)
+    setup_method: str = Field(default="", max_length=40)  # windows_app | boot_key | external_ssd | dual_boot | not_sure
     consent: bool
     website: str = Field(default="", max_length=200)
     source: str = Field(default="", max_length=200)
@@ -1788,7 +1789,7 @@ async def leads_provider(body: ProviderApplicationInput, request: Request):
 LEAD_CSV_COLUMNS = [
     "created_at", "kind", "source", "campaign", "name", "email", "contact", "region", "role", "workload",
     "gpu_needed", "frequency", "current_provider", "monthly_spend", "gpu_model", "vram", "cpu", "ram",
-    "storage", "os", "available_hours", "entity", "power_notes", "security_concerns", "expected_compensation",
+    "storage", "os", "setup_method", "available_hours", "entity", "power_notes", "security_concerns", "expected_compensation",
     "qualification", "stage", "owner", "last_contact", "next_action", "outcome", "notes", "id",
 ]
 
