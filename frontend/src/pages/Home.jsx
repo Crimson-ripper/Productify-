@@ -288,7 +288,7 @@ function Reply() {
       <div className="gx-card">
         <h2 id="gx-reply-h">Become a provider</h2>
         <p>Tell us about your hardware. We review every application and help you pair your PC.</p>
-        <Link to={ROUTES.apply} className="gx-card-btn" {...ctaProps("reply_apply_provider")}>Apply as a provider</Link>
+        <Link to={ROUTES.apply} className="gx-card-btn" {...ctaProps("reply_apply_provider")}>Start hosting</Link>
       </div>
       <details className="gx-credits">
         <summary>Photo credits</summary>

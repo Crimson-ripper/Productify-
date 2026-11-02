@@ -1991,3 +1991,31 @@ header.topbar,.footer-grid{border:0!important}
 .gz-rows{background:transparent!important;border:0!important;gap:4px}
 .gz-row{background:#1c1d20;border:0!important;color:#f2f2ee}
 .gz-row small{color:#b9bbb5!important;font:500 13px 'Archivo',sans-serif!important}
+
+/* ===== Start hosting (Apply page): method chooser + cards ===== */
+.hs-chooser{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 18px}
+.hs-pick{background:#1c1d20;color:#f2f2ee;border:1px solid #2c2d31;padding:14px 20px;font:700 15px 'Archivo',sans-serif;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;border-radius:0}
+.hs-pick:hover{border-color:#c8f04c}
+.hs-pick.on{background:#c8f04c;color:#0a0a0b;border-color:#c8f04c}
+.hs-pick:focus-visible{outline:2px solid #c8f04c;outline-offset:2px}
+.hs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px;margin-top:28px}
+.hs-card{background:#1c1d20;padding:26px;border:1px solid transparent;display:flex;flex-direction:column;gap:14px;transition:border-color .2s}
+.hs-card.picked{border-color:#c8f04c}
+.hs-card h3{margin:0;color:#f2f2ee;font:800 24px 'Archivo',sans-serif;font-stretch:75%;text-transform:uppercase;line-height:1.05}
+.hs-badge{align-self:flex-start;font:700 12px 'Archivo',sans-serif;text-transform:uppercase;letter-spacing:.06em;padding:5px 9px;background:#2a2410;color:#ffe2a8}
+.hs-card.live .hs-badge{background:#c8f04c;color:#0a0a0b}
+.hs-one{margin:0;color:#b9bbb5;font-size:16px;line-height:1.55}
+.hs-facts{margin:0;display:grid;gap:8px}
+.hs-facts div{display:grid;grid-template-columns:90px 1fr;gap:12px}
+.hs-facts dt{color:#f2f2ee;font:700 14px 'Archivo',sans-serif;text-transform:uppercase}
+.hs-facts dd{margin:0;color:#b9bbb5;font-size:15px;line-height:1.5}
+.hs-facts ul{margin:0;padding-left:1.1em}
+.hs-card .lp-list li{font-size:15px;padding:8px 0}
+.hs-card .lp-list.ok svg{color:#c8f04c}
+.hs-table-wrap{overflow-x:auto;margin-top:24px}
+.hs-table{width:100%;min-width:640px;border-collapse:collapse;color:#f2f2ee;font-size:15px}
+.hs-table th,.hs-table td{text-align:left;padding:14px 12px;border-bottom:1px solid #2c2d31;vertical-align:top}
+.hs-table thead th{font:700 13px 'Archivo',sans-serif;text-transform:uppercase;color:#b9bbb5}
+.hs-table td{color:#b9bbb5}
+.lp-section .lp-small svg{vertical-align:-3px;color:#ffe2a8}
+@media (max-width:600px){.hs-pick{flex:1 1 100%;text-align:left}.hs-card{padding:20px}}
