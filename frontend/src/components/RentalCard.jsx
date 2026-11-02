@@ -11,7 +11,9 @@ export default function RentalCard({ r }) {
       <div className="rental-info">
         <div className="node-status-row">
           <Availability r={r} />
-          {r.is_verified && <span className="node-status node-verified">· Hardware checked</span>}
+          {r.partner
+            ? <span className="node-status node-verified" title="Run by our partner Vast.ai; rented and billed through Productify">· Partner machine (Vast.ai)</span>
+            : r.is_verified && <span className="node-status node-verified">· Hardware checked</span>}
         </div>
         <h3><Link to={`/rental/${r.id}`}>{r.title}</Link></h3>
         <div className="spec-row">

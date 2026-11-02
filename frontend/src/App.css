@@ -2043,3 +2043,6 @@ header.topbar,.footer-grid{border:0!important}
 .nf-btn:disabled{opacity:.6;cursor:default}
 .nf-done{display:flex;align-items:center;gap:8px;color:#c8f04c;font-size:14px;margin-top:14px}
 .nf-err{color:#ffb4a8;font-size:13px}
+
+/* ===== Partner machines: starting notice ===== */
+.ix-starting{background:#2a2410;color:#ffe2a8;padding:14px 18px;margin:12px 0;font-size:15px;line-height:1.5}

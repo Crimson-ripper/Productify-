@@ -419,6 +419,9 @@ export default function InstanceDetail() {
 
           {/* Action Buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {instance.status === "starting" && (
+              <p className="ix-starting" role="status">Starting your machine… this usually takes 2–5 minutes and this page updates by itself. Billing starts only when it's ready; if it doesn't start within 10 minutes it's cancelled and you aren't charged.</p>
+            )}
             {instance.status === "paused" ? (
               <button
                 type="button"

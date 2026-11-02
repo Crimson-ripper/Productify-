@@ -16,13 +16,13 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done · `[?]` waiting fo
   instance started/stopped, credits running low, receipts.
 
 ## Tasks
-- [ ] 1. Rentals page: badges, available-now count, available first, auto-refresh (30 s, paused in
-      background tabs), filters (GPU, min VRAM, location, available now). Notes: —
-- [ ] 2. JupyterLab → waitlist wording (FAQ, templates) + "join the JupyterLab waitlist". Notes: —
-- [ ] 3. Emails: backend Resend client (RESEND_API_KEY in Render env, set by the user), templates,
-      verify-email flow, sign-up confirmation, instance started/stopped, credits low, receipts. Notes: —
-- [ ] 4. "Notify me when a GPU is free": subscribe on the rentals page / machine page; email when
-      it becomes available (needs 3). Notes: —
+- [x] 1. Rentals page: badges, available-now count, available first, auto-refresh (30 s, paused in
+      background tabs), filters (GPU, min VRAM, location, available now). Notes: live 2026-11-02 (e462dad).
+- [x] 2. JupyterLab → waitlist wording (FAQ, templates) + "join the JupyterLab waitlist". Notes: live (e462dad); waitlist form asks to mention JupyterLab.
+- [~] 3. Emails: backend Resend client (RESEND_API_KEY in Render env, set by the user), templates,
+      verify-email flow, sign-up confirmation, instance started/stopped, credits low, receipts. Notes: code live (bbafe73). Emails only log until RESEND_API_KEY is set in Render (user). Not yet: free-credit/receipt for claims; verified email not required for anything yet.
+- [x] 4. "Notify me when a GPU is free": subscribe on the rentals page / machine page; email when
+      it becomes available (needs 3). Notes: live (d629525); emails need RESEND_API_KEY.
 - [ ] 5. Save files to R2 before stop: "Save my files" on the instance page; on stop, archive the
       workspace to R2 (per-user prefix, expiry), download link; restore on next start. Needs an R2
       bucket + keys in Render env (user). Notes: —
