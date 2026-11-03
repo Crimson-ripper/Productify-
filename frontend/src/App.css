@@ -1991,3 +1991,74 @@ header.topbar,.footer-grid{border:0!important}
 .gz-rows{background:transparent!important;border:0!important;gap:4px}
 .gz-row{background:#1c1d20;border:0!important;color:#f2f2ee}
 .gz-row small{color:#b9bbb5!important;font:500 13px 'Archivo',sans-serif!important}
+
+/* ===== Start hosting (Apply page): method chooser + cards ===== */
+.hs-chooser{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 18px}
+.hs-pick{background:#1c1d20;color:#f2f2ee;border:1px solid #2c2d31;padding:14px 20px;font:700 15px 'Archivo',sans-serif;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;border-radius:0}
+.hs-pick:hover{border-color:#c8f04c}
+.hs-pick.on{background:#c8f04c;color:#0a0a0b;border-color:#c8f04c}
+.hs-pick:focus-visible{outline:2px solid #c8f04c;outline-offset:2px}
+.hs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px;margin-top:28px}
+.hs-card{background:#1c1d20;padding:26px;border:1px solid transparent;display:flex;flex-direction:column;gap:14px;transition:border-color .2s}
+.hs-card.picked{border-color:#c8f04c}
+.hs-card h3{margin:0;color:#f2f2ee;font:800 24px 'Archivo',sans-serif;font-stretch:75%;text-transform:uppercase;line-height:1.05}
+.hs-badge{align-self:flex-start;font:700 12px 'Archivo',sans-serif;text-transform:uppercase;letter-spacing:.06em;padding:5px 9px;background:#2a2410;color:#ffe2a8}
+.hs-card.live .hs-badge{background:#c8f04c;color:#0a0a0b}
+.hs-one{margin:0;color:#b9bbb5;font-size:16px;line-height:1.55}
+.hs-facts{margin:0;display:grid;gap:8px}
+.hs-facts div{display:grid;grid-template-columns:90px 1fr;gap:12px}
+.hs-facts dt{color:#f2f2ee;font:700 14px 'Archivo',sans-serif;text-transform:uppercase}
+.hs-facts dd{margin:0;color:#b9bbb5;font-size:15px;line-height:1.5}
+.hs-facts ul{margin:0;padding-left:1.1em}
+.hs-card .lp-list li{font-size:15px;padding:8px 0}
+.hs-card .lp-list.ok svg{color:#c8f04c}
+.hs-table-wrap{overflow-x:auto;margin-top:24px}
+.hs-table{width:100%;min-width:640px;border-collapse:collapse;color:#f2f2ee;font-size:15px}
+.hs-table th,.hs-table td{text-align:left;padding:14px 12px;border-bottom:1px solid #2c2d31;vertical-align:top}
+.hs-table thead th{font:700 13px 'Archivo',sans-serif;text-transform:uppercase;color:#b9bbb5}
+.hs-table td{color:#b9bbb5}
+.lp-section .lp-small svg{vertical-align:-3px;color:#ffe2a8}
+@media (max-width:600px){.hs-pick{flex:1 1 100%;text-align:left}.hs-card{padding:20px}}
+
+/* ===== Rentals: live toolbar ===== */
+.rental-hero~.shop-toolbar>select{background:var(--x-bk3)!important;border:0!important;color:var(--x-fg)!important;font-size:15px!important;padding:13px 14px!important;border-radius:0}
+.rx-refresh{display:inline-flex;align-items:center;gap:6px;background:transparent;border:0;color:var(--x-fg2,#b9bbb5);font-size:14px;cursor:pointer;padding:8px 4px}
+.rx-refresh:hover{color:var(--lime)}
+.rx-live-count{color:var(--lime);font-weight:700}
+.rx-link{background:none;border:0;color:var(--lime);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+@media (max-width:600px){.rental-hero~.shop-toolbar>select{flex:1 1 45%}}
+
+/* ===== Confirm-your-email bar ===== */
+.ve-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#2a2410;color:#ffe2a8;padding:10px var(--x-m,20px);font-size:14px}
+.ve-bar span{flex:1 1 260px}
+.ve-bar button{background:#c8f04c;color:#0a0a0b;border:0;padding:8px 14px;font-weight:700;cursor:pointer}
+.ve-bar button:disabled{opacity:.6;cursor:default}
+.ve-bar .ve-x{background:transparent;color:#ffe2a8;font-size:20px;padding:0 6px}
+
+/* ===== Notify me when a GPU is free ===== */
+.nf-wrap{display:inline-flex;flex-direction:column;gap:6px;margin-top:14px}
+.nf-btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid #c8f04c;color:#c8f04c;padding:10px 16px;font-weight:700;font-size:14px;cursor:pointer;text-decoration:none;margin-top:14px}
+.nf-wrap .nf-btn{margin-top:0}
+.nf-btn:hover{background:#c8f04c;color:#0a0a0b}
+.nf-btn:disabled{opacity:.6;cursor:default}
+.nf-done{display:flex;align-items:center;gap:8px;color:#c8f04c;font-size:14px;margin-top:14px}
+.nf-err{color:#ffb4a8;font-size:13px}
+
+/* ===== Partner machines: starting notice ===== */
+.ix-starting{background:#2a2410;color:#ffe2a8;padding:14px 18px;margin:12px 0;font-size:15px;line-height:1.5}
+
+/* GPU on demand (partner machines ordered by class) */
+.od-section h2{display:flex;align-items:center;gap:8px;margin:0 0 4px}
+.od-lead{color:var(--x-fg2,#b9bbb5);margin:0 0 16px}
+.od-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.od-card{background:var(--x-card,#1b1c1a);padding:18px;display:flex;flex-direction:column;gap:6px}
+.od-card h3{margin:0;font-size:18px}.od-card h3 span{font-size:13px;font-weight:400;color:var(--x-fg2,#b9bbb5)}
+.od-ex,.od-for{margin:0;font-size:14px;color:var(--x-fg2,#b9bbb5)}
+.od-price{margin:6px 0;font-weight:700}.od-price span{display:block;font-weight:400;font-size:13px;color:var(--x-fg2,#b9bbb5)}
+.od-none{margin:6px 0 0;color:var(--x-fg2,#b9bbb5)}
+.od-form{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.od-form label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.od-form input,.od-form select{padding:8px;font:inherit;max-width:100%}
+.od-note{font-size:13px;line-height:1.5;color:var(--x-fg2,#b9bbb5);margin:0}
+.od-err{color:#ff8a7a;margin:0}
+.od-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
