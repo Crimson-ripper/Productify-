@@ -38,6 +38,7 @@ from currency_engine import (
 )
 import emailer
 import vast_market
+import gamezone.geo as pfy_geo
 from gamezone import (
     GameCreateInput,
     GameUpdatePriceInput,
@@ -1160,7 +1161,7 @@ async def create_product(data: ProductInput, user=Depends(current_user)):
 
 
 @api.get("/rentals")
-async def rentals(q: str = "", sort: str = "recent", partners: bool = True):
+async def rentals(q: str = "", sort: str = "recent", partners: bool = False):
     rows = await db.rentals.find({"status": "approved"}, {"_id": 0, "pairing_token": 0}).to_list(200)
     busy = {i["rental_id"] for i in await db.instances.find({"status": {"$in": ["running", "paused"]}}, {"_id": 0, "rental_id": 1}).to_list(1000)}
     for r in rows:
@@ -3373,6 +3374,174 @@ async def destroy_partner_machine(inst: dict):
     except Exception as e:
         logger.warning(f"couldn't destroy Vast instance {vid} ({inst.get('id')}); the reaper will retry: {e}")
     await db.rentals.update_one({"id": inst.get("rental_id")}, {"$set": {"status": "partner_ended"}})
+
+
+# ---------- GPU on demand: renters order by requirements; we find and rent the machine ----------
+ORDER_TIMEOUT_S = 600          # give up (and charge nothing) after 10 minutes
+ORDER_HOST_TIMEOUT_S = 240     # a single host gets 4 minutes to start our agent
+ORDER_MAX_ATTEMPTS = 8
+
+
+class GpuOrderInput(BaseModel):
+    class_id: str = Field(max_length=20)
+    template_id: str = Field("jupyter-pytorch", max_length=40)
+    near: bool = True
+    country: str = Field("", max_length=2)
+    max_price: float = Field(gt=0, le=50)
+    disk_gb: int = Field(PARTNER_DISK_GB, ge=20, le=200)
+
+
+def _origin(country: str):
+    return pfy_geo.COUNTRIES.get((country or "").strip().upper()[:2])
+
+
+async def optional_user(request: Request):
+    try:
+        return await current_user(request)
+    except HTTPException:
+        return None
+
+
+@api.get("/partners/classes")
+async def partner_classes(user=Depends(optional_user)):
+    """Live price ranges per GPU class for 'GPU on demand' (renter prices, our markup included)."""
+    visible = partners_enabled() or (user or {}).get("role") in ["admin", "sub-admin"]
+    return {"enabled": visible, "classes": vast_market.class_summary(vast_market.cache.fresh_pool()) if visible else []}
+
+
+@api.post("/instances/order")
+async def order_gpu(data: GpuOrderInput, user=Depends(current_user)):
+    if not partners_enabled() and user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(404, "GPU on demand isn't available yet.")
+    cls = vast_market.get_class(data.class_id)
+    if not cls:
+        raise HTTPException(400, "Unknown GPU class")
+    renter = await db.users.find_one({"id": user["id"]}) or {}
+    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+        raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
+    if await db.instances.find_one({"user_id": user["id"], "status": {"$in": ["finding", "starting"]}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "You already have a GPU being set up. Wait for it to be ready first.")
+    if not vast_market.candidates(vast_market.cache.fresh_pool(), cls["id"], data.max_price):
+        raise HTTPException(409, "No machines in that class are available at or under your price cap right now. Raise the cap or try another class.")
+    tmpl = next((t for t in INSTANCE_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
+    instance_id = f"inst-{uuid.uuid4().hex[:10]}"
+    rid = f"r-{uuid.uuid4().hex[:10]}"
+    token = f"ptok_{secrets.token_hex(8)}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.rentals.insert_one({"id": rid, "status": "partner", "provider": "vast", "pairing_token": token,
+                                 "title": f"{cls['name']} GPU", "owner_id": "platform", "owner": "Vast.ai partner",
+                                 "created_at": now_iso})
+    doc = {
+        "id": instance_id, "kind": "partner", "provider": "vast", "order": True, "class_id": cls["id"],
+        "max_price": round(data.max_price, 2), "near": data.near, "country": data.country.upper(),
+        "rental_id": rid, "rental_title": f"{cls['name']} GPU", "gpu": f"{cls['name']} GPU ({cls['vram']})",
+        "vram": cls["vram"], "location": "", "user_id": user["id"], "renter_name": user.get("name", "User"),
+        "renter_email": user.get("email"), "seller_id": "platform", "seller_name": "Vast.ai partner",
+        "template_id": tmpl["id"], "template_name": tmpl["name"], "service_name": tmpl.get("service_name"),
+        "hourly_price": None, "base_price": None, "storage_price": 0.0, "disk_size_gb": data.disk_gb,
+        "status": "finding", "created_at": now_iso, "started_at": None,
+        "total_runtime_seconds": 0, "cost_accumulated": 0.0,
+        "logs": [f"[{now_iso[:19]}] Looking for a {cls['name']} GPU at or under ${data.max_price:.2f}/h."],
+    }
+    await db.instances.insert_one(doc)
+    spawn(order_worker(instance_id, token))
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+async def _log(instance_id: str, msg: str, **fields):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    upd = {"$push": {"logs": f"[{now_iso[:19]}] {msg}"}}
+    if fields:
+        upd["$set"] = fields
+    await db.instances.update_one({"id": instance_id}, upd)
+
+
+async def order_worker(instance_id: str, token: str):
+    """Try matching machines best-first until one starts our agent; then bill at its actual price."""
+    inst = await db.instances.find_one({"id": instance_id}, {"_id": 0})
+    if not inst:
+        return
+    rid, deadline, tried, vid = inst["rental_id"], time.time() + ORDER_TIMEOUT_S, set(), None
+    origin = _origin(inst.get("country")) if inst.get("near") else None
+    env = {"PFY_RENTAL_ID": rid, "PFY_TOKEN": token, "PFY_BACKEND": BACKEND_PUBLIC_URL}
+    image = PARTNER_IMAGES.get(inst["template_id"], PARTNER_IMAGES["jupyter-pytorch"])
+
+    def dist(row):
+        pos = pfy_geo.locate(row.get("location", ""))
+        return pfy_geo.km_between(origin, pos) if (origin and pos) else None
+
+    async def still_wanted():
+        cur = await db.instances.find_one({"id": instance_id}, {"_id": 0, "status": 1})
+        return cur and cur.get("status") in ("finding", "starting")
+
+    async def drop(v):
+        try:
+            await asyncio.to_thread(vast_market.destroy, v)
+        except Exception as e:
+            logger.warning(f"order {instance_id}: couldn't destroy {v}; the reaper will: {e}")
+
+    try:
+        while time.time() < deadline and len(tried) < ORDER_MAX_ATTEMPTS:
+            if not await still_wanted():
+                return
+            pool = vast_market.cache.fresh_pool()
+            cands = [r for r in vast_market.candidates(pool, inst["class_id"], inst["max_price"], origin, dist, inst.get("near", True))
+                     if r["offer_id"] not in tried]
+            if not cands:
+                await asyncio.sleep(20)  # wait for the next market refresh
+                continue
+            row = cands[0]
+            tried.add(row["offer_id"])
+            try:
+                vid = await asyncio.to_thread(vast_market.rent, row["offer_id"], image, inst["disk_size_gb"], env,
+                                              PARTNER_ONSTART.format(url=AGENT_URL), f"pfy-{instance_id}")
+            except Exception:
+                vid = None
+                await _log(instance_id, f"A {row['gpu']} was taken before we could rent it; trying another.")
+                continue
+            await _log(instance_id, f"Rented a {row['gpu']} in {row['location'] or 'an unknown location'}; setting it up.",
+                       status="starting", vast_instance_id=vid, gpu=row["gpu"], vram=row["vram"],
+                       location=row["location"], specs=row.get("specs", {}), vast_cost=row["cost"],
+                       rental_title=row["title"])
+            await db.rentals.update_one({"id": rid}, {"$set": {"gpu": row["gpu"], "vram": row["vram"], "location": row["location"],
+                                                               "price": row["price"], "title": row["title"]}})
+            host_deadline = min(deadline, time.time() + ORDER_HOST_TIMEOUT_S)
+            while time.time() < host_deadline:
+                if not await still_wanted():
+                    await drop(vid)
+                    return
+                if node_hub.is_connected(rid):
+                    await node_hub.request(rid, {"type": "job.start", "job_id": instance_id, "template": "direct"}, 60)
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    res = await db.instances.update_one({"id": instance_id, "status": "starting"}, {"$set": {
+                        "status": "running", "started_at": now_iso, "hourly_price": row["price"], "base_price": row["price"],
+                        "tunnel_connected": True},
+                        "$push": {"logs": f"[{now_iso[:19]}] Ready: {row['gpu']} at ${row['price']:.2f}/h. Billing started."}})
+                    if getattr(res, "modified_count", 1) and inst.get("renter_email"):
+                        spawn(emailer.instance_started(inst["renter_email"], inst.get("renter_name", "there"), row["gpu"], row["price"], instance_id))
+                    return
+                try:
+                    st = await asyncio.to_thread(vast_market.status, vid)
+                    msg = (st.get("status_msg") or "").lower()
+                    if "error" in msg or "failed" in msg or st.get("actual_status") in ("exited", "offline"):
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(10)
+            await _log(instance_id, f"That {row['gpu']} didn't start properly; trying another machine.", status="finding")
+            await drop(vid)
+            vid = None
+        if await still_wanted():
+            now_iso = datetime.now(timezone.utc).isoformat()
+            await db.instances.update_one({"id": instance_id}, {"$set": {
+                "status": "terminated", "terminated_at": now_iso, "end_reason": "no machine found", "cost_accumulated": 0.0},
+                "$push": {"logs": f"[{now_iso[:19]}] Couldn't get a machine in time. You haven't been charged."}})
+    except Exception as e:
+        logger.warning(f"order {instance_id} failed: {e}")
+        await db.instances.update_one({"id": instance_id, "status": {"$in": ["finding", "starting"]}}, {"$set": {
+            "status": "terminated", "end_reason": "setup failed", "cost_accumulated": 0.0}})
+        if vid:
+            await drop(vid)
 
 
 async def vast_reaper_loop():
