@@ -419,6 +419,9 @@ export default function InstanceDetail() {
 
           {/* Action Buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {instance.status === "finding" && (
+              <p className="ix-starting" role="status">Finding a machine at or under {money(instance.max_price)}/h… this page updates by itself. You see the exact price once it's ready, and billing starts only then. If nothing starts within 10 minutes the order is cancelled and you aren't charged.</p>
+            )}
             {instance.status === "starting" && (
               <p className="ix-starting" role="status">Starting your machine… this usually takes 2–5 minutes and this page updates by itself. Billing starts only when it's ready; if it doesn't start within 10 minutes it's cancelled and you aren't charged.</p>
             )}
@@ -483,7 +486,7 @@ export default function InstanceDetail() {
               ${currentCost.toFixed(4)}
             </div>
             <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)" }}>
-              Rate: {money(instance.hourly_price)}/hr ({money(instance.base_price)} compute + {money(instance.storage_price)} disk)
+              {instance.hourly_price == null ? "Price shown once your machine is ready" : <>Rate: {money(instance.hourly_price)}/hr ({money(instance.base_price)} compute + {money(instance.storage_price)} disk)</>}
             </span>
           </div>
 

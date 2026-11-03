@@ -6,6 +6,7 @@ import SEO from "@/components/SEO";
 import RentalCard from "@/components/RentalCard";
 import { availabilityOf } from "@/components/Availability";
 import NotifyButton from "@/components/NotifyButton";
+import GpuOnDemand from "@/components/GpuOnDemand";
 
 const REFRESH_MS = 30_000;
 const STATUS_ORDER = { available: 0, in_use: 1, paused: 2, offline: 3 };
@@ -90,6 +91,8 @@ export default function Rentals() {
         </p>
         {!loading && availableCount === 0 && <NotifyButton rentalId="any" label="Email me when any GPU is free" />}
       </section>
+
+      <GpuOnDemand />
 
       <section className="shop-toolbar rx-toolbar">
         <form className="shop-search" onSubmit={(e) => { e.preventDefault(); set("q", localQ); }}>

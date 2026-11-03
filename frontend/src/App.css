@@ -2046,3 +2046,19 @@ header.topbar,.footer-grid{border:0!important}
 
 /* ===== Partner machines: starting notice ===== */
 .ix-starting{background:#2a2410;color:#ffe2a8;padding:14px 18px;margin:12px 0;font-size:15px;line-height:1.5}
+
+/* GPU on demand (partner machines ordered by class) */
+.od-section h2{display:flex;align-items:center;gap:8px;margin:0 0 4px}
+.od-lead{color:var(--x-fg2,#b9bbb5);margin:0 0 16px}
+.od-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.od-card{background:var(--x-card,#1b1c1a);padding:18px;display:flex;flex-direction:column;gap:6px}
+.od-card h3{margin:0;font-size:18px}.od-card h3 span{font-size:13px;font-weight:400;color:var(--x-fg2,#b9bbb5)}
+.od-ex,.od-for{margin:0;font-size:14px;color:var(--x-fg2,#b9bbb5)}
+.od-price{margin:6px 0;font-weight:700}.od-price span{display:block;font-weight:400;font-size:13px;color:var(--x-fg2,#b9bbb5)}
+.od-none{margin:6px 0 0;color:var(--x-fg2,#b9bbb5)}
+.od-form{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.od-form label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.od-form input,.od-form select{padding:8px;font:inherit;max-width:100%}
+.od-note{font-size:13px;line-height:1.5;color:var(--x-fg2,#b9bbb5);margin:0}
+.od-err{color:#ff8a7a;margin:0}
+.od-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
