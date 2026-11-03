@@ -149,7 +149,9 @@ cache = OfferCache()
 
 def rent(offer_id: int, image: str, disk_gb: int, env: dict, onstart: str, label: str) -> int:
     """Create an instance on Productify's Vast account; returns the Vast instance id."""
-    body = {"image": image, "disk": disk_gb, "env": env, "onstart": onstart, "label": label, "runtype": "args"}
+    # "ssh" run mode is what makes Vast run our onstart script; "args" mode fails to start the
+    # container on hosts (tested 2026-11-03: 6/6 failed with args, ssh started in ~70 s).
+    body = {"image": image, "disk": disk_gb, "env": env, "onstart": onstart, "label": label, "runtype": "ssh"}
     res = _request("PUT", f"/asks/{int(offer_id)}/", body)
     if not res.get("success") or not res.get("new_contract"):
         raise VastError(res.get("msg") or res.get("error") or "Vast couldn't start that machine")
