@@ -75,7 +75,7 @@ class PartnerTests(unittest.TestCase):
         return self.c.post("/api/instances/deploy", json={"rental_id": "vast-77", "template_id": "jupyter-pytorch"})
 
     def test_listed_without_cost_and_offer_id(self):
-        rows = self.c.get("/api/rentals").json()
+        rows = self.c.get("/api/rentals?partners=true").json()
         partner = next(r for r in rows if r["id"] == "vast-77")
         self.assertNotIn("cost", partner)
         self.assertNotIn("offer_id", partner)
@@ -126,7 +126,7 @@ class PartnerTests(unittest.TestCase):
 
     def test_hidden_until_enabled_except_admins(self):
         with mock.patch.dict(os.environ, {"PARTNERS_ENABLED": ""}):
-            self.assertFalse(any(r["id"].startswith("vast-") for r in self.c.get("/api/rentals").json()))
+            self.assertFalse(any(r["id"].startswith("vast-") for r in self.c.get("/api/rentals?partners=true").json()))
             self.assertEqual(self.deploy().status_code, 404)
             server.app.dependency_overrides[server.current_user] = lambda: {"id": "u1", "name": "Ana", "email": "ana@example.com", "role": "admin"}
             self.assertEqual(self.deploy().status_code, 200)

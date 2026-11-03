@@ -67,8 +67,8 @@ def short_gpu(name: str) -> str:
     return (name or "").replace("NVIDIA ", "").replace("GeForce ", "").strip()
 
 
-def curate(offers: list, now: float = None) -> list:
-    """Pick good machines and turn them into Productify listings (dicts shaped like rentals)."""
+def valid_rows(offers: list) -> list:
+    """Every good machine, as Productify listings (dicts shaped like rentals), cheapest first."""
     m = markup()
     ok = []
     for o in offers:
@@ -107,8 +107,16 @@ def curate(offers: list, now: float = None) -> list:
             "is_verified": True,
             "owner": "Vast.ai partner",
             "partner": True,
+            "vram_gb": round(vram),
+            "reliability": float(o.get("reliability2") or o.get("reliability") or 0),
         })
     ok.sort(key=lambda r: (r["gpu"], r["price"]))
+    return ok
+
+
+def curate(offers: list, now: float = None) -> list:
+    """The cheapest few of each GPU model, for a readable list."""
+    ok = valid_rows(offers)
     out, per = [], {}
     for r in ok:
         per[r["gpu"]] = per.get(r["gpu"], 0) + 1
@@ -119,7 +127,11 @@ def curate(offers: list, now: float = None) -> list:
 
 class OfferCache:
     def __init__(self):
-        self.rows, self.at, self.error = [], 0.0, ""
+        self.rows, self.pool, self.at, self.error = [], [], 0.0, ""
+
+    def fresh_pool(self, now: float = None) -> list:
+        now = now if now is not None else time.time()
+        return self.pool if now - self.at <= STALE_S else []
 
     def fresh(self, now: float = None) -> list:
         now = now if now is not None else time.time()
@@ -131,7 +143,8 @@ class OfferCache:
     def refresh_once(self):
         offers = _request("POST", "/bundles/", {"rentable": {"eq": True}, "rented": {"eq": False}, "verified": {"eq": True},
                                                 "type": "on-demand", "num_gpus": {"eq": 1}, "limit": 600}).get("offers", [])
-        self.rows, self.at, self.error = curate(offers), time.time(), ""
+        pool = valid_rows(offers)
+        self.pool, self.rows, self.at, self.error = pool, curate(offers), time.time(), ""
 
     async def loop(self):
         while True:
@@ -180,3 +193,72 @@ def list_ours() -> list:
         token = res.get("next_token")
         if not token:
             return rows
+
+
+# ---------- GPU on demand: order by requirements ----------
+# Partner GPUs get rented by others within minutes, so renters don't pick a specific Vast machine.
+# They pick a class; we show a live price range, they set a price cap, and we rent the best match.
+CLASSES = [
+    {"id": "entry", "name": "Entry", "vram": "8-12 GB", "min_vram": 8, "max_vram": 12, "pro": False,
+     "examples": "RTX 3060, 3070, 3080", "for": "Learning, small models, inference"},
+    {"id": "mid", "name": "Mid", "vram": "16-24 GB", "min_vram": 16, "max_vram": 24, "pro": False,
+     "examples": "RTX 3090, 4080, 5070 Ti", "for": "Fine-tuning, image generation, 7B-13B models"},
+    {"id": "high", "name": "High", "vram": "24-32 GB, latest cards", "min_vram": 24, "max_vram": 32, "pro": False,
+     "examples": "RTX 4090, 5090", "for": "Fastest consumer GPUs, larger models"},
+    {"id": "datacenter", "name": "Data-centre", "vram": "40-80 GB+", "min_vram": 40, "max_vram": 999, "pro": True,
+     "examples": "A100, H100, L40S", "for": "Big training runs, large models"},
+]
+DATACENTER = ("A100", "H100", "H200", "B200", "L40", "A40", "A6000", "6000ADA", "PRO 6000")
+LATEST = ("4090", "5090")
+
+
+def in_class(row: dict, cls: dict) -> bool:
+    g = row["gpu"].upper().replace(" ", "")
+    v = row.get("vram_gb") or 0
+    is_dc = any(t.replace(" ", "") in g for t in DATACENTER)
+    if cls["pro"]:
+        return is_dc and v >= cls["min_vram"]
+    if is_dc:
+        return False
+    if cls["id"] == "high":
+        return any(t in g for t in LATEST)
+    if cls["id"] == "mid":
+        return cls["min_vram"] <= v <= cls["max_vram"] and not any(t in g for t in LATEST)
+    return cls["min_vram"] <= v <= cls["max_vram"]
+
+
+def get_class(class_id: str):
+    return next((c for c in CLASSES if c["id"] == class_id), None)
+
+
+def _pct(vals, q):
+    vals = sorted(vals)
+    return vals[min(len(vals) - 1, max(0, int(round(q * (len(vals) - 1)))))]
+
+
+def class_summary(pool: list) -> list:
+    """Live price range per class (renter prices): low = 10th percentile, typical = median,
+    high = 80th percentile. 'available' is how many machines match right now."""
+    out = []
+    for c in CLASSES:
+        prices = [r["price"] for r in pool if in_class(r, c)]
+        item = {k: c[k] for k in ("id", "name", "vram", "examples", "for")}
+        item["available"] = len(prices)
+        if prices:
+            item.update(low=_pct(prices, 0.1), typical=_pct(prices, 0.5), high=_pct(prices, 0.8))
+        out.append(item)
+    return out
+
+
+def candidates(pool: list, class_id: str, max_price: float, origin=None, distance=None, near: bool = True) -> list:
+    """Machines to try for an order, best first: within the cap, reliable, near the renter if asked."""
+    cls = get_class(class_id)
+    if not cls:
+        return []
+    rows = [r for r in pool if in_class(r, cls) and r["price"] <= max_price + 1e-9]
+
+    def key(r):
+        d = distance(r) if (near and origin is not None and distance) else None
+        bucket = 0 if d is None else (0 if d < 2500 else 1 if d < 6000 else 2)
+        return (bucket, -round(r.get("reliability", 0), 2), r["price"])
+    return sorted(rows, key=key)
