@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -21,8 +22,10 @@ import urllib.request
 log = logging.getLogger("vast_market")
 
 API = "https://console.vast.ai/api/v0"
-REFRESH_S = 180
-STALE_S = 600
+# Vast allows 20,000 search rows a day: 300 rows every 30 minutes is 14,400, leaving room for restarts.
+REFRESH_S = 1800
+STALE_S = 5400
+OFFER_LIMIT = 300
 PER_MODEL = 3
 MIN = {"gpu_ram_gb": 8, "reliability": 0.97, "inet_down": 200, "inet_up": 100, "disk_space": 60, "cuda": 12.0}
 NOT_FOR_RENTERS = ("CMP",)  # mining cards
@@ -142,19 +145,24 @@ class OfferCache:
 
     def refresh_once(self):
         offers = _request("POST", "/bundles/", {"rentable": {"eq": True}, "rented": {"eq": False}, "verified": {"eq": True},
-                                                "type": "on-demand", "num_gpus": {"eq": 1}, "limit": 600}).get("offers", [])
+                                                "type": "on-demand", "num_gpus": {"eq": 1}, "limit": OFFER_LIMIT}).get("offers", [])
         pool = valid_rows(offers)
         self.pool, self.rows, self.at, self.error = pool, curate(offers), time.time(), ""
 
     async def loop(self):
         while True:
+            wait = REFRESH_S
             if _key():
                 try:
                     await asyncio.to_thread(self.refresh_once)
                 except Exception as e:
                     self.error = str(e)[:200]
                     log.warning(f"vast offers refresh failed: {e}")
-            await asyncio.sleep(REFRESH_S)
+                    # Out of quota: retrying only wastes requests, so wait as long as Vast asks.
+                    m = re.search(r'"retry_after":\s*(\d+)', str(e))
+                    if m:
+                        wait = max(REFRESH_S, int(m.group(1)) + 60)
+            await asyncio.sleep(wait)
 
 
 cache = OfferCache()
