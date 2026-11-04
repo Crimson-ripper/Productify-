@@ -2048,6 +2048,7 @@ header.topbar,.footer-grid{border:0!important}
 .ix-starting{background:#2a2410;color:#ffe2a8;padding:14px 18px;margin:12px 0;font-size:15px;line-height:1.5}
 
 /* GPU on demand (partner machines ordered by class) */
+.od-section h2,.od-card h3{color:var(--x-fg,#f4f4ef)}
 .od-section h2{display:flex;align-items:center;gap:8px;margin:0 0 4px}
 .od-lead{color:var(--x-fg2,#b9bbb5);margin:0 0 16px}
 .od-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
