@@ -3520,6 +3520,18 @@ async def order_worker(instance_id: str, token: str):
                 if node_hub.is_connected(rid):
                     await node_hub.request(rid, {"type": "job.start", "job_id": instance_id, "template": "direct"}, 60)
                     now_iso = datetime.now(timezone.utc).isoformat()
+                    # Vast's real rate can differ from the listing. Never above the renter's cap.
+                    price = row["price"]
+                    try:
+                        st = await asyncio.to_thread(vast_market.status, vid)
+                        if st.get("dph_total"):
+                            wanted = vast_market.renter_price(float(st["dph_total"]))
+                            price = min(max(price, wanted), inst["max_price"])
+                            if wanted > inst["max_price"]:
+                                logger.warning(f"order {instance_id}: capped at ${price:.2f}/h, full price would be ${wanted:.2f}/h")
+                    except Exception as e:
+                        logger.warning(f"order {instance_id}: couldn't read the real rate: {e}")
+                    row = {**row, "price": price}
                     res = await db.instances.update_one({"id": instance_id, "status": "starting"}, {"$set": {
                         "status": "running", "started_at": now_iso, "hourly_price": row["price"], "base_price": row["price"],
                         "tunnel_connected": True},

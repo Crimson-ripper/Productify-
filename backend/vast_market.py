@@ -7,12 +7,14 @@ Productify rents Vast.ai machines on its own account and bills renters in Produc
   Renters never call Vast directly; the site reads only the cache.
 - Only verified, reliable machines with enough VRAM, disk and bandwidth are shown, and only the
   cheapest few of each GPU model, so the page stays readable.
-- Renter price = Vast price x VAST_MARKUP (env). User decision 2026-11-02: at least 45% markup,
-  so the multiplier is never below 1.45 (default 1.45).
+- Renter price = Vast cost with our disk size x VAST_MARKUP (env), rounded up to the next cent.
+  User decision 2026-11-05: 105% markup (45-55% base + 10-20% data transfer + 18-30% tax), so the
+  multiplier is never below 2.05.
 """
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -35,7 +37,8 @@ def _key() -> str:
     return os.environ.get("VAST_API_KEY", "").strip()
 
 
-MIN_MARKUP = 1.45  # user: "at least 45%"
+MIN_MARKUP = 2.05  # user: 105% markup
+RENTED_DISK_GB = 40  # every partner rental's disk; Vast's list price assumes a smaller one
 
 
 def markup() -> float:
@@ -43,6 +46,19 @@ def markup() -> float:
         return max(MIN_MARKUP, float(os.environ.get("VAST_MARKUP", str(MIN_MARKUP))))
     except ValueError:
         return MIN_MARKUP
+
+
+def renter_price(cost: float) -> float:
+    """Vast $/hour to renter $/hour, rounded up so the markup is never cut short."""
+    return math.ceil(round(cost * markup() * 100, 6)) / 100
+
+
+def real_cost(offer: dict, disk_gb: int = RENTED_DISK_GB) -> float:
+    """$/hour for this offer with our disk. storage_cost is $/GB/month (720 hours)."""
+    base, storage = offer.get("dph_base"), offer.get("storage_cost")
+    if base is None or storage is None:
+        return float(offer.get("dph_total") or 0)
+    return float(base) + float(storage) * disk_gb / 720
 
 
 class VastError(RuntimeError):
@@ -72,7 +88,6 @@ def short_gpu(name: str) -> str:
 
 def valid_rows(offers: list) -> list:
     """Every good machine, as Productify listings (dicts shaped like rentals), cheapest first."""
-    m = markup()
     ok = []
     for o in offers:
         gpu = short_gpu(o.get("gpu_name"))
@@ -87,7 +102,8 @@ def valid_rows(offers: list) -> list:
         n = int(o.get("num_gpus") or 1)
         if n != 1:  # one GPU per rental, like Productify Node machines
             continue
-        price = round(float(o.get("dph_total") or 0) * m, 2)
+        cost = real_cost(o)
+        price = renter_price(cost)
         if price <= 0:
             continue
         geo = o.get("geolocation") or ""
@@ -100,7 +116,7 @@ def valid_rows(offers: list) -> list:
             "vram": f"{round(vram)} GB",
             "location": geo,
             "price": price,
-            "cost": round(float(o.get("dph_total") or 0), 4),
+            "cost": round(cost, 4),
             "specs": {"cpu": f"{int(o.get('cpu_cores_effective') or 0)} cores", "cpu_model": (o.get("cpu_name") or "").strip(),
                       "ram": f"{round((o.get('cpu_ram') or 0) / 1024)} GB", "disk": f"{round(o.get('disk_space') or 0)} GB",
                       "internet": f"{round(o.get('inet_down') or 0)} / {round(o.get('inet_up') or 0)} Mbps"},
