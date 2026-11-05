@@ -2069,3 +2069,6 @@ header.topbar,.footer-grid{border:0!important}
 .credit-balance b{color:var(--lime);font-size:18px}
 .credit-balance small{color:var(--x-fg2,#b9bbb5);font-size:13px}
 .credit-balance a{color:var(--lime);text-decoration:underline;font-size:14px;margin-left:auto}
+
+/* Terminal and code output: dark scrollbars */
+.ix-code,.ix-code *,.ix textarea{scrollbar-color:#3a3d42 #0c0e12;scrollbar-width:thin}

@@ -3442,7 +3442,7 @@ async def order_gpu(data: GpuOrderInput, user=Depends(current_user)):
         "hourly_price": None, "base_price": None, "storage_price": 0.0, "disk_size_gb": data.disk_gb,
         "status": "finding", "created_at": now_iso, "started_at": None,
         "total_runtime_seconds": 0, "cost_accumulated": 0.0,
-        "logs": [f"[{now_iso[:19]}] Looking for a {cls['name']} GPU at or under ${data.max_price:.2f}/h."],
+        "logs": [f"[{now_iso[:19]}] Looking for {'an' if cls['name'][0] in 'AEIOU' else 'a'} {cls['name']} GPU at or under ${data.max_price:.2f}/h."],
     }
     await db.instances.insert_one(doc)
     spawn(order_worker(instance_id, token))
