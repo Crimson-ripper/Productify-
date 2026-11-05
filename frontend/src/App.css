@@ -2072,3 +2072,5 @@ header.topbar,.footer-grid{border:0!important}
 
 /* Terminal and code output: dark scrollbars */
 .ix-code,.ix-code *,.ix textarea{scrollbar-color:#3a3d42 #0c0e12;scrollbar-width:thin}
+
+.od-beta{background:var(--lime);color:#0a0a0b;font-size:12px;font-weight:700;padding:2px 8px}

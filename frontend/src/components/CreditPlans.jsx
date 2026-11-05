@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 // Fallback copy of the backend's CREDIT_PLANS (GET /credits/plans). 1 credit = US$1.
 const DEFAULT_PLANS = [
-  { id: "free", name: "Free", price_usd: 0, credits: 5, available: true, points: ["One-time $5 of credit per account", "About 10 hours on a $0.50/hr GPU", "PyTorch and Python environments"] },
+  { id: "free", name: "Free", price_usd: 0, credits: 2, available: true, points: ["One-time $2 of credit per account", "About 4 hours on a $0.50/hr GPU", "PyTorch and Python environments"] },
   { id: "starter", name: "Starter", price_usd: 20, credits: 21, available: false, points: ["$21 of credit for $20", "Credits don't expire", "Email support"] },
   { id: "builder", name: "Builder", price_usd: 50, credits: 53, available: false, points: ["$53 of credit for $50", "Credits don't expire", "Priority email support"] },
 ];

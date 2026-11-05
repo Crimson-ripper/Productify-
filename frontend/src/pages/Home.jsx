@@ -115,13 +115,13 @@ const SPEC = [
 ];
 
 const PLANS = [
-  { name: "Free", price: "$0", credit: "$5 credit, once", lines: ["About 10 hours on a $0.50/hr GPU", "PyTorch and Python environments"], cta: "Claim it on the pricing page", to: ROUTES.pricing, live: true },
+  { name: "Free", price: "$0", credit: "$2 credit, once", lines: ["About 4 hours on a $0.50/hr GPU", "PyTorch and Python environments"], cta: "Claim it on the pricing page", to: ROUTES.pricing, live: true },
   { name: "Starter", price: "$20", credit: "$21 credit", lines: ["5% extra credit", "Credits don't expire", "Email support"], cta: "Coming soon" },
   { name: "Builder", price: "$50", credit: "$53 credit", lines: ["6% extra credit", "Credits don't expire", "Priority email support", "For longer training runs"], cta: "Coming soon" },
 ];
 
 const FAQ = [
-  ["What can I run?", "Python and PyTorch on an NVIDIA GPU, from a browser terminal. JupyterLab is on the way. Gaming and full remote desktops aren't supported."],
+  ["What can I run?", "Python and PyTorch on an NVIDIA GPU, from a browser terminal. JupyterLab has a waitlist. Gaming and full remote desktops aren't supported."],
   ["How am I charged?", "The machine's hourly price, metered by the second while the instance runs, plus $0.0002 per GB of disk per hour. Instances stop automatically when your credits run out."],
   ["Can the provider see my work?", "Your job runs in an isolated container without access to the provider's files, but the provider owns the hardware. Don't upload secrets you can't afford to expose."],
   ["Is it live?", "It's a closed beta: some machines are listed, they go online and offline, and payments are in test mode."],
@@ -163,7 +163,7 @@ function Hero({ online }) {
         Run your AI code on real NVIDIA graphics cards in people's PCs. Pay by the second.
       </p>
       <div className="gx-hero-act">
-        <p className="gx-hero-fact"><b>$5</b> free credit to start{online != null && <> · {online} online now</>}</p>
+        <p className="gx-hero-fact"><b>$2</b> free credit to start{online != null && <> · {online} online now</>}</p>
         <Link to={ROUTES.waitlist} className="gx-link" {...ctaProps("hero_join_waitlist")}>Or join the waitlist</Link>
       </div>
     </section>
@@ -288,14 +288,14 @@ function Reply() {
       <div className="gx-card">
         <h2 id="gx-reply-h">Become a provider</h2>
         <p>Tell us about your hardware. We review every application and help you pair your PC.</p>
-        <Link to={ROUTES.apply} className="gx-card-btn" {...ctaProps("reply_apply_provider")}>Apply as a provider</Link>
+        <Link to={ROUTES.apply} className="gx-card-btn" {...ctaProps("reply_apply_provider")}>Start hosting</Link>
       </div>
       <details className="gx-credits">
         <summary>Photo credits</summary>
         Photographs via Wikimedia Commons: "2025 Wnętrze komputera PC" by Jacek Halicki (CC BY-SA 4.0);
         "MSI GeForce RTX 3070 VENTUS 3X OC" by TheStriker (CC BY 4.0); "Gaming-PC 20240426 HOF2514" and
         "Gigabyte GeForce RTX 3090 Eagle OC" by PantheraLeo1359531 (CC BY 4.0); "Charge" and "Sprite Fright" posters and Blender 3.0 splash by Blender Studio (CC BY 4.0);
-        Game screenshots via Wikimedia Commons: Veloren by Antimundo (CC0); 0 A.D. by Wildfire Games (CC BY-SA 3.0); SuperTuxKart by the SuperTuxKart contributors (CC BY 1.0, CC BY 3.0); Red Eclipse 2 by TucanHolmes (CC BY-SA 4.0); Luanti (Minetest) by cisoun (CC BY-SA 4.0); Unvanquished by the Unvanquished developers (CC BY-SA 2.5); OpenTTD by the OpenTTD contributors (CC BY-SA 4.0); Xonotic by OliwierJaszczyszyn (CC BY-SA 4.0); Battle for Wesnoth by the Wesnoth developers (CC BY-SA 3.0). Screenshots and app photo: Productify test, 19 Oct 2026.
+        Game screenshots via Wikimedia Commons: Veloren by Antimundo (CC0); 0 A.D. by Wildfire Games (CC BY-SA 3.0); SuperTuxKart by the SuperTuxKart contributors (CC BY 1.0, CC BY 3.0); Red Eclipse 2 by TucanHolmes (CC BY-SA 4.0); Luanti (Minetest) by cisoun (CC BY-SA 4.0); Unvanquished by the Unvanquished developers (CC BY-SA 2.5); OpenTTD by the OpenTTD contributors (GPLv2); Xonotic by OliwierJaszczyszyn (GPL); Battle for Wesnoth by the Wesnoth developers (CC BY-SA 3.0). Screenshots and app photo: Productify test, 19 Oct 2026.
       </details>
     </section>
   );
@@ -311,7 +311,7 @@ export default function Home() {
     <div className="gx">
       <SEO
         title="Productify — Rent a GPU by the hour · Earn with your hardware"
-        description="Run AI code on real NVIDIA GPUs in people's PCs, billed by the second, with $5 of free credit — or make your idle gaming GPU rentable. Closed beta."
+        description="Run AI code on real NVIDIA GPUs in people's PCs, billed by the second, with $2 of free credit — or make your idle gaming GPU rentable. Closed beta."
         path="/"
         jsonLd={{ "@context": "https://schema.org", "@type": "WebSite", name: "Productify", url: "https://www.productifynow.com" }}
       />

@@ -3718,10 +3718,10 @@ async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(
 
 # ---------- Credits & billing (one place for every way an instance ends) ----------
 MIN_CREDITS_TO_START = 0.50   # USD of credit needed to start or resume
-FREE_BETA_CREDITS = 5.00      # one-time free-tier credit per account (closed beta)
+FREE_BETA_CREDITS = 2.00      # one-time free-tier credit per account (closed beta)
 CREDIT_PLANS = [  # 1 credit = US$1. Paid packs are planned, not on sale (payments aren't live).
     {"id": "free", "name": "Free", "price_usd": 0, "credits": FREE_BETA_CREDITS, "bonus_pct": 0, "available": True,
-     "points": ["One-time $5 of credit per account", "About 10 hours on a $0.50/hr GPU", "PyTorch and Python environments"]},
+     "points": ["One-time $2 of credit per account", "About 4 hours on a $0.50/hr GPU", "PyTorch and Python environments"]},
     {"id": "starter", "name": "Starter", "price_usd": 20, "credits": 21, "bonus_pct": 5, "available": False,
      "points": ["$21 of credit for $20", "Credits don't expire", "Email support"]},
     {"id": "builder", "name": "Builder", "price_usd": 50, "credits": 53, "bonus_pct": 6, "available": False,

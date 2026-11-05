@@ -89,7 +89,7 @@ export default function GpuOnDemand() {
   if (!data?.enabled) return null;
   return (
     <section className="rental-section od-section" aria-labelledby="od-title">
-      <h2 id="od-title"><Cpu size={18} aria-hidden="true" /> GPU on demand</h2>
+      <h2 id="od-title"><Cpu size={18} aria-hidden="true" /> GPU on demand <span className="od-beta">Beta</span></h2>
       <p className="od-lead">Pick a class and the most you'll pay per hour. We find a partner machine and set it up for you.</p>
       <div className="od-grid">
         {data.classes.map((c) => (
