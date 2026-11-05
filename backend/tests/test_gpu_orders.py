@@ -145,6 +145,57 @@ class OrderTests(unittest.TestCase):
         self.assertEqual((saved["status"], saved["cost_accumulated"], saved["end_reason"]), ("terminated", 0.0, "no machine found"))
         self.assertEqual(sorted(self.destroyed), [9001, 9002])
 
+    def test_pages_work_before_a_price_exists(self):
+        inst = self.order().json()
+        self.assertEqual(self.c.get(f"/api/instances/{inst['id']}").status_code, 200)
+        self.assertEqual(self.c.get("/api/instances").status_code, 200)
+
+    def test_stop_while_finding_costs_nothing(self):
+        inst = self.order().json()
+        r = self.c.post(f"/api/instances/{inst['id']}/action", json={"action": "terminate"})
+        self.assertEqual((r.status_code, r.json()["cost_accumulated"]), (200, 0))
+        self.assertEqual(self.c.get("/api/instances").status_code, 200)
+
+    def test_stop_during_rent_is_not_undone(self):
+        inst = self.order().json()
+
+        def rent_then_stopped(offer_id, *a):
+            self.db.instances.rows[0]["status"] = "terminated"
+            return 9000 + offer_id
+        with mock.patch.object(vm, "rent", rent_then_stopped):
+            asyncio.run(server.order_worker(inst["id"], self.token()))
+        self.assertEqual(self.db.instances.rows[0]["status"], "terminated")
+        self.assertEqual(self.destroyed, [9001])
+
+    def test_taken_listings_do_not_use_up_tries(self):
+        vm.cache.pool = [row(i, price=0.05) for i in range(1, 7)]
+        self.fail_offers = {1, 2, 3, 4, 5}
+        inst = self.order().json()
+        self.hub.connected.add(inst["rental_id"])
+        with mock.patch.object(server, "ORDER_MAX_ATTEMPTS", 1):
+            asyncio.run(server.order_worker(inst["id"], self.token()))
+        self.assertEqual(self.db.instances.rows[0]["status"], "running")
+
+    def test_near_me_order_runs(self):
+        inst = self.order(near=True, country="IN").json()
+        self.hub.connected.add(inst["rental_id"])
+        asyncio.run(server.order_worker(inst["id"], self.token()))
+        self.assertEqual(self.db.instances.rows[0]["status"], "running")
+
+    def test_restart_closes_orders_without_charge(self):
+        inst = self.order().json()
+        self.db.instances.rows[0].update(status="starting", vast_instance_id=9001)
+
+        async def go():
+            with mock.patch.object(server, "spawn", lambda c: asyncio.ensure_future(c)):
+                await server.recover_partner_orders()
+                await asyncio.gather(*[t for t in asyncio.all_tasks() if t is not asyncio.current_task()], return_exceptions=True)
+        asyncio.run(go())
+        saved = self.db.instances.rows[0]
+        self.assertEqual((saved["id"], saved["status"], saved["cost_accumulated"]), (inst["id"], "terminated", 0.0))
+        self.assertEqual(self.destroyed, [9001])
+        self.assertEqual(self.db.users.rows[0]["compute_credits"], 5.0)
+
     def test_refusals(self):
         self.assertEqual(self.order(class_id="nope").status_code, 400)
         self.assertEqual(self.order(max_price=0.05).status_code, 409)   # nothing under the cap

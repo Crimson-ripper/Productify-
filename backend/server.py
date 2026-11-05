@@ -2871,7 +2871,7 @@ async def end_instance_on_machine(rental_id: str, inst_id: str, reason: str, end
                 started = started.replace(tzinfo=timezone.utc)
             delta = max(0, int((end - started).total_seconds()))
             total_sec += delta
-            cost += delta / 3600.0 * float(inst.get("hourly_price", 0.5))
+            cost += delta / 3600.0 * float(inst.get("hourly_price", 0.5) or 0)
         except Exception:
             pass
     # The container is already gone on the machine; don't ask it to destroy anything
@@ -3379,7 +3379,8 @@ async def destroy_partner_machine(inst: dict):
 # ---------- GPU on demand: renters order by requirements; we find and rent the machine ----------
 ORDER_TIMEOUT_S = 600          # give up (and charge nothing) after 10 minutes
 ORDER_HOST_TIMEOUT_S = 240     # a single host gets 4 minutes to start our agent
-ORDER_MAX_ATTEMPTS = 8
+ORDER_MAX_ATTEMPTS = 8         # machines actually rented and tried
+ORDER_MAX_TAKEN = 40           # listings that turned out to be gone (the list can be 30 minutes old)
 
 
 class GpuOrderInput(BaseModel):
@@ -3453,7 +3454,8 @@ async def _log(instance_id: str, msg: str, **fields):
     upd = {"$push": {"logs": f"[{now_iso[:19]}] {msg}"}}
     if fields:
         upd["$set"] = fields
-    await db.instances.update_one({"id": instance_id}, upd)
+    # Only while the order is live: a renter's stop must never be undone.
+    await db.instances.update_one({"id": instance_id, "status": {"$in": ["finding", "starting"]}}, upd)
 
 
 async def order_worker(instance_id: str, token: str):
@@ -3462,6 +3464,7 @@ async def order_worker(instance_id: str, token: str):
     if not inst:
         return
     rid, deadline, tried, vid = inst["rental_id"], time.time() + ORDER_TIMEOUT_S, set(), None
+    rented, taken = 0, 0
     origin = _origin(inst.get("country")) if inst.get("near") else None
     env = {"PFY_RENTAL_ID": rid, "PFY_TOKEN": token, "PFY_BACKEND": BACKEND_PUBLIC_URL}
     image = PARTNER_IMAGES.get(inst["template_id"], PARTNER_IMAGES["jupyter-pytorch"])
@@ -3481,7 +3484,7 @@ async def order_worker(instance_id: str, token: str):
             logger.warning(f"order {instance_id}: couldn't destroy {v}; the reaper will: {e}")
 
     try:
-        while time.time() < deadline and len(tried) < ORDER_MAX_ATTEMPTS:
+        while time.time() < deadline and rented < ORDER_MAX_ATTEMPTS and taken < ORDER_MAX_TAKEN:
             if not await still_wanted():
                 return
             pool = vast_market.cache.fresh_pool()
@@ -3496,9 +3499,13 @@ async def order_worker(instance_id: str, token: str):
                 vid = await asyncio.to_thread(vast_market.rent, row["offer_id"], image, inst["disk_size_gb"], env,
                                               PARTNER_ONSTART.format(url=AGENT_URL), f"pfy-{instance_id}")
             except Exception:
-                vid = None
+                vid, taken = None, taken + 1
                 await _log(instance_id, f"A {row['gpu']} was taken before we could rent it; trying another.")
                 continue
+            rented += 1
+            if not await still_wanted():  # stopped while we were renting
+                await drop(vid)
+                return
             await _log(instance_id, f"Rented a {row['gpu']} in {row['location'] or 'an unknown location'}; setting it up.",
                        status="starting", vast_instance_id=vid, gpu=row["gpu"], vram=row["vram"],
                        location=row["location"], specs=row.get("specs", {}), vast_cost=row["cost"],
@@ -3544,6 +3551,15 @@ async def order_worker(instance_id: str, token: str):
             await drop(vid)
 
 
+async def recover_partner_orders():
+    """Setup runs in memory, so a backend restart ends it: close those orders with no charge
+    (the renter can order again) and destroy any machine they had."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for inst in await db.instances.find({"kind": "partner", "status": {"$in": ["finding", "starting"]}}, {"_id": 0}).to_list(500):
+        logger.warning(f"closing partner order {inst['id']}: setup was interrupted by a restart")
+        await finish_instance(inst, 0, 0.0, now_iso, reason="setup interrupted, please order again")
+
+
 async def vast_reaper_loop():
     """Every 10 minutes destroy any Vast machine of ours that no running instance needs (no leaks)."""
     while True:
@@ -3577,7 +3593,7 @@ async def list_instances(as_host: bool = False, user=Depends(current_user)):
             except Exception:
                 pass
         inst["live_runtime_seconds"] = total_sec
-        inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
+        inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5) or 0), 4)
 
     return instances
 
@@ -3606,7 +3622,7 @@ async def get_instance(inst_id: str, user=Depends(current_user)):
             pass
 
     inst["live_runtime_seconds"] = total_sec
-    inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
+    inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5) or 0), 4)
 
     # No live GPU telemetry from the agent yet, so none is shown (honesty rule 2: no unmeasured numbers).
     inst["telemetry"] = None
@@ -3652,7 +3668,7 @@ async def instance_action(inst_id: str, data: InstanceActionInput, user=Depends(
                 started = started.replace(tzinfo=timezone.utc)
             delta_sec = max(0, int((now - started).total_seconds()))
             total_sec += delta_sec
-            accum_cost += (delta_sec / 3600.0) * float(inst.get("hourly_price", 0.5))
+            accum_cost += (delta_sec / 3600.0) * float(inst.get("hourly_price", 0.5) or 0)
         except Exception:
             pass
 
@@ -3750,12 +3766,12 @@ async def enforce_credit_limits():
                 started = started.replace(tzinfo=timezone.utc)
             delta = max(0, int((now - started).total_seconds()))
             total_sec = int(inst.get("total_runtime_seconds", 0)) + delta
-            cost = float(inst.get("cost_accumulated", 0.0)) + delta / 3600.0 * float(inst.get("hourly_price", 0.5))
+            cost = float(inst.get("cost_accumulated", 0.0)) + delta / 3600.0 * float(inst.get("hourly_price", 0.5) or 0)
             renter = await db.users.find_one({"id": inst.get("user_id")}) or {}
             if cost >= float(renter.get("compute_credits", 0.0)):
                 await finish_instance(inst, total_sec, cost, now.isoformat(), reason="credits ran out")
             elif not inst.get("low_credit_warned") and renter.get("email"):
-                rate = float(inst.get("hourly_price", 0.5)) or 0.5
+                rate = float(inst.get("hourly_price", 0.5) or 0) or 0.5
                 remaining = float(renter.get("compute_credits", 0.0)) - cost
                 minutes_left = int(remaining / rate * 60)
                 if minutes_left <= 10:
@@ -3973,7 +3989,7 @@ async def seller_nodes_telemetry(user=Depends(current_user)):
                 pass
             running_count += 1
         inst["live_runtime_seconds"] = total_sec
-        inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5)), 4)
+        inst["live_cost"] = round((total_sec / 3600.0) * float(inst.get("hourly_price", 0.5) or 0), 4)
         total_compute_hours += total_sec / 3600.0
         total_gross_earned += inst["live_cost"]
 
@@ -5107,6 +5123,7 @@ async def startup():
     asyncio.create_task(credit_limit_loop())
     asyncio.create_task(gpu_watch_loop())
     asyncio.create_task(vast_market.cache.loop())
+    asyncio.create_task(recover_partner_orders())
     asyncio.create_task(vast_reaper_loop())
 
 
