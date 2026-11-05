@@ -26,21 +26,59 @@ import SEO from "@/components/SEO";
 import TemplateIcon from "@/components/TemplateIcon";
 import { toast } from "sonner";
 
+const NEEDS_TORCH = `try:
+    import torch
+except ImportError:
+    raise SystemExit("PyTorch isn't installed here. Order the PyTorch environment, or run: pip install torch")
+if not torch.cuda.is_available():
+    raise SystemExit("PyTorch can't see a GPU on this machine.")
+`;
+
+// Every number these print is measured on the renter's machine when they run (CLAUDE.md §3 rule 2).
 const CODE_PRESETS = {
   matrix: {
     id: "matrix",
-    title: "Matrix Multiply Benchmark",
-    code: `import time\nprint("Initializing Matrix Multiply benchmark on GPU node...")\nt0 = time.time()\nsize = 1200\nprint(f"Allocating {size}x{size} compute tensor in memory...")\ngrid = [[(i * 3 + j) % 256 for j in range(size)] for i in range(10)]\ndur = time.time() - t0\nprint(f"✓ Matrix compute finished in {dur:.4f}s")\nprint(f"✓ Estimated speed: {size * size / dur / 1e6:.2f} M-ops/sec")\nprint("✓ All GPU streaming cores active and verified.")`,
+    title: "GPU matrix multiply",
+    code: `import time
+${NEEDS_TORCH}
+size = 4000
+a = torch.rand(size, size, device="cuda")
+b = torch.rand(size, size, device="cuda")
+torch.cuda.synchronize()
+t0 = time.time()
+c = a @ b
+torch.cuda.synchronize()
+print(f"GPU: {torch.cuda.get_device_name(0)}")
+print(f"Multiplied two {size}x{size} matrices in {time.time() - t0:.4f}s")`,
   },
   system: {
     id: "system",
-    title: "System & CUDA Probe",
-    code: `import sys, platform, os\nprint("=" * 45)\nprint(" PRODUCTIFY NODE HARDWARE & RUNTIME REPORT")\nprint("=" * 45)\nprint(f"OS Platform : {platform.system()} {platform.release()} ({platform.machine()})")\nprint(f"Python Exec : {sys.version.split()[0]} ({sys.executable})")\nprint(f"CPU Threads : {os.cpu_count()} logical cores")\nprint(f"Process PID : {os.getpid()}")\nprint("CUDA Driver : Hardware bridge active (12.4 runtime)")\nprint("Status      : READY FOR WORKLOADS")`,
+    title: "System & GPU info",
+    code: `import os, platform, subprocess, sys
+print(f"OS:      {platform.system()} {platform.release()} ({platform.machine()})")
+print(f"Python:  {sys.version.split()[0]}")
+print(f"CPU:     {os.cpu_count()} logical cores")
+r = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"], capture_output=True, text=True)
+print(f"GPU:     {r.stdout.strip() or 'none found'}")
+try:
+    import torch
+    print(f"PyTorch: {torch.__version__}, can use GPU: {torch.cuda.is_available()}")
+except ImportError:
+    print("PyTorch: not installed")`,
   },
   vram: {
     id: "vram",
-    title: "VRAM Memory Buffer",
-    code: `import time\nprint("Probing dedicated GPU node scratch buffer...")\nt0 = time.time()\nbuf_mb = 64\ndata = bytearray(buf_mb * 1024 * 1024)\nfor i in range(0, len(data), 1024 * 1024):\n    data[i] = 255\ndt = time.time() - t0\nprint(f"✓ Allocated {buf_mb} MB high-speed memory buffer")\nprint(f"✓ Transfer rate: {buf_mb / dt:.1f} MB/s in {dt:.4f}s")\nprint("✓ VRAM memory allocation verified clean.")`,
+    title: "GPU memory test",
+    code: `import time
+${NEEDS_TORCH}
+gb = 1
+t0 = time.time()
+x = torch.ones(gb * 1024 ** 3, dtype=torch.uint8, device="cuda")
+torch.cuda.synchronize()
+print(f"Filled {gb} GB of GPU memory in {time.time() - t0:.4f}s")
+print(f"Allocated: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB of {torch.cuda.get_device_properties(0).total_memory / 1024 ** 3:.1f} GB")
+del x
+torch.cuda.empty_cache()`,
   },
 };
 
@@ -370,7 +408,7 @@ export default function InstanceDetail() {
                   {instance.status.toUpperCase()}
                 </span>
 
-                {instance.tunnel_connected ? (
+                {instance.status === "terminated" ? null : instance.tunnel_connected ? (
                   <span
                     style={{
                       display: "inline-flex",
@@ -452,8 +490,8 @@ export default function InstanceDetail() {
                   padding: "10px 18px",
                   fontSize: "0.85rem",
                   fontWeight: 700,
-                  background: "var(--ix-bad-bg)",
-                  color: "var(--danger)",
+                  background: "#c0392b",
+                  color: "#ffffff",
                   border: "0",
                   borderRadius: 0,
                   cursor: "pointer",
@@ -513,8 +551,8 @@ export default function InstanceDetail() {
             <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-fg2)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono, monospace)" }}>
               <Server size={15} /> Machine connection
             </div>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: instance.tunnel_connected ? "var(--ok)" : "var(--danger)", margin: "10px 0 4px" }}>
-              {instance.tunnel_connected ? "Connected" : "Machine offline"}
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: instance.status === "terminated" ? "var(--ix-fg2)" : instance.tunnel_connected ? "var(--ok)" : "var(--danger)", margin: "10px 0 4px" }}>
+              {instance.status === "terminated" ? "Ended" : instance.tunnel_connected ? "Connected" : "Machine offline"}
             </div>
             <span style={{ fontSize: "0.75rem", color: "var(--ix-fg2)" }}>
               Disk: {instance.disk_size_gb} GB
@@ -542,24 +580,23 @@ export default function InstanceDetail() {
               How to connect
             </div>
             <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--on-ink-muted)", maxWidth: 520 }}>
-              Use the browser terminal below to run Python and PyTorch commands in your container. SSH isn't available yet, and JupyterLab has a <a href="/waitlist" style={{ color: "inherit", textDecoration: "underline" }}>waitlist</a>.
+              {instance.status === "terminated"
+                ? "This instance has ended and its files were deleted, so there's nothing to connect to."
+                : <>Use the browser terminal below to run Python and PyTorch commands in your container. SSH isn't available yet, and JupyterLab has a <a href="/waitlist" style={{ color: "inherit", textDecoration: "underline" }}>waitlist</a>.</>}
             </p>
           </div>
 
-          <div>
+          {instance.status !== "terminated" && <div>
             <button
               type="button"
-              onClick={() => {
-                setActiveTab("workspace");
-                toast.success(`Switched to in-browser ${instance.service_name} view below!`);
-              }}
+              onClick={() => setActiveTab("terminal")}
               className="primary-button"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "8px",
                 background: "var(--lime, #c8f04c)",
-                color: "var(--ix-fg)",
+                color: "#0a0a0b",
                 padding: "10px 20px",
                 fontSize: "0.85rem",
                 fontWeight: 800,
@@ -568,7 +605,7 @@ export default function InstanceDetail() {
             >
               <ExternalLink size={15} /> Open browser terminal
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* Security, Isolation & Ephemeral Wipe Shield */}
@@ -600,7 +637,7 @@ export default function InstanceDetail() {
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.76rem", color: "var(--ix-ok)", fontFamily: "var(--font-mono, monospace)" }}>
             <span style={{ background: "var(--ix-ok-bg)", padding: "4px 8px", borderRadius: 0, border: "0", fontWeight: 600 }}>
-              {instance.tunnel_connected ? "MACHINE: ONLINE" : "MACHINE: OFFLINE"}
+              {instance.status === "terminated" ? "MACHINE: RELEASED" : instance.tunnel_connected ? "MACHINE: ONLINE" : "MACHINE: OFFLINE"}
             </span>
             {instance.host_meta?.docker_available && (
               <span style={{ background: "var(--ix-ok-bg)", padding: "4px 8px", borderRadius: 0, border: "0", fontWeight: 600 }}>
@@ -620,8 +657,9 @@ export default function InstanceDetail() {
               style={{
                 padding: "14px 22px",
                 border: "none",
-                background: activeTab === "terminal" ? "#ffffff" : "transparent",
-                borderBottom: activeTab === "terminal" ? "2px solid var(--ink, #101112)" : "none",
+                background: activeTab === "terminal" ? "var(--lime)" : "transparent",
+                color: activeTab === "terminal" ? "#0a0a0b" : "var(--ix-fg)",
+                borderBottom: "none",
                 fontWeight: activeTab === "terminal" ? 700 : 500,
                 fontSize: "0.88rem",
                 cursor: "pointer",
@@ -630,7 +668,7 @@ export default function InstanceDetail() {
                 gap: "8px",
               }}
             >
-              <Terminal size={16} /> Container Logs & Startup
+              <Terminal size={16} /> Browser terminal & logs
             </button>
 
             <button
@@ -639,8 +677,9 @@ export default function InstanceDetail() {
               style={{
                 padding: "14px 22px",
                 border: "none",
-                background: activeTab === "workspace" ? "#ffffff" : "transparent",
-                borderBottom: activeTab === "workspace" ? "2px solid var(--ink, #101112)" : "none",
+                background: activeTab === "workspace" ? "var(--lime)" : "transparent",
+                color: activeTab === "workspace" ? "#0a0a0b" : "var(--ix-fg)",
+                borderBottom: "none",
                 fontWeight: activeTab === "workspace" ? 700 : 500,
                 fontSize: "0.88rem",
                 cursor: "pointer",
@@ -649,7 +688,7 @@ export default function InstanceDetail() {
                 gap: "8px",
               }}
             >
-              <Code2 size={16} /> In-Browser {instance.service_name} Workspace
+              <Code2 size={16} /> Python workspace
             </button>
 
             <button
@@ -658,8 +697,9 @@ export default function InstanceDetail() {
               style={{
                 padding: "14px 22px",
                 border: "none",
-                background: activeTab === "specs" ? "#ffffff" : "transparent",
-                borderBottom: activeTab === "specs" ? "2px solid var(--ink, #101112)" : "none",
+                background: activeTab === "specs" ? "var(--lime)" : "transparent",
+                color: activeTab === "specs" ? "#0a0a0b" : "var(--ix-fg)",
+                borderBottom: "none",
                 fontWeight: activeTab === "specs" ? 700 : 500,
                 fontSize: "0.88rem",
                 cursor: "pointer",
@@ -674,7 +714,7 @@ export default function InstanceDetail() {
 
           {/* TAB 1: Terminal & Interactive Container Shell */}
           {activeTab === "terminal" && (
-            <div style={{ background: "#0c0e12", color: "#e2e8f0", padding: "20px", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.6, minHeight: "440px" }}>
+            <div className="ix-code" style={{ background: "#0c0e12", color: "#e2e8f0", padding: "20px", fontFamily: "ui-monospace, Consolas, 'Courier New', monospace", fontSize: "0.82rem", lineHeight: 1.6, minHeight: "440px" }}>
               {/* Header Bar */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1e2430", paddingBottom: "10px", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--ix-fg2)", fontSize: "0.78rem" }}>
@@ -695,11 +735,11 @@ export default function InstanceDetail() {
 
               {/* Startup Logs Stream */}
               {Array.isArray(instance.logs) && instance.logs.length > 0 && (
-                <div style={{ marginBottom: "14px", opacity: 0.85, borderLeft: "2px solid #334155", paddingLeft: "10px" }}>
+                <div style={{ marginBottom: "14px", borderLeft: "2px solid #334155", paddingLeft: "10px" }}>
                   {instance.logs.slice(-10).map((log, idx) => (
                     <div key={idx} style={{ marginBottom: "2px", fontSize: "0.78rem" }}>
                       <span style={{ color: "var(--ix-fg2)" }}>{log.split("]")[0]}]</span>
-                      <span style={{ color: log.includes("healthy") || log.includes("registered") ? "var(--ok)" : log.includes("service") ? "var(--violet)" : "var(--muted)" }}>
+                      <span style={{ color: log.includes("healthy") || log.includes("registered") ? "var(--ok)" : "var(--ix-fg)" }}>
                         {log.substring(log.indexOf("]") + 1)}
                       </span>
                     </div>
@@ -726,12 +766,12 @@ export default function InstanceDetail() {
                     {line.type === "output" && (
                       <div style={{ marginTop: "4px" }}>
                         {line.stdout && (
-                          <pre style={{ margin: 0, color: "var(--ix-ok)", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.80rem" }}>
+                          <pre style={{ margin: 0, color: "var(--ix-ok)", whiteSpace: "pre", overflowX: "auto", fontFamily: "inherit", fontSize: "0.80rem" }}>
                             {line.stdout}
                           </pre>
                         )}
                         {line.stderr && (
-                          <pre style={{ margin: 0, color: "var(--danger)", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.80rem" }}>
+                          <pre style={{ margin: 0, color: "var(--danger)", whiteSpace: "pre", overflowX: "auto", fontFamily: "inherit", fontSize: "0.80rem" }}>
                             {line.stderr}
                           </pre>
                         )}
@@ -865,7 +905,7 @@ export default function InstanceDetail() {
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: 700, color: "var(--ix-fg)" }}>
                     <Sparkles size={16} color="var(--ok)" />
-                    <span>In-Browser GPU Execution Engine</span>
+                    <span>Python workspace</span>
                   </div>
                   <span style={{ fontSize: "0.74rem", background: "var(--ix-ok-bg)", color: "var(--ix-ok)", padding: "2px 8px", borderRadius: "100px", fontWeight: 600, border: "1px solid #a7f3d0" }}>
                     Node: {instance.gpu} ({instance.vram})
@@ -936,10 +976,9 @@ export default function InstanceDetail() {
                           borderRadius: 0,
                           fontSize: "0.82rem",
                           fontWeight: selectedPreset === preset.id ? 700 : 500,
-                          background: selectedPreset === preset.id ? "#181a1b" : "#f1f3f5",
-                          color: selectedPreset === preset.id ? "#ffffff" : "var(--ink, #101112)",
-                          border: "1px solid",
-                          borderColor: selectedPreset === preset.id ? "#181a1b" : "#e2e8f0",
+                          background: selectedPreset === preset.id ? "var(--lime)" : "#26282b",
+                          color: selectedPreset === preset.id ? "#0a0a0b" : "var(--ix-fg)",
+                          border: "0",
                           cursor: "pointer",
                           display: "inline-flex",
                           alignItems: "center",
@@ -960,7 +999,7 @@ export default function InstanceDetail() {
                       <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--danger)", display: "inline-block" }} />
                       <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#a56b1a", display: "inline-block" }} />
                       <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--ok)", display: "inline-block" }} />
-                      <span style={{ marginLeft: "6px", color: "#cbd5e1", fontWeight: 600 }}>run.py (Python 3.11 · Host Worker)</span>
+                      <span style={{ marginLeft: "6px", color: "#cbd5e1", fontWeight: 600 }}>run.py</span>
                     </div>
                     <span>Press Shift + Enter to run</span>
                   </div>
@@ -985,7 +1024,7 @@ export default function InstanceDetail() {
                       border: "none",
                       outline: "none",
                       resize: "vertical",
-                      fontFamily: "var(--font-mono, monospace)",
+                      fontFamily: "ui-monospace, Consolas, 'Courier New', monospace",
                       fontSize: "0.85rem",
                       lineHeight: 1.5,
                       boxSizing: "border-box",
@@ -995,7 +1034,7 @@ export default function InstanceDetail() {
                   {/* Editor Actions Footer */}
                   <div style={{ background: "#1a1b1d", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                     <div style={{ fontSize: "0.76rem", color: "var(--ix-fg2)" }}>
-                      Executed securely inside host container on <b>{instance.gpu}</b>
+                      Runs in your container on <b>{instance.gpu}</b>. Code uses the GPU only if it asks for it.
                     </div>
 
                     <div style={{ display: "flex", gap: "8px" }}>
@@ -1019,7 +1058,7 @@ export default function InstanceDetail() {
                         }}
                       >
                         {codeExecuting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
-                        {codeExecuting ? "Executing Workload..." : "▶ Run Code on GPU"}
+                        {codeExecuting ? "Running..." : "Run code"}
                       </button>
                     </div>
                   </div>
@@ -1029,9 +1068,9 @@ export default function InstanceDetail() {
                 <div style={{ border: "0", borderRadius: 0, overflow: "hidden", background: "#0a0d12" }}>
                   <div style={{ background: "#161b22", padding: "10px 16px", borderBottom: "1px solid #21262d", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Terminal size={14} color="var(--violet)" />
+                      <Terminal size={14} color="var(--ix-ok)" />
                       <span style={{ fontSize: "0.80rem", fontWeight: 700, color: "#f0f6fc", fontFamily: "var(--font-mono, monospace)" }}>
-                        Node Live Execution Console
+                        Output
                       </span>
                     </div>
 
@@ -1064,21 +1103,21 @@ export default function InstanceDetail() {
                     )}
                   </div>
 
-                  <div style={{ padding: "16px", minHeight: "140px", maxHeight: "280px", overflowY: "auto", fontFamily: "var(--font-mono, monospace)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                  <div className="ix-code" style={{ padding: "16px", minHeight: "140px", maxHeight: "280px", overflowY: "auto", fontFamily: "ui-monospace, Consolas, 'Courier New', monospace", fontSize: "0.82rem", lineHeight: 1.5 }}>
                     {codeOutput?.status === "running" ? (
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--lime)", padding: "20px 0" }}>
                         <Loader2 size={16} className="animate-spin" />
-                        <span>Sending job to GPU node container & executing Python runtime...</span>
+                        <span>Running your code...</span>
                       </div>
                     ) : codeOutput ? (
                       <>
                         {codeOutput.stdout && (
-                          <pre style={{ margin: 0, color: "var(--ix-ok)", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                          <pre style={{ margin: 0, color: "var(--ix-ok)", whiteSpace: "pre", overflowX: "auto", fontFamily: "inherit" }}>
                             {codeOutput.stdout}
                           </pre>
                         )}
                         {codeOutput.stderr && (
-                          <pre style={{ margin: 0, color: "var(--danger)", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                          <pre style={{ margin: 0, color: "var(--danger)", whiteSpace: "pre", overflowX: "auto", fontFamily: "inherit" }}>
                             {codeOutput.stderr}
                           </pre>
                         )}
@@ -1090,7 +1129,7 @@ export default function InstanceDetail() {
                       </>
                     ) : (
                       <div style={{ color: "var(--ix-fg2)", fontStyle: "italic", padding: "20px 0", textAlign: "center" }}>
-                        Click "▶ Run Code on GPU" or press Shift + Enter to run this workload on {instance.gpu}.
+                        Click "Run code" or press Shift + Enter to run this workload on {instance.gpu}.
                       </div>
                     )}
                   </div>
