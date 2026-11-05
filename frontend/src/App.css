@@ -2063,3 +2063,9 @@ header.topbar,.footer-grid{border:0!important}
 .od-note{font-size:13px;line-height:1.5;color:var(--x-fg2,#b9bbb5);margin:0}
 .od-err{color:#ff8a7a;margin:0}
 .od-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+
+/* Compute credit balance (rentals page and profile) */
+.credit-balance{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:16px 0;padding:12px 16px;background:var(--x-card,#1b1c1a);color:var(--x-fg,#f4f4ef);font-size:15px;line-height:1.4}
+.credit-balance b{color:var(--lime);font-size:18px}
+.credit-balance small{color:var(--x-fg2,#b9bbb5);font-size:13px}
+.credit-balance a{color:var(--lime);text-decoration:underline;font-size:14px;margin-left:auto}
