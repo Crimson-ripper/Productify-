@@ -231,7 +231,7 @@ export default function MyInstances() {
                       {formatRuntime(inst.live_runtime_seconds || 0)} · <span style={{ color: "var(--ok)" }}>${(inst.live_cost || 0).toFixed(4)}</span>
                     </div>
                     <div style={{ fontSize: "0.75rem", color: "#888" }}>
-                      {money(inst.hourly_price)}/hr · {inst.disk_size_gb}GB NVMe
+                      {inst.hourly_price == null ? "Price shown when ready" : `${money(inst.hourly_price)}/hr`} · {inst.disk_size_gb}GB NVMe
                     </div>
                   </div>
 

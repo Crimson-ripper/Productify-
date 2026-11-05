@@ -419,6 +419,9 @@ export default function InstanceDetail() {
 
           {/* Action Buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {instance.status === "terminated" && instance.kind === "partner" && !instance.started_at && (
+              <p className="ix-starting" role="status">This order didn't start{instance.end_reason ? `: ${instance.end_reason}` : ""}. You haven't been charged. <Link to="/rentals">Order again</Link></p>
+            )}
             {instance.status === "finding" && (
               <p className="ix-starting" role="status">Finding a machine at or under {money(instance.max_price)}/h… this page updates by itself. You see the exact price once it's ready, and billing starts only then. If nothing starts within 10 minutes the order is cancelled and you aren't charged.</p>
             )}
