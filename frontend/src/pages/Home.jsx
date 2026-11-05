@@ -115,7 +115,7 @@ const SPEC = [
 ];
 
 const PLANS = [
-  { name: "Free", price: "$0", credit: "$5 credit, once", lines: ["About 10 hours on a $0.50/hr GPU", "PyTorch and Python environments"], cta: "Claim it on the pricing page", to: ROUTES.pricing, live: true },
+  { name: "Free", price: "$0", credit: "$2 credit, once", lines: ["About 4 hours on a $0.50/hr GPU", "PyTorch and Python environments"], cta: "Claim it on the pricing page", to: ROUTES.pricing, live: true },
   { name: "Starter", price: "$20", credit: "$21 credit", lines: ["5% extra credit", "Credits don't expire", "Email support"], cta: "Coming soon" },
   { name: "Builder", price: "$50", credit: "$53 credit", lines: ["6% extra credit", "Credits don't expire", "Priority email support", "For longer training runs"], cta: "Coming soon" },
 ];
@@ -163,7 +163,7 @@ function Hero({ online }) {
         Run your AI code on real NVIDIA graphics cards in people's PCs. Pay by the second.
       </p>
       <div className="gx-hero-act">
-        <p className="gx-hero-fact"><b>$5</b> free credit to start{online != null && <> · {online} online now</>}</p>
+        <p className="gx-hero-fact"><b>$2</b> free credit to start{online != null && <> · {online} online now</>}</p>
         <Link to={ROUTES.waitlist} className="gx-link" {...ctaProps("hero_join_waitlist")}>Or join the waitlist</Link>
       </div>
     </section>
@@ -311,7 +311,7 @@ export default function Home() {
     <div className="gx">
       <SEO
         title="Productify — Rent a GPU by the hour · Earn with your hardware"
-        description="Run AI code on real NVIDIA GPUs in people's PCs, billed by the second, with $5 of free credit — or make your idle gaming GPU rentable. Closed beta."
+        description="Run AI code on real NVIDIA GPUs in people's PCs, billed by the second, with $2 of free credit — or make your idle gaming GPU rentable. Closed beta."
         path="/"
         jsonLd={{ "@context": "https://schema.org", "@type": "WebSite", name: "Productify", url: "https://www.productifynow.com" }}
       />
