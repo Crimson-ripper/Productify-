@@ -25,7 +25,7 @@ export default function CreditBalance() {
       <span>Credit balance</span>
       <b>{money(credits)}</b>
       <small>Running instances are charged when they stop.</small>
-      <Link to="/dashboard">Manage credits</Link>
+      <Link to="/pricing">Get credits</Link>
     </div>
   );
 }
