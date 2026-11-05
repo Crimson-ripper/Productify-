@@ -196,6 +196,22 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(self.destroyed, [9001])
         self.assertEqual(self.db.users.rows[0]["compute_credits"], 5.0)
 
+    def test_real_rate_raises_price_but_never_above_cap(self):
+        inst = self.order().json()   # cap 0.12; the first listing is 0.09
+        self.hub.connected.add(inst["rental_id"])
+        self.statuses[9001] = {"actual_status": "running", "dph_total": 0.05}   # 0.05 x 2.05 = 0.1025 -> 0.11
+        asyncio.run(server.order_worker(inst["id"], self.token()))
+        self.assertEqual(self.db.instances.rows[0]["hourly_price"], 0.11)
+
+    def test_real_rate_over_cap_keeps_machine_at_cap(self):
+        inst = self.order().json()
+        self.hub.connected.add(inst["rental_id"])
+        self.statuses[9001] = {"actual_status": "running", "dph_total": 0.5}
+        asyncio.run(server.order_worker(inst["id"], self.token()))
+        saved = self.db.instances.rows[0]
+        self.assertEqual((saved["status"], saved["hourly_price"]), ("running", 0.12))
+        self.assertEqual(self.destroyed, [])
+
     def test_refusals(self):
         self.assertEqual(self.order(class_id="nope").status_code, 400)
         self.assertEqual(self.order(max_price=0.05).status_code, 409)   # nothing under the cap

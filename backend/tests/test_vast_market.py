@@ -18,7 +18,7 @@ def offer(i, gpu="RTX 4090", vram=24576, price=0.40, **kw):
 
 class CurateTests(unittest.TestCase):
     def test_filters_and_markup(self):
-        with mock.patch.dict(os.environ, {"VAST_MARKUP": "1.5"}):  # above the 1.45 floor
+        with mock.patch.dict(os.environ, {"VAST_MARKUP": "2.5"}):  # above the 2.05 floor
             rows = vm.curate([
                 offer(1),
                 offer(2, vram=4096),                  # too little VRAM
@@ -30,7 +30,7 @@ class CurateTests(unittest.TestCase):
             ])
         self.assertEqual([r["offer_id"] for r in rows], [1])
         r = rows[0]
-        self.assertEqual((r["id"], r["price"], r["vram"], r["provider"], r["availability"]), ("vast-1", 0.6, "24 GB", "vast", "available"))
+        self.assertEqual((r["id"], r["price"], r["vram"], r["provider"], r["availability"]), ("vast-1", 1.0, "24 GB", "vast", "available"))
         self.assertTrue(r["partner"])
 
     def test_cheapest_few_per_model(self):
@@ -41,12 +41,19 @@ class CurateTests(unittest.TestCase):
         self.assertEqual(by["RTX 4090"], [1, 2, 3])
         self.assertEqual(by["RTX 3090"], [99])
 
-    def test_markup_at_least_45_percent(self):
-        for v in ("0.5", "1.2", "abc", ""):
+    def test_markup_at_least_105_percent(self):
+        for v in ("0.5", "1.45", "abc", ""):
             with mock.patch.dict(os.environ, {"VAST_MARKUP": v}):
-                self.assertEqual(vm.markup(), 1.45, v)
-        with mock.patch.dict(os.environ, {"VAST_MARKUP": "1.6"}):
-            self.assertEqual(vm.markup(), 1.6)
+                self.assertEqual(vm.markup(), 2.05, v)
+        with mock.patch.dict(os.environ, {"VAST_MARKUP": "2.2"}):
+            self.assertEqual(vm.markup(), 2.2)
+
+    def test_price_uses_our_disk_and_rounds_up(self):
+        # The RTX 4070 we rented: $0.12 GPU + $0.2667/GB/month x 40 GB = $0.1348/h, x 2.05 = $0.2764
+        o = offer(1, price=0.123, dph_base=0.12, storage_cost=0.26666666)
+        self.assertAlmostEqual(vm.real_cost(o), 0.13481, places=4)
+        self.assertEqual(vm.curate([o])[0]["price"], 0.28)
+        self.assertEqual(vm.renter_price(0.2), 0.41)  # exactly 0.41 stays 0.41
 
     def test_cache_goes_stale(self):
         c = vm.OfferCache()
