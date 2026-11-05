@@ -3,6 +3,7 @@ import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import ImageUpload from "@/components/ImageUpload";
 import SEO from "@/components/SEO";
+import CreditBalance from "@/components/CreditBalance";
 import { toast } from "sonner";
 
 export default function Profile() {
@@ -35,6 +36,7 @@ export default function Profile() {
         <div className="eyebrow"><span className="eyebrow-line" /> ACCOUNT</div>
         <h1>Your profile<em>.</em></h1>
         <p className="subtitle">Signed in as {user?.email} · role: {user?.role}</p>
+        <CreditBalance />
 
         <form className="profile-form" onSubmit={save}>
           <div className="avatar-row">
