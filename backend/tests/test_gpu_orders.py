@@ -4,6 +4,7 @@ import asyncio
 import os
 import time
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:1")
@@ -211,6 +212,42 @@ class OrderTests(unittest.TestCase):
         saved = self.db.instances.rows[0]
         self.assertEqual((saved["status"], saved["hourly_price"]), ("running", 0.12))
         self.assertEqual(self.destroyed, [])
+
+    def _running(self, iid, cost):
+        self.db.instances.rows.append({"id": iid, "user_id": "u1", "status": "running", "kind": "node",
+                                       "started_at": datetime.now(timezone.utc).isoformat(), "hourly_price": 0.2,
+                                       "total_runtime_seconds": 0, "cost_accumulated": cost})
+
+    def test_balance_limits_all_machines_together(self):
+        self.db.users.rows[0]["compute_credits"] = 2.0
+        self._running("a", 1.2)
+        self._running("b", 1.2)     # each is under $2, together over it
+        asyncio.run(server.enforce_credit_limits())
+        self.assertEqual([i["status"] for i in self.db.instances.rows], ["terminated", "terminated"])
+
+    def test_machines_under_balance_keep_running(self):
+        self.db.users.rows[0]["compute_credits"] = 5.0
+        self._running("a", 1.0)
+        self._running("b", 1.0)
+        asyncio.run(server.enforce_credit_limits())
+        self.assertEqual([i["status"] for i in self.db.instances.rows], ["running", "running"])
+
+    def test_new_order_counts_running_usage(self):
+        self.db.users.rows[0]["compute_credits"] = 2.0
+        self._running("a", 1.8)     # only $0.20 of the $2 is left
+        self.assertEqual(self.order().status_code, 402)
+
+    def _claim_as(self, **fields):
+        self.db.users.rows[0].pop("free_credits_claimed_at", None)
+        server.app.dependency_overrides[server.current_user] = lambda: {"id": "u1", **fields}
+        return self.c.post("/api/credits/claim-free")
+
+    def test_free_credit_needs_verified_email(self):
+        self.assertEqual(self._claim_as(password_hash="x", email_verified=False).status_code, 403)
+        self.assertEqual(self.db.users.rows[0]["compute_credits"], 5.0)
+        r = self._claim_as(password_hash="x", email_verified=True)
+        self.assertEqual((r.status_code, r.json()["added"]), (200, 2.0))
+        self.assertEqual(self._claim_as().status_code, 200)     # Google sign-in has no password
 
     def test_refusals(self):
         self.assertEqual(self.order(class_id="nope").status_code, 400)

@@ -3182,7 +3182,7 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
     if await db.instances.find_one({"rental_id": rental["id"], "status": {"$in": ["running", "paused"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "This machine is in use by another renter. Try another machine, or try again later.")
     renter = await db.users.find_one({"id": user["id"]}) or {}
-    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+    if await spendable_credits(user["id"]) < MIN_CREDITS_TO_START:
         raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
     try:
         pod_res = await host_tunnel_manager.send_rpc(
@@ -3293,7 +3293,7 @@ async def deploy_partner(data: InstanceDeployInput, user):
     if not row:
         raise HTTPException(409, "This partner machine was just rented by someone else. Pick another one.")
     renter = await db.users.find_one({"id": user["id"]}) or {}
-    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+    if await spendable_credits(user["id"]) < MIN_CREDITS_TO_START:
         raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
     if await db.instances.find_one({"user_id": user["id"], "status": "starting"}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "You already have a machine starting. Wait for it to finish starting first.")
@@ -3419,7 +3419,7 @@ async def order_gpu(data: GpuOrderInput, user=Depends(current_user)):
     if not cls:
         raise HTTPException(400, "Unknown GPU class")
     renter = await db.users.find_one({"id": user["id"]}) or {}
-    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+    if await spendable_credits(user["id"]) < MIN_CREDITS_TO_START:
         raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
     if await db.instances.find_one({"user_id": user["id"], "status": {"$in": ["finding", "starting"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "You already have a GPU being set up. Wait for it to be ready first.")
@@ -3768,30 +3768,53 @@ async def finish_instance(inst: dict, total_sec: int, accum_cost: float, now_iso
     return final_cost
 
 
+def _live_usage(inst: dict, now: datetime):
+    """(total seconds, total cost) of an instance so far, including the current running stretch."""
+    total_sec, cost = int(inst.get("total_runtime_seconds", 0)), float(inst.get("cost_accumulated", 0.0))
+    if inst.get("status") == "running" and inst.get("started_at"):
+        started = datetime.fromisoformat(inst["started_at"])
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        delta = max(0, int((now - started).total_seconds()))
+        total_sec += delta
+        cost += delta / 3600.0 * float(inst.get("hourly_price", 0.5) or 0)
+    return total_sec, cost
+
+
+async def spendable_credits(user_id: str) -> float:
+    """Balance minus what the renter's running instances have used (charged only when they stop)."""
+    renter = await db.users.find_one({"id": user_id}) or {}
+    now = datetime.now(timezone.utc)
+    running = await db.instances.find({"user_id": user_id, "status": "running"}, {"_id": 0}).to_list(100)
+    return float(renter.get("compute_credits", 0.0)) - sum(_live_usage(i, now)[1] for i in running)
+
+
 async def enforce_credit_limits():
-    """Stop running instances whose cost has reached the renter's credit balance."""
+    """Stop a renter's running instances once together they've used up the renter's balance."""
     now = datetime.now(timezone.utc)
     running = await db.instances.find({"status": "running"}, {"_id": 0}).to_list(1000)
+    by_user = {}
     for inst in running:
+        by_user.setdefault(inst.get("user_id"), []).append(inst)
+    for user_id, insts in by_user.items():
         try:
-            started = datetime.fromisoformat(inst["started_at"])
-            if started.tzinfo is None:
-                started = started.replace(tzinfo=timezone.utc)
-            delta = max(0, int((now - started).total_seconds()))
-            total_sec = int(inst.get("total_runtime_seconds", 0)) + delta
-            cost = float(inst.get("cost_accumulated", 0.0)) + delta / 3600.0 * float(inst.get("hourly_price", 0.5) or 0)
-            renter = await db.users.find_one({"id": inst.get("user_id")}) or {}
-            if cost >= float(renter.get("compute_credits", 0.0)):
-                await finish_instance(inst, total_sec, cost, now.isoformat(), reason="credits ran out")
-            elif not inst.get("low_credit_warned") and renter.get("email"):
-                rate = float(inst.get("hourly_price", 0.5) or 0) or 0.5
-                remaining = float(renter.get("compute_credits", 0.0)) - cost
+            usage = {i["id"]: _live_usage(i, now) for i in insts}
+            used = sum(cost for _, cost in usage.values())
+            renter = await db.users.find_one({"id": user_id}) or {}
+            remaining = float(renter.get("compute_credits", 0.0)) - used
+            if remaining <= 0:
+                for inst in insts:
+                    await finish_instance(inst, usage[inst["id"]][0], usage[inst["id"]][1], now.isoformat(), reason="credits ran out")
+            elif renter.get("email"):
+                rate = sum(float(i.get("hourly_price", 0.5) or 0) for i in insts) or 0.5
                 minutes_left = int(remaining / rate * 60)
-                if minutes_left <= 10:
-                    await db.instances.update_one({"id": inst["id"]}, {"$set": {"low_credit_warned": True}})
+                unwarned = [i for i in insts if not i.get("low_credit_warned")]
+                if minutes_left <= 10 and unwarned:
+                    for inst in unwarned:
+                        await db.instances.update_one({"id": inst["id"]}, {"$set": {"low_credit_warned": True}})
                     spawn(emailer.credits_low(renter["email"], renter.get("name", "there"), remaining, max(minutes_left, 0)))
         except Exception as e:
-            logger.warning(f"credit check failed for {inst.get('id')}: {e}")
+            logger.warning(f"credit check failed for {user_id}: {e}")
 
 
 async def credit_limit_loop():
@@ -3863,7 +3886,7 @@ async def start_node_game_session(data: GameSessionInput, user=Depends(current_u
     if await db.instances.find_one({"rental_id": rental["id"], "status": {"$in": ["running", "paused"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "This machine is in use by another renter. Try another machine, or try again later.")
     renter = await db.users.find_one({"id": user["id"]}) or {}
-    if float(renter.get("compute_credits", 0.0)) < MIN_CREDITS_TO_START:
+    if await spendable_credits(user["id"]) < MIN_CREDITS_TO_START:
         raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of credits to start a session.")
 
     session_id = f"gs-{uuid.uuid4().hex[:10]}"
@@ -4045,6 +4068,8 @@ async def get_credit_plans():
 @api.post("/credits/claim-free")
 async def claim_free_credits(user=Depends(current_user)):
     """Free tier: one-time beta credit per account. Atomic, so it can't be claimed twice."""
+    if not user.get("email_verified") and "password_hash" in user:
+        raise HTTPException(403, "Verify your email to claim your free credit. Check your inbox, or resend the email from your account.")
     now_iso = datetime.now(timezone.utc).isoformat()
     res = await db.users.update_one(
         {"id": user["id"], "free_credits_claimed_at": {"$exists": False}},
