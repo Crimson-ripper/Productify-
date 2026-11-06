@@ -582,10 +582,17 @@ export default function InstanceDetail() {
             <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--on-ink-muted)", maxWidth: 520 }}>
               {instance.status === "terminated"
                 ? "This instance has ended and its files were deleted, so there's nothing to connect to."
-                : <>Use the browser terminal below to run Python and PyTorch commands in your container. SSH isn't available yet, and JupyterLab has a <a href="/waitlist" style={{ color: "inherit", textDecoration: "underline" }}>waitlist</a>.</>}
+                : instance.template_id === "jupyterlab"
+                  ? "Open JupyterLab, which can take a minute to finish starting, or use the browser terminal below. Your JupyterLab link is private and its connection isn't encrypted yet, so don't send passwords or keys through it."
+                  : <>Use the browser terminal below to run Python and PyTorch commands in your container. SSH isn't available yet, and JupyterLab has a <a href="/waitlist" style={{ color: "inherit", textDecoration: "underline" }}>waitlist</a>.</>}
             </p>
           </div>
 
+          {instance.status === "running" && instance.jupyter_url && (
+            <a href={instance.jupyter_url} target="_blank" rel="noopener noreferrer" className="primary-button" style={{ color: "#0a0a0b" }} title="It can take a minute to finish starting after the machine is ready. This private link includes your access token, so don't share it. The connection isn't encrypted yet.">
+              <ExternalLink size={15} /> Open JupyterLab
+            </a>
+          )}
           {instance.status !== "terminated" && <div>
             <button
               type="button"

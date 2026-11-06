@@ -3257,7 +3257,7 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
 # The renter rents through Productify; the machine is created on Productify's Vast account.
 # A Productify agent starts inside it in direct mode and connects back, so the Workspace and
 # Terminal work as on Productify Node machines. Billing starts only once it's connected.
-PARTNER_IMAGES = {"jupyter-pytorch": "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime", "ubuntu-base": "python:3.12"}
+PARTNER_IMAGES = {"jupyter-pytorch": "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime", "jupyterlab": "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime", "ubuntu-base": "python:3.12"}
 PARTNER_DISK_GB = 40
 PARTNER_START_TIMEOUT_S = 600
 AGENT_URL = os.environ.get("PFY_AGENT_URL", "https://github.com/Crimson-ripper/Productify-Node/releases/download/v2.2.0-beta.1/productify-agent-linux-amd64")
@@ -3377,6 +3377,11 @@ async def destroy_partner_machine(inst: dict):
 
 
 # ---------- GPU on demand: renters order by requirements; we find and rent the machine ----------
+PARTNER_TEMPLATES = [{"id": "jupyterlab", "name": "JupyterLab (PyTorch)", "category": "AI development", "service_name": "JupyterLab"}]
+# Tested 2026-11-06: reachable about 20 s after the machine starts, and refuses requests without the token.
+JUPYTER_ONSTART = (" pip install -q jupyterlab > /var/log/jl-install.log 2>&1 && "
+                   "nohup jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token=$PFY_JUPYTER_TOKEN "
+                   "--ServerApp.root_dir=/workspace > /var/log/jl.log 2>&1 &")
 ORDER_TIMEOUT_S = 600          # give up (and charge nothing) after 10 minutes
 ORDER_HOST_TIMEOUT_S = 240     # a single host gets 4 minutes to start our agent
 ORDER_MAX_ATTEMPTS = 8         # machines actually rented and tried
@@ -3422,9 +3427,10 @@ async def order_gpu(data: GpuOrderInput, user=Depends(current_user)):
         raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of compute credits to start an instance.")
     if await db.instances.find_one({"user_id": user["id"], "status": {"$in": ["finding", "starting"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "You already have a GPU being set up. Wait for it to be ready first.")
-    if not vast_market.candidates(vast_market.cache.fresh_pool(), cls["id"], data.max_price):
+    wants_jupyter = data.template_id == "jupyterlab"
+    if not [r for r in vast_market.candidates(vast_market.cache.fresh_pool(), cls["id"], data.max_price) if r.get("direct_ports") or not wants_jupyter]:
         raise HTTPException(409, "No machines in that class are available at or under your price cap right now. Raise the cap or try another class.")
-    tmpl = next((t for t in INSTANCE_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
+    tmpl = next((t for t in INSTANCE_TEMPLATES + PARTNER_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
     instance_id = f"inst-{uuid.uuid4().hex[:10]}"
     rid = f"r-{uuid.uuid4().hex[:10]}"
     token = f"ptok_{secrets.token_hex(8)}"
@@ -3468,6 +3474,12 @@ async def order_worker(instance_id: str, token: str):
     origin = _origin(inst.get("country")) if inst.get("near") else None
     env = {"PFY_RENTAL_ID": rid, "PFY_TOKEN": token, "PFY_BACKEND": BACKEND_PUBLIC_URL}
     image = PARTNER_IMAGES.get(inst["template_id"], PARTNER_IMAGES["jupyter-pytorch"])
+    onstart = PARTNER_ONSTART.format(url=AGENT_URL)
+    jupyter = inst["template_id"] == "jupyterlab"
+    jupyter_token = secrets.token_hex(16) if jupyter else ""
+    if jupyter:
+        env.update({"PFY_JUPYTER_TOKEN": jupyter_token, "-p 8888:8888": "1"})
+        onstart += JUPYTER_ONSTART
 
     def dist(row):
         pos = pfy_geo.locate(row.get("location", ""))
@@ -3489,7 +3501,7 @@ async def order_worker(instance_id: str, token: str):
                 return
             pool = vast_market.cache.fresh_pool()
             cands = [r for r in vast_market.candidates(pool, inst["class_id"], inst["max_price"], origin, dist, inst.get("near", True))
-                     if r["offer_id"] not in tried]
+                     if r["offer_id"] not in tried and (r.get("direct_ports") or not jupyter)]
             if not cands:
                 await asyncio.sleep(20)  # wait for the next market refresh
                 continue
@@ -3497,7 +3509,7 @@ async def order_worker(instance_id: str, token: str):
             tried.add(row["offer_id"])
             try:
                 vid = await asyncio.to_thread(vast_market.rent, row["offer_id"], image, inst["disk_size_gb"], env,
-                                              PARTNER_ONSTART.format(url=AGENT_URL), f"pfy-{instance_id}")
+                                              onstart, f"pfy-{instance_id}")
             except Exception:
                 vid, taken = None, taken + 1
                 await _log(instance_id, f"A {row['gpu']} was taken before we could rent it; trying another.")
@@ -3521,9 +3533,12 @@ async def order_worker(instance_id: str, token: str):
                     await node_hub.request(rid, {"type": "job.start", "job_id": instance_id, "template": "direct"}, 60)
                     now_iso = datetime.now(timezone.utc).isoformat()
                     # Vast's real rate can differ from the listing. Never above the renter's cap.
-                    price = row["price"]
+                    price, jupyter_url = row["price"], None
                     try:
                         st = await asyncio.to_thread(vast_market.status, vid)
+                        ports = (st.get("ports") or {}).get("8888/tcp") or []
+                        if jupyter and ports and st.get("public_ipaddr"):
+                            jupyter_url = f"http://{st['public_ipaddr'].strip()}:{ports[0]['HostPort']}/lab?token={jupyter_token}"
                         if st.get("dph_total"):
                             wanted = vast_market.renter_price(float(st["dph_total"]))
                             price = min(max(price, wanted), inst["max_price"])
@@ -3534,7 +3549,7 @@ async def order_worker(instance_id: str, token: str):
                     row = {**row, "price": price}
                     res = await db.instances.update_one({"id": instance_id, "status": "starting"}, {"$set": {
                         "status": "running", "started_at": now_iso, "hourly_price": row["price"], "base_price": row["price"],
-                        "tunnel_connected": True},
+                        "tunnel_connected": True, "jupyter_url": jupyter_url},
                         "$push": {"logs": f"[{now_iso[:19]}] Ready: {row['gpu']} at ${row['price']:.2f}/h. Billing started."}})
                     if getattr(res, "modified_count", 1) and inst.get("renter_email"):
                         spawn(emailer.instance_started(inst["renter_email"], inst.get("renter_name", "there"), row["gpu"], row["price"], instance_id))
@@ -3639,6 +3654,8 @@ async def get_instance(inst_id: str, user=Depends(current_user)):
     # No live GPU telemetry from the agent yet, so none is shown (honesty rule 2: no unmeasured numbers).
     inst["telemetry"] = None
     inst["logs"] = inst.get("logs") or []
+    if not is_renter:
+        inst.pop("jupyter_url", None)
     inst.pop("ssh_command", None)
     inst.pop("host_ip", None)
 

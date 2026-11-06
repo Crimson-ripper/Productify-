@@ -7,6 +7,7 @@ import { DEFAULT_TEMPLATES } from "@/lib/templates";
 
 // Partner GPUs get rented by others within minutes, so renters pick a class and a price cap and
 // we rent the best matching machine. The actual price is shown once the machine is ready.
+const ENVIRONMENTS = [{ id: "jupyterlab", name: "JupyterLab (PyTorch)" }, ...DEFAULT_TEMPLATES];
 const money = (n) => `$${Number(n).toFixed(2)}`;
 const guessCountry = () => {
   const m = (navigator.language || "").match(/-([A-Za-z]{2})$/);
@@ -16,7 +17,7 @@ const guessCountry = () => {
 function OrderForm({ cls, onClose }) {
   const navigate = useNavigate();
   const { user } = useAuth() || {};
-  const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATES[0].id);
+  const [templateId, setTemplateId] = useState(ENVIRONMENTS[0].id);
   const [near, setNear] = useState(true);
   const [country, setCountry] = useState(guessCountry());
   const [cap, setCap] = useState(String(cls.high ?? cls.typical ?? ""));
@@ -44,7 +45,7 @@ function OrderForm({ cls, onClose }) {
     <form className="od-form" onSubmit={submit} aria-label={`Order a ${cls.name} GPU`}>
       <label>Environment
         <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-          {DEFAULT_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {ENVIRONMENTS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
       <label>Region
