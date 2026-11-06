@@ -249,6 +249,23 @@ class OrderTests(unittest.TestCase):
         self.assertEqual((r.status_code, r.json()["added"]), (200, 2.0))
         self.assertEqual(self._claim_as().status_code, 200)     # Google sign-in has no password
 
+    def test_jupyterlab_order_gets_a_private_link(self):
+        vm.cache.pool = [row(1, price=0.09), {**row(2, price=0.11), "direct_ports": 10}]
+        inst = self.order(template_id="jupyterlab").json()
+        self.assertEqual(inst["template_name"], "JupyterLab (PyTorch)")
+        self.hub.connected.add(inst["rental_id"])
+        self.statuses[9002] = {"actual_status": "running", "public_ipaddr": "1.2.3.4 ", "ports": {"8888/tcp": [{"HostPort": "4242"}]}}
+        asyncio.run(server.order_worker(inst["id"], self.token()))
+        self.assertEqual(self.rented, [2])      # machine 1 has no open ports
+        url = self.db.instances.rows[0]["jupyter_url"]
+        self.assertTrue(url.startswith("http://1.2.3.4:4242/lab?token="))
+        self.assertEqual(self.c.get(f"/api/instances/{inst['id']}").json()["jupyter_url"], url)
+        server.app.dependency_overrides[server.current_user] = lambda: {"id": "admin1", "role": "admin"}
+        self.assertNotIn("jupyter_url", self.c.get(f"/api/instances/{inst['id']}").json())
+
+    def test_jupyterlab_refused_without_open_ports(self):
+        self.assertEqual(self.order(template_id="jupyterlab").status_code, 409)
+
     def test_refusals(self):
         self.assertEqual(self.order(class_id="nope").status_code, 400)
         self.assertEqual(self.order(max_price=0.05).status_code, 409)   # nothing under the cap

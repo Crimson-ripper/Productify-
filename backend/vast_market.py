@@ -127,6 +127,7 @@ def valid_rows(offers: list) -> list:
             "owner": "Vast.ai partner",
             "partner": True,
             "vram_gb": round(vram),
+            "direct_ports": int(o.get("direct_port_count") or 0),
             "reliability": float(o.get("reliability2") or o.get("reliability") or 0),
         })
     ok.sort(key=lambda r: (r["gpu"], r["price"]))
