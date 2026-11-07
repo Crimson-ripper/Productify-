@@ -78,12 +78,14 @@ class EmailTests(unittest.TestCase):
         self.flush()
         subjects = [s[1] for s in self.sent]
         self.assertIn("Confirm your email for Productify", subjects)
-        self.assertIn("Welcome to Productify", subjects)
+        self.assertNotIn("Welcome to Productify", subjects)  # sent only once they confirm
         text = next(t for _, s, t in self.sent if s.startswith("Confirm"))
         token = text.split("token=")[1].split()[0]
         ok = self.c.post("/api/auth/verify-email", json={"token": token})
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertTrue(self.db.users.rows[0]["email_verified"])
+        self.flush()
+        self.assertIn("Welcome to Productify", [s[1] for s in self.sent])
         again = self.c.post("/api/auth/verify-email", json={"token": token})
         self.assertEqual(again.status_code, 400)  # single use
 

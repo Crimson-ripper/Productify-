@@ -416,7 +416,22 @@ def jwt_token(u):
     return jwt.encode({"sub": u["id"], "exp": datetime.now(timezone.utc) + timedelta(days=7)}, JWT_SECRET, algorithm="HS256")
 
 
+# Email sign-ups can use only these until they confirm their address (Google sign-ins are already verified).
+UNVERIFIED_ALLOWED = {"/api/auth/me", "/api/auth/resend-verification", "/api/auth/logout"}
+
+
+def email_unverified(u: dict) -> bool:
+    return "password_hash" in u and not u.get("email_verified")
+
+
 async def current_user(request: Request):
+    u = await _signed_in_user(request)
+    if email_unverified(u) and request.url.path not in UNVERIFIED_ALLOWED:
+        raise HTTPException(403, "Confirm your email address first. We sent you a link when you signed up.")
+    return u
+
+
+async def _signed_in_user(request: Request):
     # 1) session_token cookie (Emergent Google Auth)
     session_token = request.cookies.get("session_token")
     if session_token:
@@ -481,7 +496,13 @@ async def root():
 @api.post("/auth/register")
 async def register(data: AuthInput, request: Request):
     email = data.email.lower().strip()
-    if await db.users.find_one({"email": email}):
+    existing = await db.users.find_one({"email": email})
+    if existing and email_unverified(existing) and \
+            (existing.get("email_verify") or {}).get("expires", "") < datetime.now(timezone.utc).isoformat():
+        # Never confirmed and the link has expired: the address's real owner can sign up.
+        await db.users.delete_one({"id": existing["id"], "email_verified": {"$ne": True}})
+        existing = None
+    if existing:
         raise HTTPException(409, "An account with this email already exists")
     role = data.role if data.role in ["buyer", "seller"] else "buyer"
     u = {
@@ -500,8 +521,7 @@ async def register(data: AuthInput, request: Request):
     u["email_verify"] = {"hash": hashlib.sha256(token.encode()).hexdigest(),
                          "expires": (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()}
     await db.users.insert_one(u)
-    spawn(emailer.verify_email(email, u["name"], token))
-    spawn(emailer.welcome(email, u["name"]))
+    spawn(emailer.verify_email(email, u["name"], token))  # the welcome email follows once they confirm
     # Registration implies acceptance of all currently-published policies.
     for ct in POLICY_TYPES:
         try:
@@ -524,6 +544,8 @@ async def verify_email(data: VerifyEmailInput):
     if (u.get("email_verify") or {}).get("expires", "") < datetime.now(timezone.utc).isoformat():
         raise HTTPException(410, "This link has expired. Sign in and ask for a new one.")
     await db.users.update_one({"id": u["id"]}, {"$set": {"email_verified": True}, "$unset": {"email_verify": ""}})
+    if not u.get("email_verified"):
+        spawn(emailer.welcome(u["email"], u.get("name", "there")))
     return {"ok": True, "email": u["email"]}
 
 
