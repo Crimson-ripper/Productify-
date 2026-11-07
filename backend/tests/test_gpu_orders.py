@@ -266,6 +266,14 @@ class OrderTests(unittest.TestCase):
     def test_jupyterlab_refused_without_open_ports(self):
         self.assertEqual(self.order(template_id="jupyterlab").status_code, 409)
 
+    def test_picked_machine_is_tried_first(self):
+        vm.regional.lists["US"] = {"rows": [row(77, price=0.11)], "at": time.time(), "error": ""}
+        inst = self.order(preferred_offer=77).json()
+        self.hub.connected.add(inst["rental_id"])
+        asyncio.run(server.order_worker(inst["id"], self.token()))
+        self.assertEqual(self.rented, [77])
+        vm.regional.lists.clear()
+
     def test_refusals(self):
         self.assertEqual(self.order(class_id="nope").status_code, 400)
         self.assertEqual(self.order(max_price=0.05).status_code, 409)   # nothing under the cap
