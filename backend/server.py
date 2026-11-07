@@ -3396,6 +3396,7 @@ class GpuOrderInput(BaseModel):
     country: str = Field("", max_length=2)
     max_price: float = Field(gt=0, le=50)
     disk_gb: int = Field(PARTNER_DISK_GB, ge=20, le=200)
+    preferred_offer: Optional[int] = None  # a machine picked from the nearby list, tried first
 
 
 def _origin(country: str):
@@ -3413,7 +3414,52 @@ async def optional_user(request: Request):
 async def partner_classes(user=Depends(optional_user)):
     """Live price ranges per GPU class for 'GPU on demand' (renter prices, our markup included)."""
     visible = partners_enabled() or (user or {}).get("role") in ["admin", "sub-admin"]
+    if visible:
+        await asyncio.to_thread(vast_market.cache.maybe_refresh)
     return {"enabled": visible, "classes": vast_market.class_summary(vast_market.cache.fresh_pool()) if visible else []}
+
+
+NEARBY_CLICK_S = 20
+NEARBY_CLICKS = {}  # ip -> last refresh click
+
+
+def _nearest_countries(code: str, n: int = 5) -> list:
+    here = pfy_geo.COUNTRIES.get(code)
+    if not here:
+        return []
+    others = sorted((pfy_geo.km_between(here, pos), c) for c, pos in pfy_geo.COUNTRIES.items() if c != code)
+    return [c for _, c in others[:n]]
+
+
+@api.get("/partners/nearby")
+async def partners_nearby(request: Request, country: str = "", country_hint: str = "", refresh: bool = False, user=Depends(optional_user)):
+    """Top 10 partner machines in the visitor's country (or the nearest countries if it has none).
+    Searches only on a visit; a region's list is shared for 2 minutes (longer once the quota is half used)."""
+    if not (partners_enabled() or (user or {}).get("role") in ["admin", "sub-admin"]):
+        return {"enabled": False, "machines": []}
+    detected = (request.headers.get("cf-ipcountry") or "").upper()
+    code = (country or detected or country_hint or "US").strip().upper()[:2]
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    retry_in = 0
+    if refresh:
+        last = NEARBY_CLICKS.get(ip, 0)
+        if time.time() - last < NEARBY_CLICK_S:
+            retry_in = int(NEARBY_CLICK_S - (time.time() - last)) + 1
+        else:
+            NEARBY_CLICKS[ip] = time.time()
+    lst = await asyncio.to_thread(vast_market.regional.get, code, [code])
+    machines, fallback = vast_market.nearby_top(lst["rows"]), []
+    if not machines and lst.get("at"):
+        fallback = _nearest_countries(code)
+        if fallback:
+            lst = await asyncio.to_thread(vast_market.regional.get, f"near:{code}", fallback)
+            machines = vast_market.nearby_top(lst["rows"])
+    now = time.time()
+    return {"enabled": True, "country": code, "detected": detected, "fallback": fallback if machines else [],
+            "machines": machines, "age_s": int(now - lst["at"]) if lst.get("at") else None,
+            "next_search_s": max(0, int(vast_market.budget.window() - (now - lst.get("at", 0)))),
+            "retry_in": retry_in, "paused": not vast_market.budget.can_search(),
+            "countries": sorted(pfy_geo.COUNTRIES)}
 
 
 @api.post("/instances/order")
@@ -3429,7 +3475,11 @@ async def order_gpu(data: GpuOrderInput, user=Depends(current_user)):
     if await db.instances.find_one({"user_id": user["id"], "status": {"$in": ["finding", "starting"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "You already have a GPU being set up. Wait for it to be ready first.")
     wants_jupyter = data.template_id == "jupyterlab"
-    if not [r for r in vast_market.candidates(vast_market.cache.fresh_pool(), cls["id"], data.max_price) if r.get("direct_ports") or not wants_jupyter]:
+    if not vast_market.cache.fresh_pool():
+        await asyncio.to_thread(vast_market.cache.maybe_refresh, 0)
+    picked = vast_market.regional.find(data.preferred_offer) if data.preferred_offer else None
+    pool = vast_market.cache.fresh_pool() + ([picked] if picked else [])
+    if not [r for r in vast_market.candidates(pool, cls["id"], data.max_price) if r.get("direct_ports") or not wants_jupyter]:
         raise HTTPException(409, "No machines in that class are available at or under your price cap right now. Raise the cap or try another class.")
     tmpl = next((t for t in INSTANCE_TEMPLATES + PARTNER_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
     instance_id = f"inst-{uuid.uuid4().hex[:10]}"
@@ -3442,6 +3492,7 @@ async def order_gpu(data: GpuOrderInput, user=Depends(current_user)):
     doc = {
         "id": instance_id, "kind": "partner", "provider": "vast", "order": True, "class_id": cls["id"],
         "max_price": round(data.max_price, 2), "near": data.near, "country": data.country.upper(),
+        "preferred_offer": data.preferred_offer,
         "rental_id": rid, "rental_title": f"{cls['name']} GPU", "gpu": f"{cls['name']} GPU ({cls['vram']})",
         "vram": cls["vram"], "location": "", "user_id": user["id"], "renter_name": user.get("name", "User"),
         "renter_email": user.get("email"), "seller_id": "platform", "seller_name": "Vast.ai partner",
@@ -3503,8 +3554,12 @@ async def order_worker(instance_id: str, token: str):
             pool = vast_market.cache.fresh_pool()
             cands = [r for r in vast_market.candidates(pool, inst["class_id"], inst["max_price"], origin, dist, inst.get("near", True))
                      if r["offer_id"] not in tried and (r.get("direct_ports") or not jupyter)]
+            pref = vast_market.regional.find(inst["preferred_offer"]) if inst.get("preferred_offer") else None
+            if pref and pref["offer_id"] not in tried and pref["price"] <= inst["max_price"] + 1e-9 and (pref.get("direct_ports") or not jupyter):
+                cands.insert(0, pref)
             if not cands:
-                await asyncio.sleep(20)  # wait for the next market refresh
+                await asyncio.to_thread(vast_market.cache.maybe_refresh, 600)
+                await asyncio.sleep(20)
                 continue
             row = cands[0]
             tried.add(row["offer_id"])
@@ -5221,7 +5276,6 @@ async def startup():
     asyncio.create_task(currency_sync_loop())
     asyncio.create_task(credit_limit_loop())
     asyncio.create_task(gpu_watch_loop())
-    asyncio.create_task(vast_market.cache.loop())
     asyncio.create_task(recover_partner_orders())
     asyncio.create_task(vast_reaper_loop())
     asyncio.create_task(gz_inventory.collector_loop(_inventory_node_rows))

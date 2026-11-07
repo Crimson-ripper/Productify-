@@ -14,13 +14,14 @@ const guessCountry = () => {
   return m ? m[1].toUpperCase() : "";
 };
 
-function OrderForm({ cls, onClose }) {
+// cls: a class card. machine: a machine picked from the nearby list (tried first; class from the machine).
+export function OrderForm({ cls, machine, onClose }) {
   const navigate = useNavigate();
   const { user } = useAuth() || {};
   const [templateId, setTemplateId] = useState(ENVIRONMENTS[0].id);
   const [near, setNear] = useState(true);
   const [country, setCountry] = useState(guessCountry());
-  const [cap, setCap] = useState(String(cls.high ?? cls.typical ?? ""));
+  const [cap, setCap] = useState(String(machine ? machine.price_high : cls.high ?? cls.typical ?? ""));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -32,7 +33,8 @@ function OrderForm({ cls, onClose }) {
     setBusy(true); setErr("");
     try {
       const res = await api.post("/instances/order", {
-        class_id: cls.id, template_id: templateId, near, country: near ? country.slice(0, 2) : "", max_price: max,
+        class_id: machine ? machine.class_id : cls.id, template_id: templateId, near: !machine && near,
+        country: !machine && near ? country.slice(0, 2) : "", max_price: max, preferred_offer: machine?.offer_id,
       });
       navigate(`/instances/${res.data.id}`);
     } catch (ex) {
@@ -42,19 +44,19 @@ function OrderForm({ cls, onClose }) {
   };
 
   return (
-    <form className="od-form" onSubmit={submit} aria-label={`Order a ${cls.name} GPU`}>
+    <form className="od-form" onSubmit={submit} aria-label={`Order a ${machine ? machine.gpu : cls.name} GPU`}>
       <label>Environment
         <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
           {ENVIRONMENTS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
-      <label>Region
+      {!machine && <label>Region
         <select value={near ? "near" : "any"} onChange={(e) => setNear(e.target.value === "near")}>
           <option value="near">Near me (lower latency)</option>
           <option value="any">Anywhere (cheapest)</option>
         </select>
-      </label>
-      {near && (
+      </label>}
+      {!machine && near && (
         <label>Your country code
           <input value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} maxLength={2} placeholder="e.g. IN" />
         </label>
@@ -82,9 +84,7 @@ export default function GpuOnDemand() {
 
   useEffect(() => {
     const load = () => api.get("/partners/classes").then((r) => setData(r.data)).catch(() => {});
-    load();
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
+    load();  // once per visit: the list searches only when someone arrives
   }, []);
 
   if (!data?.enabled) return null;

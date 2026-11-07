@@ -2074,3 +2074,10 @@ header.topbar,.footer-grid{border:0!important}
 .ix-code,.ix-code *,.ix textarea{scrollbar-color:#3a3d42 #0c0e12;scrollbar-width:thin}
 
 .od-beta{background:var(--lime);color:#0a0a0b;font-size:12px;font-weight:700;padding:2px 8px}
+
+/* Machines near you (partner machines in the visitor's country) */
+.nb-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:0 0 12px}
+.nb-head h2{margin:0;display:flex;align-items:center;gap:8px}
+.nb-head select{padding:8px;font:inherit}
+.nb-note{color:var(--x-fg2,#b9bbb5);margin:0 0 14px;font-size:14px}
+.nb-tag{background:var(--lime);color:#0a0a0b;font-size:12px;font-weight:700;padding:2px 8px;align-self:flex-start}

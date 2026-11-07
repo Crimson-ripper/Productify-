@@ -17,6 +17,8 @@ import logging
 import math
 import os
 import re
+import threading
+import re
 import time
 import urllib.error
 import urllib.request
@@ -128,6 +130,7 @@ def valid_rows(offers: list) -> list:
             "partner": True,
             "vram_gb": round(vram),
             "direct_ports": int(o.get("direct_port_count") or 0),
+            "direct_ports": int(o.get("direct_port_count") or 0),
             "reliability": float(o.get("reliability2") or o.get("reliability") or 0),
         })
     ok.sort(key=lambda r: (r["gpu"], r["price"]))
@@ -161,10 +164,21 @@ class OfferCache:
         return next((r for r in self.fresh() if r["id"] == rid), None)
 
     def refresh_once(self):
-        offers = _request("POST", "/bundles/", {"rentable": {"eq": True}, "rented": {"eq": False}, "verified": {"eq": True},
-                                                "type": "on-demand", "num_gpus": {"eq": 1}, "limit": OFFER_LIMIT}).get("offers", [])
+        offers = _search({}, OFFER_LIMIT)
         pool = valid_rows(offers)
         self.pool, self.rows, self.at, self.error = pool, curate(offers), time.time(), ""
+
+    def maybe_refresh(self, max_age: float = None):
+        """Search only when someone needs the list and it's older than max_age (on a visit, not on a timer)."""
+        max_age = POOL_MAX_AGE_S if max_age is None else max_age
+        if time.time() - self.at < max_age or not _key() or not budget.can_search():
+            return
+        try:
+            self.refresh_once()
+        except Exception as e:
+            budget.note_error(e)
+            self.error = str(e)[:200]
+            log.warning(f"vast offers refresh failed: {e}")
 
     async def loop(self):
         while True:
@@ -287,3 +301,132 @@ def candidates(pool: list, class_id: str, max_price: float, origin=None, distanc
         bucket = 0 if d is None else (0 if d < 2500 else 1 if d < 6000 else 2)
         return (bucket, -round(r.get("reliability", 0), 2), r["price"])
     return sorted(rows, key=key)
+
+
+# ---------- Searches only when someone visits (user rules 2026-11-07) ----------
+# - A visitor from a region triggers a search for that region; everyone from the same region in the
+#   next 2 minutes sees that same list. Refresh obeys the same window (and 20 s per person, server side).
+# - Vast allows 20,000 search rows a day. After 10,000 the window grows to 3, then 4, then 5 minutes.
+# - Once Vast says the quota is used up, every region keeps its last list until Vast allows searches again.
+DAILY_ROWS = 20000
+REGION_LIMIT = 60     # rows per regional search
+POOL_MAX_AGE_S = 1800  # the class price ranges search again at most every 30 minutes, and only on a visit
+
+
+class SearchBudget:
+    def __init__(self):
+        self.used, self.day_start, self.blocked_until = 0, time.time(), 0.0
+        self.lock = threading.Lock()
+
+    def _roll(self, now):
+        if now - self.day_start >= 86400:
+            self.used, self.day_start = 0, now
+
+    def add(self, rows: int, now: float = None):
+        now = now if now is not None else time.time()
+        with self.lock:
+            self._roll(now)
+            self.used += rows
+
+    def window(self, now: float = None) -> int:
+        now = now if now is not None else time.time()
+        with self.lock:
+            self._roll(now)
+            used = self.used
+        return 120 if used < 10000 else 180 if used < 13000 else 240 if used < 16000 else 300
+
+    def can_search(self, now: float = None) -> bool:
+        return (now if now is not None else time.time()) >= self.blocked_until
+
+    def note_error(self, err: Exception, now: float = None):
+        m = re.search(r'"retry_after":\s*(\d+)', str(err))
+        if m:
+            self.blocked_until = (now if now is not None else time.time()) + int(m.group(1))
+
+
+budget = SearchBudget()
+
+
+def _search(filters: dict, limit: int) -> list:
+    offers = _request("POST", "/bundles/", {"rentable": {"eq": True}, "rented": {"eq": False}, "verified": {"eq": True},
+                                            "type": "on-demand", "num_gpus": {"eq": 1}, "limit": limit, **filters}).get("offers", [])
+    budget.add(len(offers))
+    return offers
+
+
+class RegionalLists:
+    """The shared list per region key ("US", or "near:IN" for a fallback group of countries)."""
+
+    def __init__(self):
+        self.lists = {}  # key -> {"rows": [...], "at": float, "error": str}
+        self.locks = {}
+        self.guard = threading.Lock()
+
+    def _lock(self, key):
+        with self.guard:
+            return self.locks.setdefault(key, threading.Lock())
+
+    def get(self, key: str, countries: list, now: float = None) -> dict:
+        with self._lock(key):
+            now = now if now is not None else time.time()
+            cur = self.lists.get(key)
+            if cur and now - cur["at"] < budget.window(now):
+                return cur
+            if not _key() or not budget.can_search(now):
+                return cur or {"rows": [], "at": 0.0, "error": "searches paused"}
+            try:
+                rows = valid_rows(_search({"geolocation": {"in": countries}}, REGION_LIMIT))
+                cur = {"rows": rows, "at": now, "error": ""}
+            except Exception as e:
+                budget.note_error(e, now)
+                log.warning(f"regional search {key} failed: {e}")
+                cur = {**(cur or {"rows": [], "at": 0.0}), "error": "search failed"}
+            self.lists[key] = cur
+            return cur
+
+    def find(self, offer_id: int):
+        for lst in list(self.lists.values()):
+            for r in lst["rows"]:
+                if r["offer_id"] == offer_id:
+                    return r
+        return None
+
+
+regional = RegionalLists()
+
+
+def class_of(row: dict):
+    return next((c["id"] for c in CLASSES if in_class(row, c)), None)
+
+
+def nearby_top(rows: list, n: int = 10) -> list:
+    """Top machines for a region: #1 the cheapest, #3 the best configuration, the rest the most reliable.
+    Prices are shown as a range (cost x 1.55 to cost x 3); the exact price is set when the machine is ready."""
+    rows = [r for r in rows if class_of(r)]
+    if not rows:
+        return []
+    cheapest = min(rows, key=lambda r: r["price"])
+    best = max(rows, key=lambda r: (r.get("vram_gb", 0), r["price"]))
+    rest = sorted(rows, key=lambda r: (-round(r.get("reliability", 0), 2), r["price"]))
+    picked = [cheapest]
+    for r in rest:
+        if len(picked) == 2:
+            break
+        if r is not cheapest and r is not best:
+            picked.append(r)
+    if best is not cheapest:
+        picked.insert(min(2, len(picked)), best)
+    for r in rest:
+        if len(picked) >= n:
+            break
+        if all(r is not p for p in picked):
+            picked.append(r)
+    out = []
+    for i, r in enumerate(picked[:n]):
+        tag = "Cheapest" if r is cheapest else "Top configuration" if r is best else ""
+        out.append({"offer_id": r["offer_id"], "gpu": r["gpu"], "vram": r["vram"], "location": r["location"],
+                    "specs": r.get("specs", {}), "class_id": class_of(r), "tag": tag,
+                    "direct_ports": r.get("direct_ports", 0),
+                    "price_low": math.ceil(round(r["cost"] * 1.55 * 100, 6)) / 100,
+                    "price_high": math.ceil(round(r["cost"] * 3 * 100, 6)) / 100})
+    return out

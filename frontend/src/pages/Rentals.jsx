@@ -7,6 +7,7 @@ import RentalCard from "@/components/RentalCard";
 import { availabilityOf } from "@/components/Availability";
 import NotifyButton from "@/components/NotifyButton";
 import GpuOnDemand from "@/components/GpuOnDemand";
+import NearbyMachines from "@/components/NearbyMachines";
 import CreditBalance from "@/components/CreditBalance";
 
 const REFRESH_MS = 30_000;
@@ -94,6 +95,7 @@ export default function Rentals() {
         <CreditBalance />
       </section>
 
+      <NearbyMachines />
       <GpuOnDemand />
 
       <section className="shop-toolbar rx-toolbar">
