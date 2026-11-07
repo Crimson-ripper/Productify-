@@ -2081,3 +2081,8 @@ header.topbar,.footer-grid{border:0!important}
 .nb-head select{padding:8px;font:inherit}
 .nb-note{color:var(--x-fg2,#b9bbb5);margin:0 0 14px;font-size:14px}
 .nb-tag{background:var(--lime);color:#0a0a0b;font-size:12px;font-weight:700;padding:2px 8px;align-self:flex-start}
+
+/* Readable text on dark cards */
+.od-card .od-price,.od-card h3{color:var(--x-fg,#f4f4ef)}
+.od-price span{color:var(--x-fg2,#b9bbb5)}
+.nb-head .rx-refresh:disabled{opacity:.6;cursor:default}
