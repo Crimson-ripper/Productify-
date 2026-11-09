@@ -2086,3 +2086,6 @@ header.topbar,.footer-grid{border:0!important}
 .od-card .od-price,.od-card h3{color:var(--x-fg,#f4f4ef)}
 .od-price span{color:var(--x-fg2,#b9bbb5)}
 .nb-head .rx-refresh:disabled{opacity:.6;cursor:default}
+
+.gz-client-note{max-width:34ch;margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--x-fg2,#b9bbb5)}
+.gz-client-note a{color:inherit;text-decoration:underline}
