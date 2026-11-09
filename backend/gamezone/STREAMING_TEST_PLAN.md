@@ -218,6 +218,31 @@ Not covered yet: a fresh VM running the updated onstart start to finish, PG Conn
 the real backend, Steam sign-in and a game (needs the player's own account), escape tests (T-K3) and
 input latency.
 
+#### First outside player (2026-11-09/10, instance 59921029) — passed
+Host: Vast VM, RTX 5060 Ti, Ryzen 5 3500, Japan, $0.109/h, updated onstart with no fixes by hand
+(rent → kiosk ready in 754 s; the 10 GB VM image was not cached). Player: a friend at home in India,
+Windows 11, PG Connect 0.1.4 installed from the live /gamezone page (built-in tunnel: no WireGuard, no
+admin prompt per session), launched with a .bat that set `PRODUCTIFY_API_BASE` to a temporary
+Cloudflare quick tunnel in front of the mock backend running a private session code.
+
+Result: ~1 hour session (stream_started 23:27, stream_ended 00:24). Signed in with their own Steam
+account and played ONE PIECE Bounty Rush offline and online multiplayer. Player's verdict: lag was
+noticeable but not bothersome.
+
+Found:
+- **Steam stuck on its loading screen after quitting the game:** the game's process was a zombie but
+  its launcher (`GameLauncher.exe`) and Proton/wine processes kept running, so Steam thought the game
+  was still open. Killing the leftover tree under `reaper SteamLaunch` fixed it at once. To do: a
+  kiosk watchdog that clears a game's leftovers ~30 s after its main process exits.
+- **Returning players get stuck** (dry run on the tester's own PC): PG Connect remembered an older VM
+  with the same name and address `10.77.0.1`; the new VM has a new identity, so the join loop logged
+  "Found unexpected PC 'Productify Gamezone'" and never paired. Clearing PG Connect's saved hosts fixed
+  it. To do in PG Connect: drop a saved host at the tunnel address whose identity changed.
+- **Bitrate:** PG Connect's default (~15-20 Mbps) flooded home connections; the tester set 720p / 5 Mbps
+  by hand. To do: default to a lower bitrate for tunnelled sessions.
+- Only VM-capable host in India was an unverified RTX 3060 with a 2016 Xeon; nearest good hosts were in
+  Japan and Taiwan.
+
 ### Cross-cutting
 | ID | Test | Pass if |
 |---|---|---|
