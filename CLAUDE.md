@@ -129,6 +129,7 @@ Answers the user has already given. Don't ask these again; ask if circumstances 
 | 2026-10-19 | Self-serve GPU flows vs. waitlist/application | **Keep both public.** Existing self-serve renting and seller pairing stay open; the waitlist and provider application are added alongside. |
 | 2026-10-19 | Crawlability fix | **Decide at Task 6.** Options A–D are in the Task 0 audit (recommendation: A, build-time pre-render). |
 | 2026-10-19 | Gamezone (advertised but unsupported, rule 4) | **Leave it until later.** Don't change Gamezone during this roadmap. |
+| 2026-11-09 | PG Connect download on the live site | **Public now.** The live `/gamezone` page offers "Download for Windows" (latest PG Connect, with a note that WireGuard is needed until it is built in). Mac and Android apps are on hold. Next: build WireGuard into the Windows installer (DESIGN.md "phase 2"). |
 
 ## 9. Codebase notes (from the Task 0 audit)
 
