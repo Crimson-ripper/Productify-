@@ -49,7 +49,7 @@ export DEBIAN_FRONTEND=noninteractive
 # The image ships without apt lists, so installs fail until an update; tolerate flaky third-party repos.
 apt-get -o DPkg::Lock::Timeout=600 update -qq || true
 # picom: Steam's Big Picture UI fails to draw (GLXBadPixmap) without a compositor (2026-11-09).
-apt-get -o DPkg::Lock::Timeout=600 install -y -qq openbox x11-xserver-utils unclutter wireguard-tools iptables picom >/dev/null || true
+apt-get -o DPkg::Lock::Timeout=600 install -y -qq openbox x11-xserver-utils unclutter wireguard-tools iptables picom xdotool >/dev/null || true
 if [ -n "${GZ_HEROIC_VERSION:-}" ]; then
   mkdir -p /opt/heroic
   curl -fsSL -o /opt/heroic/Heroic.AppImage \
@@ -67,6 +67,58 @@ cat > /home/$PLAYER/.config/openbox/rc.xml <<'EOF'
   <applications><application class="*"><decor>no</decor><maximized>yes</maximized><fullscreen>yes</fullscreen></application></applications>
 </openbox_config>
 EOF
+# Game watchdog (2026-11-10): some games leave their launcher and Proton running after the player
+# quits (ONE PIECE Bounty Rush left GameLauncher.exe + wineserver), so Steam thinks the game is still
+# open and shows its loading screen forever. Every 10 s, for each game Steam started (a
+# "reaper SteamLaunch" process): if none of its processes has had a visible window for 40 s and the
+# game started more than 2 minutes ago, close what is left of it. Games with a window are never touched.
+cat > /usr/local/bin/gamezone-game-watchdog <<'EOF'
+#!/bin/bash
+declare -A quiet
+descendants() {
+  local kids
+  kids=$(pgrep -P "$1")
+  for k in $kids; do echo "$k"; descendants "$k"; done
+}
+while true; do
+  sleep 10
+  for reaper in $(pgrep -u "$(id -u)" -f "reaper SteamLaunch"); do
+    age=$(ps -o etimes= -p "$reaper" 2>/dev/null | tr -d ' ')
+    [ -n "$age" ] || continue
+    has_window=0
+    for pid in $reaper $(descendants "$reaper"); do
+      if xdotool search --onlyvisible --pid "$pid" >/dev/null 2>&1; then has_window=1; break; fi
+    done
+    # Safety: an application window that doesn't say which process owns it (_NET_WM_PID; old X11
+    # programs) might be this game, so never close anything while one is on screen. The kiosk's own
+    # compositor/Openbox helper windows have no WM_CLASS (or are Openbox's) and are ignored.
+    if [ "$has_window" = 0 ]; then
+      for w in $(xdotool search --onlyvisible --name "" 2>/dev/null); do
+        xdotool getwindowpid "$w" >/dev/null 2>&1 && continue
+        cls=$(xprop -id "$w" WM_CLASS 2>/dev/null)
+        case "$cls" in *'"'*) ;; *) continue ;; esac
+        case "$cls" in *Openbox*|*openbox*) continue ;; esac
+        has_window=1; break
+      done
+    fi
+    if [ "$has_window" = 1 ] || [ "$age" -lt 120 ]; then
+      quiet[$reaper]=0
+      continue
+    fi
+    quiet[$reaper]=$(( ${quiet[$reaper]:-0} + 10 ))
+    if [ "${quiet[$reaper]}" -ge 40 ]; then
+      echo "$(date -Is) closing leftovers of a finished game (reaper $reaper)"
+      pids="$(descendants "$reaper") $reaper"
+      kill -TERM $pids 2>/dev/null
+      sleep 5
+      kill -KILL $pids 2>/dev/null
+      unset "quiet[$reaper]"
+    fi
+  done
+done
+EOF
+chmod 755 /usr/local/bin/gamezone-game-watchdog
+
 cat > /usr/local/bin/gamezone-session <<EOF
 #!/bin/bash
 xrandr -s $RES 2>/dev/null || true
@@ -77,6 +129,7 @@ picom -b --backend xrender 2>/dev/null || true
 # Sunshine runs inside this session so it captures this display (a systemd user service never
 # started in testing, 2026-11-09).
 /usr/bin/sunshine > /tmp/sunshine.log 2>&1 &
+/usr/local/bin/gamezone-game-watchdog > /tmp/gamezone-watchdog.log 2>&1 &
 # Steam Big Picture is the "home screen"; restart it if the player quits it.
 while true; do /usr/games/steam -gamepadui -fulldesktopres; sleep 2; done
 EOF
