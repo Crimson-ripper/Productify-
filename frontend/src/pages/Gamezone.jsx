@@ -11,7 +11,7 @@ import { track } from "@/lib/analytics";
 
 // PG Connect (Productify Game Connect): GPLv3 fork of Moonlight, published on GitHub Releases
 // like Productify Node. Direct file link so the browser downloads instead of opening GitHub.
-const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.1.3/PGConnect-Setup-0.1.3-x64.msi";
+const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.1.4/PGConnect-Setup-0.1.4-x64.msi";
 
 export default function Gamezone() {
   const { user } = useAuth();
@@ -305,9 +305,8 @@ export default function Gamezone() {
             Download for Windows
           </a>
           <p className="gz-client-note">
-            Also install <a href="https://www.wireguard.com/install/" target="_blank" rel="noopener noreferrer">WireGuard for Windows</a> (free):
-            PG Connect uses it for a secure connection to your gaming machine and asks for admin permission
-            when you connect. A version that doesn't need WireGuard is coming.
+            Nothing else to install: PG Connect sets up its own secure connection to your gaming machine.
+            Windows asks for permission once, while installing.
           </p>
         </div>
         </div>
