@@ -5,15 +5,15 @@ import { ctaProps } from "@/lib/analytics";
 import { ROUTES } from "@/lib/routes";
 
 const ELIGIBILITY = [
-  ["GPU", "An NVIDIA GPU. [TODO: confirm minimum GPU model and VRAM]"],
+  ["GPU", "An NVIDIA GPU. Machines without one can't be listed, and we review every machine before renters see it."],
   ["Operating system", "Windows 10 or 11 (64-bit)"],
   ["Software", "Docker Desktop and a current NVIDIA driver"],
-  ["Connection", "A steady internet connection. [TODO: confirm minimum upload speed]"],
-  ["Region", "[TODO: confirm supported regions]"],
+  ["Connection", "A steady internet connection. Faster uploads make your machine nicer to rent."],
+  ["Region", "Hosts anywhere can apply. We'll tell you if your region isn't supported yet."],
 ];
 
 const VERIFY = [
-  ["Apply or pair", "Apply with the form, or — if you already have a seller account — create a pairing code in Seller Studio."],
+  ["Choose a method and register", "Pick how you want to host on the Start hosting page and register, or — if you already have a seller account — create a pairing code in Seller Studio."],
   ["Install Productify Node", "Install the Windows app on the machine and enter the pairing code."],
   ["Hardware report", "The app reports GPU, VRAM, CPU and memory directly from the machine. You don't type specs in by hand."],
   ["Review", "Productify reviews the machine before it appears to renters."],
@@ -23,7 +23,7 @@ const CONTROL = [
   ["Pause or go live", "Take the machine off the market whenever you want to use it yourself."],
   ["Limits", "Set limits on what renters can use."],
   ["Emergency stop", "Stop every running job from the app straight away."],
-  ["Removing a machine", "You can delete a listing yourself before it's reviewed. After review, contact support to remove it."],
+  ["Removing a machine", "You can delete a listing yourself before it's reviewed. After review, email hosts@productifynow.com to remove it."],
 ];
 
 const SECURITY = [
@@ -31,7 +31,7 @@ const SECURITY = [
   "Containers can't see your folders or files — no host folders are shared with them.",
   "No ports are opened on your network; the app connects out to Productify.",
   "Each container and its files are deleted when the job ends.",
-  "Blocking renter jobs from reaching other devices on your home network is still being built. Until it ships, keep sensitive devices on a separate network.",
+  "Renter jobs can't reach your computer or other devices on your home network. Each job gets its own sealed network and can only connect to public internet addresses (Productify Node 2.1 or later).",
 ];
 
 export default function EarnWithHardware() {
@@ -49,7 +49,7 @@ export default function EarnWithHardware() {
         <h1>Make your idle GPU rentable</h1>
         <p>Rent out an NVIDIA GPU you already own to AI developers, on your terms. You decide when it's available.</p>
         <div className="hero-actions">
-          <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_hero_apply")}>Apply as a provider <ArrowRight size={17} /></Link>
+          <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_hero_apply")}>Start hosting <ArrowRight size={17} /></Link>
         </div>
       </section>
 
@@ -100,7 +100,7 @@ export default function EarnWithHardware() {
           </div>
           <div className="lp-prose">
             <p><b>What you earn.</b> You set an hourly price. For time your machine is rented, you receive that price minus the platform fee (10% on the Free plan).</p>
-            <p><b>Withdrawals.</b> Request a withdrawal once your balance is at least $10. Each request is reviewed and paid to bank, PayPal or UPI. [TODO: confirm payout timing]</p>
+            <p><b>Withdrawals.</b> Request a withdrawal once your balance is at least $10. Each request is reviewed by hand, then paid to bank, PayPal or UPI.</p>
             <p><b>Right now.</b> Payments are in test mode during the closed beta, so no real money moves yet.</p>
             <p className="lp-disclaimer">Earnings depend on utilisation, your price, power costs and downtime. There's no guaranteed income, and your machine may not be rented at all.</p>
           </div>
@@ -110,7 +110,7 @@ export default function EarnWithHardware() {
       <section className="lp-cta">
         <h2>Have an NVIDIA GPU sitting idle?</h2>
         <p>Tell us about your hardware. We'll get back to you about the closed beta.</p>
-        <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_footer_apply")}>Apply as a provider <ArrowRight size={17} /></Link>
+        <Link to={ROUTES.apply} className="primary-button" {...ctaProps("earn_footer_apply")}>Start hosting <ArrowRight size={17} /></Link>
       </section>
     </>
   );
