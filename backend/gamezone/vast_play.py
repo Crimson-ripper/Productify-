@@ -87,8 +87,11 @@ def machines_near(country: str, origin=None, limit: int = 12) -> dict:
     if not offers and country in geo.COUNTRIES:
         here = geo.COUNTRIES[country]
         near = sorted((geo.km_between(here, p), c) for c, p in geo.COUNTRIES.items() if c != country)
-        used = [c for _, c in near[:6]]
-        offers = _search(used)
+        for n in (6, 15, 30):  # widen until something is free (2026-11-10: none within 6 of India)
+            used = [c for _, c in near[:n]]
+            offers = _search(used)
+            if offers:
+                break
     origin = origin or geo.COUNTRIES.get(country)
     rows = [_row(o, origin) for o in offers]
     rows.sort(key=lambda r: (r["distance_km"] if r["distance_km"] is not None else 1e9, -r["score"], r["price"]))
