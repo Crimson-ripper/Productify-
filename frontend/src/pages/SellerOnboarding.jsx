@@ -36,15 +36,10 @@ export default function SellerOnboarding() {
 
   // STEP 2: Verification
   const [emailCode, setEmailCode] = useState("");
-  const [phoneCode, setPhoneCode] = useState("");
   const [emailSent, setEmailSent] = useState(false);
-  const [phoneSent, setPhoneSent] = useState(false);
   const [emailVerified, setEmailVerified] = useState(Boolean(user?.email_verified || user?.auth_provider === "google"));
-  const [phoneVerified, setPhoneVerified] = useState(Boolean(user?.phone_verified));
   const [sendingEmailCode, setSendingEmailCode] = useState(false);
-  const [sendingPhoneCode, setSendingPhoneCode] = useState(false);
   const [verifyingEmail, setVerifyingEmail] = useState(false);
-  const [verifyingPhone, setVerifyingPhone] = useState(false);
 
   // STEP 3: Store Profile
   const [username, setUsername] = useState(user?.username || "");
@@ -71,7 +66,6 @@ export default function SellerOnboarding() {
       setUsername((prev) => prev || user.username || "");
       setStorename((prev) => prev || user.storename || "");
       if (user.email_verified || user.auth_provider === "google") setEmailVerified(true);
-      if (user.phone_verified) setPhoneVerified(true);
       if (user.seller_tier) setSelectedTier(user.seller_tier);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,7 +113,7 @@ export default function SellerOnboarding() {
           avatar_url: avatarUrl,
           role: "buyer"
         });
-        toast.success("Account registered! Please verify your email and phone.");
+        toast.success("Account registered! Now confirm your email.");
         setStep(2);
       } catch (err) {
         toast.error(getErrorMessage(err, "Registration failed"));
@@ -131,61 +125,37 @@ export default function SellerOnboarding() {
     }
   };
 
-  // Step 2: Send OTP
-  const handleSendCode = async (type) => {
-    const val = type === "email" ? email : phone;
-    if (type === "email") setSendingEmailCode(true);
-    else setSendingPhoneCode(true);
-
+  // Step 2: email code (phones can't be verified yet: no SMS provider, 2026-11-10)
+  const handleSendCode = async () => {
+    setSendingEmailCode(true);
     try {
-      const res = await sendSellerOtp(type, val);
-      if (type === "email") {
-        setEmailSent(true);
-        toast.success(`Verification code sent to ${val}`);
-        if (res.debug_code) toast.info(`Preview code: ${res.debug_code}`);
-      } else {
-        setPhoneSent(true);
-        toast.success(`SMS verification code sent to ${val}`);
-        if (res.debug_code) toast.info(`Preview SMS code: ${res.debug_code}`);
-      }
+      const res = await sendSellerOtp("email", email);
+      setEmailSent(true);
+      toast.success(res.message || `We sent a code to ${email}.`);
     } catch (err) {
-      toast.error(getErrorMessage(err, `Failed to send code to ${val}`));
+      toast.error(getErrorMessage(err, `Failed to send code to ${email}`));
     } finally {
-      if (type === "email") setSendingEmailCode(false);
-      else setSendingPhoneCode(false);
+      setSendingEmailCode(false);
     }
   };
 
-  // Step 2: Confirm OTP
-  const handleVerifyCode = async (type) => {
-    const val = type === "email" ? email : phone;
-    const code = type === "email" ? emailCode : phoneCode;
-    if (!code || code.trim().length < 4) return toast.error("Please enter the verification code.");
-
-    if (type === "email") setVerifyingEmail(true);
-    else setVerifyingPhone(true);
-
+  const handleVerifyCode = async () => {
+    if (!emailCode || emailCode.trim().length < 4) return toast.error("Please enter the verification code.");
+    setVerifyingEmail(true);
     try {
-      await confirmSellerOtp(type, val, code);
-      if (type === "email") {
-        setEmailVerified(true);
-        toast.success("Email verified successfully!");
-      } else {
-        setPhoneVerified(true);
-        toast.success("Phone verified successfully!");
-      }
+      await confirmSellerOtp("email", email, emailCode);
+      setEmailVerified(true);
+      toast.success("Email verified successfully!");
     } catch (err) {
       toast.error(getErrorMessage(err, "Invalid verification code"));
     } finally {
-      if (type === "email") setVerifyingEmail(false);
-      else setVerifyingPhone(false);
+      setVerifyingEmail(false);
     }
   };
 
   // Step 2 -> Step 3
   const handleStep2Continue = () => {
     if (!emailVerified) return toast.error("Please verify your email address before continuing.");
-    if (!phoneVerified) return toast.error("Please verify your mobile phone number before continuing.");
     setStep(3);
   };
 
@@ -283,7 +253,7 @@ export default function SellerOnboarding() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, position: "relative" }}>
               {[
                 { s: 1, label: "Account", sub: "Personal info" },
-                { s: 2, label: "Verification", sub: "1:1 Email & Phone" },
+                { s: 2, label: "Verification", sub: "Confirm your email" },
                 { s: 3, label: "Store Profile", sub: "Username & Logo" },
                 { s: 4, label: "Finished", sub: "Plan & Launch" }
               ].map(({ s, label, sub }) => {
@@ -478,10 +448,10 @@ export default function SellerOnboarding() {
                 <div style={{ marginBottom: 20 }}>
                   <div className="eyebrow"><span className="eyebrow-line" /> STEP 2 OF 4</div>
                   <h2 style={{ font: "600 24px 'Space Grotesk', sans-serif", margin: "6px 0 4px" }}>
-                    Verify email & phone<em>.</em>
+                    Confirm your email<em>.</em>
                   </h2>
                   <p style={{ color: "var(--muted, #747570)", fontSize: "0.88rem", margin: 0 }}>
-                    To protect buyers and sellers, every seller account must be confirmed with 1 unique email and 1 unique mobile phone.
+                    To protect buyers and sellers, every seller account is confirmed with a unique email address. We'll email you a 6-digit code.
                   </p>
                 </div>
 
@@ -513,7 +483,7 @@ export default function SellerOnboarding() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => handleSendCode("email")}
+                        onClick={handleSendCode}
                         disabled={sendingEmailCode}
                         className="secondary-button"
                         style={{ padding: "8px 16px", fontSize: "0.82rem" }}
@@ -535,7 +505,7 @@ export default function SellerOnboarding() {
                       />
                       <button
                         type="button"
-                        onClick={() => handleVerifyCode("email")}
+                        onClick={handleVerifyCode}
                         disabled={verifyingEmail || !emailCode}
                         className="primary-button"
                         style={{ padding: "10px 20px", fontSize: "0.85rem" }}
@@ -546,65 +516,13 @@ export default function SellerOnboarding() {
                   )}
                 </div>
 
-                {/* Phone Verification Box */}
-                <div
-                  style={{
-                    background: phoneVerified ? "rgba(112, 213, 158, 0.1)" : "#fafaf8",
-                    border: phoneVerified ? "1px solid #70d59e" : "1px solid var(--line, #dedfd9)",
-                    borderRadius: 0,
-                    padding: 20,
-                    marginBottom: 24
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: phoneVerified ? "#70d59e" : "var(--ink, #101112)", color: phoneVerified ? "#0d3c22" : "var(--lime, #c8f04c)", display: "grid", placeItems: "center" }}>
-                        <Phone size={16} />
-                      </div>
-                      <div>
-                        <b style={{ fontSize: "0.95rem", display: "block" }}>Mobile Phone</b>
-                        <small style={{ color: "var(--muted, #747570)" }}>{phone}</small>
-                      </div>
-                    </div>
-
-                    {phoneVerified ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#e9f3e5", color: "#277c50", padding: "4px 10px", borderRadius: 100, fontSize: "0.78rem", fontWeight: 700 }}>
-                        <CheckCircle2 size={14} /> Verified ✓
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleSendCode("phone")}
-                        disabled={sendingPhoneCode}
-                        className="secondary-button"
-                        style={{ padding: "8px 16px", fontSize: "0.82rem" }}
-                      >
-                        {sendingPhoneCode ? "Sending…" : phoneSent ? "Resend SMS" : "Get code"}
-                      </button>
-                    )}
+                {/* Phone: kept as a contact number. It can't be verified yet (no SMS provider, 2026-11-10). */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", marginBottom: 24, border: "1px solid var(--line, #dedfd9)", background: "#fafaf8" }}>
+                  <Phone size={16} aria-hidden="true" />
+                  <div>
+                    <b style={{ fontSize: "0.95rem", display: "block" }}>Mobile phone (contact only)</b>
+                    <small style={{ color: "var(--muted, #747570)" }}>{phone || "Not given"} · saved so we can reach you; no SMS code needed</small>
                   </div>
-
-                  {!phoneVerified && phoneSent && (
-                    <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        placeholder="Enter 6-digit SMS code"
-                        value={phoneCode}
-                        onChange={(e) => setPhoneCode(e.target.value)}
-                        style={{ flex: 1, padding: "10px 14px", border: "1px solid var(--line, #dedfd9)", background: "#fff", fontSize: "1rem", letterSpacing: "2px", fontFamily: "'DM Mono', monospace" }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleVerifyCode("phone")}
-                        disabled={verifyingPhone || !phoneCode}
-                        className="primary-button"
-                        style={{ padding: "10px 20px", fontSize: "0.85rem" }}
-                      >
-                        {verifyingPhone ? "Verifying…" : "Confirm"}
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {/* Back / Next buttons */}
@@ -621,7 +539,7 @@ export default function SellerOnboarding() {
                   <button
                     type="button"
                     onClick={handleStep2Continue}
-                    disabled={!emailVerified || !phoneVerified}
+                    disabled={!emailVerified}
                     className="primary-button"
                     style={{ padding: "14px 28px", fontSize: "0.95rem" }}
                   >

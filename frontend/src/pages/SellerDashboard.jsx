@@ -222,6 +222,8 @@ export default function SellerDashboard() {
   ];
 
   const attention = [
+    // Unconfirmed email sign-ups can't load their studio data (the backend refuses until they confirm).
+    user?.email_verified === false && { text: "Confirm your email to use Seller Studio. Your sales, machines and earnings show up once you do.", action: { label: "Resend link", onClick: () => api.post("/auth/resend-verification").then(() => toast.success(`We sent a new link to ${user.email}`), (err) => toast.error(getErrorMessage(err, "Couldn't send the link"))) } },
     pendingCount > 0 && { text: `${pendingCount} listing${pendingCount === 1 ? " is" : "s are"} waiting for admin review.`, action: { label: "View", onClick: () => setSection("listings") } },
     offlineMachines.length > 0 && { text: `${offlineMachines.length} live machine${offlineMachines.length === 1 ? " is" : "s are"} offline, so renters can't use ${offlineMachines.length === 1 ? "it" : "them"}.`, action: { label: "Fix", onClick: () => setSection("machines") } },
     openReports > 0 && { text: `${openReports} open report${openReports === 1 ? "" : "s"} on your listings.`, action: { label: "Review", onClick: () => setSection("reports") } },

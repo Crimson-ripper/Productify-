@@ -72,6 +72,16 @@ async def verify_email(to: str, name: str, token: str):
                f"Hi {name},\n\nConfirm your email for Productify: {url}\n\nThe link works for 48 hours.")
 
 
+async def seller_code(to: str, name: str, code: str) -> bool:
+    """6-digit code that confirms a seller's email address (Seller onboarding)."""
+    return await send(to, "Your Productify verification code",  # code not in the subject: it's logged
+                      _layout("Confirm your email", _p(f"Hi {name}, enter this code to confirm your email for selling on Productify:") +
+                              _p(f"<b style=\"font-size:22px;letter-spacing:4px\">{code}</b>") +
+                              _p("It works for 10 minutes. If you didn't ask for it, ignore this email.")),
+                      f"Hi {name},\n\nYour Productify code is {code}. It works for 10 minutes.\n"
+                      "If you didn't ask for it, ignore this email.")
+
+
 async def welcome(to: str, name: str):
     await send(to, "Welcome to Productify",
                _layout("Welcome to Productify", _p(f"Hi {name}, your account is ready.") +

@@ -400,8 +400,7 @@ def public_user(u):
         "avatar_url": u.get("avatar_url"),
         "phone": u.get("phone"),
         "phone_verified": u.get("phone_verified", False),
-        "email_verified": bool(u.get("email_verified")) or "password_hash" not in u,
-        "email_verified": u.get("email_verified", True if u.get("auth_provider") == "google" else False),
+        "email_verified": not email_unverified(u),
         "seller_verified": u.get("seller_verified", False),
         "seller_tier": u.get("seller_tier", "free"),
         "payout_lock_until": u.get("payout_lock_until"),
@@ -417,11 +416,15 @@ def jwt_token(u):
 
 
 # Email sign-ups can use only these until they confirm their address (Google sign-ins are already verified).
-UNVERIFIED_ALLOWED = {"/api/auth/me", "/api/auth/resend-verification", "/api/auth/logout"}
+UNVERIFIED_ALLOWED = {"/api/auth/me", "/api/auth/resend-verification", "/api/auth/logout",
+                      # an emailed seller code confirms the account's email too
+                      "/api/seller/verify/send-code", "/api/seller/verify/confirm-code"}
 
 
 def email_unverified(u: dict) -> bool:
-    return "password_hash" in u and not u.get("email_verified")
+    """Only email sign-ups made since the lock (stored with email_verified=False) must confirm first.
+    Accounts from before it have no flag and stay usable; so does the seeded admin (2026-11-10)."""
+    return "password_hash" in u and u.get("email_verified") is False
 
 
 async def current_user(request: Request):
@@ -735,45 +738,53 @@ async def seller_verify_send_code(data: SellerVerifySendCodeInput, user=Depends(
             raise HTTPException(409, "This email is already registered to another active seller account.")
     else:
         raise HTTPException(400, "Invalid verification type")
+    if data.type == "phone":
+        # 2026-11-10: there is no SMS provider yet, so phone numbers can't be verified. The number is
+        # kept as a contact detail; activation needs a confirmed email instead.
+        raise HTTPException(501, "Phone verification isn't available yet. Your number is saved as a contact number.")
 
-    # Generate 6-digit cryptographic OTP
+    now = datetime.now(timezone.utc)
+    prev = await db.verification_codes.find_one({"user_id": user["id"], "type": data.type, "value": val})
+    sent_at = (prev or {}).get("created_at")
+    if sent_at and sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=timezone.utc)
+    if sent_at and (now - sent_at).total_seconds() < 60 and not (prev or {}).get("verified"):
+        raise HTTPException(429, "A code was just sent. Wait a minute before asking for another.")
+
+    # 6-digit code, emailed and stored only as a hash (2026-11-10: it used to be returned to the browser).
     otp = f"{secrets.randbelow(900000) + 100000}"
-    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
-    
     await db.verification_codes.update_one(
         {"user_id": user["id"], "type": data.type, "value": val},
-        {"$set": {"code": otp, "expires_at": expires, "verified": False, "created_at": datetime.now(timezone.utc)}},
+        {"$set": {"code_hash": hashlib.sha256(otp.encode()).hexdigest(), "expires_at": now + timedelta(minutes=10),
+                  "verified": False, "attempts": 0, "created_at": now}, "$unset": {"code": ""}},
         upsert=True
     )
-    
-    logger.info(f"Verification code for {data.type} {val}: {otp}")
-    return {
-        "ok": True,
-        "message": f"Verification code sent to {val}",
-        "debug_code": otp,
-    }
+    if not await emailer.seller_code(val, user.get("name", "there"), otp):
+        raise HTTPException(503, "We couldn't send the email right now. Please try again in a few minutes.")
+    return {"ok": True, "message": f"We emailed a 6-digit code to {val}."}
 
 
 @api.post("/seller/verify/confirm-code")
 async def seller_verify_confirm_code(data: SellerVerifyConfirmInput, user=Depends(current_user)):
     """Confirms 6-digit OTP code for email or phone."""
     val = data.value.strip().lower() if data.type == "email" else data.value.strip()
-    record = await db.verification_codes.find_one({
-        "user_id": user["id"],
-        "type": data.type,
-        "value": val,
-        "code": data.code.strip()
-    })
-    if not record:
+    record = await db.verification_codes.find_one({"user_id": user["id"], "type": data.type, "value": val})
+    if not record or not record.get("code_hash"):
         raise HTTPException(400, "Invalid verification code. Please check and try again.")
-    
+    if record.get("attempts", 0) >= 5:
+        raise HTTPException(429, "Too many wrong codes. Please request a new code.")
     exp = record.get("expires_at")
     if exp and exp.tzinfo is None:
         exp = exp.replace(tzinfo=timezone.utc)
     if exp and exp < datetime.now(timezone.utc):
         raise HTTPException(400, "Verification code has expired. Please request a new code.")
-    
-    await db.verification_codes.update_one({"_id": record["_id"]}, {"$set": {"verified": True}})
+    if not secrets.compare_digest(hashlib.sha256(data.code.strip().encode()).hexdigest(), record["code_hash"]):
+        await db.verification_codes.update_one({"_id": record["_id"]}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Invalid verification code. Please check and try again.")
+
+    await db.verification_codes.update_one({"_id": record["_id"]}, {"$set": {"verified": True}, "$unset": {"code_hash": ""}})
+    if data.type == "email" and val == (user.get("email") or "").lower():
+        await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}})
     return {"ok": True, "verified": True}
 
 
@@ -811,10 +822,13 @@ async def seller_activate(data: SellerActivateInput, user=Depends(current_user))
     if existing_phone:
         raise HTTPException(409, "This phone number is already registered to another seller account.")
     
-    # Verify phone confirmation record
+    # A confirmed email is required (phone numbers can't be verified yet: no SMS provider).
+    email = (user.get("email") or "").lower()
+    email_rec = await db.verification_codes.find_one({"user_id": user["id"], "type": "email", "value": email, "verified": True})
+    email_ok = bool(email_rec) or user.get("email_verified") is True or user.get("auth_provider") == "google"
+    if not email_ok:
+        raise HTTPException(400, "Confirm your email address first: enter the code we emailed you.")
     phone_rec = await db.verification_codes.find_one({"user_id": user["id"], "type": "phone", "value": phone, "verified": True})
-    if not phone_rec and not user.get("phone_verified"):
-        raise HTTPException(400, "Phone number has not been verified yet. Please enter the verification code first.")
     
     # Check username uniqueness if provided
     username = (data.username or "").strip().lower()
@@ -835,8 +849,8 @@ async def seller_activate(data: SellerActivateInput, user=Depends(current_user))
         "role": "seller",
         "seller_verified": True,
         "phone": phone,
-        "phone_verified": True,
-        "email_verified": True,
+        "phone_verified": bool(phone_rec) or bool(user.get("phone_verified")),
+        "email_verified": True,  # checked above
         "recovery_key_hash": key_hash,
         "seller_tier": chosen_tier,
         "seller_activated_at": datetime.now(timezone.utc).isoformat(),
@@ -878,14 +892,8 @@ async def seller_recovery_reset(data: SellerRecoveryInput, user=Depends(current_
             raise HTTPException(401, "Account password verification failed.")
         authenticated = True
     else:
-        rec = await db.verification_codes.find_one({
-            "user_id": user["id"],
-            "code": (data.proof_code or "").strip(),
-            "verified": True
-        })
-        if not rec:
-            raise HTTPException(403, "Verification proof not satisfied. Please provide password or recovery key.")
-        authenticated = True
+        # Codes are no longer stored in plain text (2026-11-10), so only the password or recovery key works.
+        raise HTTPException(403, "Confirm it's you with your account password or your recovery key.")
         
     if not authenticated:
         raise HTTPException(403, "Identity confirmation failed.")
@@ -906,14 +914,21 @@ async def seller_recovery_reset(data: SellerRecoveryInput, user=Depends(current_
     
     updates = {
         field: new_val,
-        f"{field}_verified": True,
+        # The new address/number isn't proven yet: a new email must be confirmed from the link we send.
+        f"{field}_verified": False,
         "payout_lock_until": lock_until,
         "last_recovery_at": datetime.now(timezone.utc).isoformat(),
     }
     
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     user.update(updates)
-    
+    if field == "email":
+        token = secrets.token_urlsafe(32)
+        await db.users.update_one({"id": user["id"]}, {"$set": {"email_verify": {
+            "hash": hashlib.sha256(token.encode()).hexdigest(),
+            "expires": (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()}}})
+        spawn(emailer.verify_email(new_val, user.get("name", "there"), token))
+
     return {
         "user": public_user(user),
         "message": f"Successfully updated your {field}. Note: Payouts are temporarily locked for 24 hours as a security precaution.",
@@ -1416,6 +1431,10 @@ async def publish_machine(rid: str, data: MachinePublishInput, user=Depends(curr
         raise HTTPException(400, "This machine can't be changed right now")
     if not r.get("gpu"):
         raise HTTPException(400, "Pair the machine with Productify Node first so its hardware is known.")
+    if r["gpu"].startswith("CPU only") or not r.get("vram"):
+        # 2026-11-10: renters book GPUs; a machine without a detected NVIDIA GPU can't be listed.
+        raise HTTPException(400, "Productify Node didn't find an NVIDIA GPU on this machine. Install or update the "
+                                 "NVIDIA driver, restart Productify Node, and try again once the GPU shows here.")
     update = {
         "price": round(float(data.price), 2),
         "title": (data.title or "").strip() or r.get("title") or r["gpu"],
