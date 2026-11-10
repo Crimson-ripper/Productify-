@@ -2089,3 +2089,53 @@ header.topbar,.footer-grid{border:0!important}
 
 .gz-client-note{max-width:34ch;margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--x-fg2,#b9bbb5)}
 .gz-client-note a{color:inherit;text-decoration:underline}
+
+/* Gamezone play (2026-11-10): region + machine + launcher picker, live session panel, low-credit popup */
+.gz-play-wrap{background:#0a0a0b;padding:0 clamp(20px,3.6vw,56px) 28px}
+.gz-play{background:var(--surface);color:var(--ink);padding:22px;border:1px solid var(--line)}
+.gz-play-head h2{margin:0 0 4px;font:800 22px var(--font-heading)}
+.gz-play-head p{margin:0 0 16px;color:var(--muted)}
+.gz-play .gz-muted{color:var(--muted)!important;font-size:14px;margin:6px 0}
+.gz-session>button,.gz-session>.secondary-button{justify-self:start}
+.gz-picker{display:grid;gap:14px}
+.gz-picker-row{display:flex;align-items:flex-end;gap:8px}
+.gz-field{display:grid;gap:4px;font-size:13px;color:var(--subtle)}
+.gz-field span{display:flex;align-items:center;gap:6px;font-weight:600}
+.gz-field select{min-width:220px;max-width:100%;padding:9px 10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit}
+.gz-icon-btn{display:inline-grid;place-items:center;width:38px;height:38px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.gz-icon-btn:focus-visible,.gz-machine:focus-within,.gz-chip:focus-within{outline:2px solid var(--ink);outline-offset:2px}
+.gz-machines{display:grid;gap:8px;max-height:360px;overflow:auto}
+.gz-machine{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 14px;border:1px solid var(--line);background:var(--surface);cursor:pointer}
+.gz-machine.on{border-color:var(--ink);box-shadow:inset 4px 0 0 var(--lime)}
+.gz-machine input{position:absolute;opacity:0;pointer-events:none}
+.gz-machine-gpu{display:flex;align-items:center;gap:6px;font-weight:700}
+.gz-machine-gpu small{color:var(--subtle);font-weight:500}
+.gz-machine-meta{grid-column:1;color:var(--muted);font-size:13px}
+.gz-machine-price{grid-column:2;grid-row:1/3;align-self:center;font-weight:800;font-size:18px}
+.gz-machine-price small{font-weight:500;font-size:12px;color:var(--subtle)}
+.gz-launchers{display:flex;flex-wrap:wrap;gap:8px;border:0;padding:0;margin:0}
+.gz-launchers legend{font-size:13px;font-weight:600;color:var(--subtle);margin-bottom:6px;padding:0}
+.gz-chip{position:relative;padding:8px 14px;border:1px solid var(--line);cursor:pointer;font-weight:600}
+.gz-chip.on{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.gz-chip input{position:absolute;opacity:0;pointer-events:none}
+.gz-terms{margin:0;padding-left:18px;color:var(--muted);font-size:13px;display:grid;gap:4px}
+.gz-play-btn{justify-self:start}
+.gz-session{display:grid;gap:10px}
+.gz-session-state{display:flex;align-items:center;gap:8px;font-weight:700}
+.gz-dot{width:10px;height:10px;border-radius:50%;background:var(--subtle);display:inline-block}
+.gz-dot.on{background:#2f9e44}
+.gz-dot.pulse{background:#e8a317;animation:gzpulse 1.2s ease-in-out infinite}
+@keyframes gzpulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.gz-dot.pulse{animation:none}}
+.gz-code{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.gz-code span{color:var(--subtle);font-size:13px}
+.gz-code b{font:800 24px/1 ui-monospace,Consolas,monospace;letter-spacing:.12em}
+.gz-session-actions{display:flex;flex-wrap:wrap;gap:8px}
+.gz-meter{display:flex;flex-wrap:wrap;gap:8px 24px;margin:4px 0 0}
+.gz-meter div{display:grid}
+.gz-meter dt{font-size:12px;color:var(--subtle)}
+.gz-meter dd{margin:0;font-weight:700}
+.gz-modal{position:fixed;inset:0;background:rgba(10,10,11,.6);display:grid;place-items:center;padding:16px;z-index:1000}
+.gz-modal-box{background:var(--surface);color:var(--ink);max-width:420px;width:100%;padding:20px;border:1px solid var(--line)}
+.gz-modal-box h3{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+@media (max-width:560px){.gz-play{padding:16px}.gz-field select{min-width:0;width:100%}.gz-picker-row .gz-field{flex:1}}
