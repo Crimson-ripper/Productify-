@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Cookie, Request, Response, UploadFile, File, Depends, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response as FastAPIResponse, PlainTextResponse, FileResponse, RedirectResponse
+from fastapi.responses import Response as FastAPIResponse, PlainTextResponse, FileResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -51,7 +51,7 @@ from gamezone import (
     calculate_session_metered_cost,
     CURATED_GAMES,
 )
-from gamezone import geo as gz_geo, inventory as gz_inventory
+from gamezone import geo as gz_geo, inventory as gz_inventory, vast_play as gz_play
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
@@ -3660,7 +3660,7 @@ async def recover_partner_orders():
     """Setup runs in memory, so a backend restart ends it: close those orders with no charge
     (the renter can order again) and destroy any machine they had."""
     now_iso = datetime.now(timezone.utc).isoformat()
-    for inst in await db.instances.find({"kind": "partner", "status": {"$in": ["finding", "starting"]}}, {"_id": 0}).to_list(500):
+    for inst in await db.instances.find({"provider": "vast", "status": {"$in": ["finding", "starting"]}}, {"_id": 0}).to_list(500):
         logger.warning(f"closing partner order {inst['id']}: setup was interrupted by a restart")
         await finish_instance(inst, 0, 0.0, now_iso, reason="setup interrupted, please order again")
 
@@ -3835,7 +3835,7 @@ async def finish_instance(inst: dict, total_sec: int, accum_cost: float, now_iso
     if not getattr(res, "modified_count", 1):
         return final_cost
     rental_id = inst.get("rental_id")
-    if inst.get("kind") == "partner":
+    if inst.get("kind") == "partner" or (inst.get("kind") == "game" and inst.get("provider") == "vast"):
         spawn(destroy_partner_machine(inst))
     if destroy and rental_id and inst.get("kind") == "game" and node_hub.is_connected(rental_id):
         try:
@@ -3916,6 +3916,7 @@ async def credit_limit_loop():
         await asyncio.sleep(60)
         try:
             await enforce_credit_limits()
+            await gamezone_session_limit()
         except Exception as e:
             logger.warning(f"credit limit loop: {e}")
 
@@ -4009,20 +4010,301 @@ async def start_node_game_session(data: GameSessionInput, user=Depends(current_u
             "connect_url": f"productify://connect?code={join_code}"}
 
 
-@api.post("/gamezone/sessions/{code}/connect")
-async def gamezone_connect(code: str):
-    """PG Connect's join call (contract in productify-connect DESIGN.md)."""
+# ---------- Gamezone play on rented Vast VMs (flow A, 2026-11-10) ----------
+# The player picks a region (default: their IP's country) and a machine near them, and a launcher
+# (Steam or Epic). We rent that VM with the kiosk setup; PG Connect joins it with the session code.
+# Billing starts only when the VM is ready; ending the session destroys (and so wipes) the VM.
+GZ_PLAY_SESSION_HOURS = 12      # hard stop, so a forgotten session can't run for days
+
+
+def _gz_play_enabled(user) -> bool:
+    return os.environ.get("GZ_PLAY_ENABLED", "").lower() in ("1", "true", "yes") or \
+        (user or {}).get("role") in ["admin", "sub-admin"]
+
+
+@api.get("/gamezone/play/machines")
+async def gamezone_play_machines(request: Request, country: str = "", lat: Optional[float] = None,
+                                 lon: Optional[float] = None, user=Depends(optional_user)):
+    """Gaming machines near the player with their hourly price. Region defaults to the IP's country."""
+    if not _gz_play_enabled(user):
+        return {"enabled": False, "machines": []}
+    detected = (request.headers.get("cf-ipcountry") or "").upper()
+    code = (country or detected or "US").strip().upper()[:2]
+    origin = _inventory_origin(lat, lon, code)
+    try:
+        data = await asyncio.to_thread(gz_play.machines_near, code, origin)
+    except Exception as e:
+        logger.warning(f"gamezone machines {code}: {e}")
+        raise HTTPException(503, "Couldn't load machines right now. Try again in a minute.")
+    return {"enabled": True, "country": code, "detected": detected, "searched": data["searched"],
+            "machines": data["machines"], "countries": sorted(pfy_geo.COUNTRIES),
+            "launchers": [{"id": k, "name": v} for k, v in gz_play.LAUNCHERS.items()]}
+
+
+class GamePlayStartInput(BaseModel):
+    offer_id: int = Field(ge=1)
+    launcher: str = Field(pattern="^(steam|epic)$")
+    country: str = Field("", max_length=2)
+
+
+def _play_view(inst: dict) -> dict:
+    now = datetime.now(timezone.utc)
+    secs, cost = _live_usage(inst, now)
+    out = {k: inst.get(k) for k in ("id", "status", "join_code", "gpu", "location", "launcher", "hourly_price",
+                                     "created_at", "started_at", "end_reason", "setup_detail")}
+    out.update({"runtime_seconds": secs, "cost": round(cost, 4),
+                "connect_url": f"productify://connect?code={inst['join_code']}" if inst.get("status") == "running" else None,
+                "logs": (inst.get("logs") or [])[-6:]})
+    return out
+
+
+@api.post("/gamezone/play")
+async def gamezone_play_start(data: GamePlayStartInput, user=Depends(current_user)):
+    if not _gz_play_enabled(user):
+        raise HTTPException(404, "Gamezone isn't open yet.")
+    if not gz_play.ssh_key_configured():
+        raise HTTPException(503, "Gamezone isn't set up on this server yet.")
+    if await spendable_credits(user["id"]) < MIN_CREDITS_TO_START:
+        raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of credits to start a session.")
+    if await db.instances.find_one({"user_id": user["id"], "kind": "game",
+                                    "status": {"$in": ["finding", "starting", "running"]}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "You already have a Gamezone session. End it before starting another.")
+    row = gz_play.find_offer(data.offer_id)
+    if not row:
+        raise HTTPException(409, "That machine is no longer listed. Refresh the list and pick again.")
+    session_id = f"gs-{uuid.uuid4().hex[:10]}"
+    join_code = "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(8))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": session_id, "kind": "game", "provider": "vast", "join_code": join_code,
+        "launcher": data.launcher, "offer_id": data.offer_id, "country": (data.country or row["country"]).upper(),
+        "rental_id": None, "rental_title": f"{row['gpu']} gaming machine", "gpu": row["gpu"], "vram": f"{row['vram_gb']} GB",
+        "location": row["location"], "user_id": user["id"], "renter_name": user.get("name", "User"),
+        "renter_email": user.get("email"), "seller_id": "platform", "seller_name": "Vast.ai partner",
+        "template_id": "gamezone-kiosk", "template_name": f"Gamezone ({gz_play.LAUNCHERS[data.launcher]})",
+        "hourly_price": row["price"], "base_price": row["price"], "storage_price": 0.0,
+        "status": "finding", "created_at": now_iso, "started_at": None,
+        "total_runtime_seconds": 0, "cost_accumulated": 0.0,
+        "logs": [f"[{now_iso[:19]}] Renting a {row['gpu']} in {row['location']} at ${row['price']:.2f}/h."],
+    }
+    await db.instances.insert_one(doc)
+    spawn(gamezone_play_worker(session_id))
+    return _play_view(doc)
+
+
+@api.get("/gamezone/play/current")
+async def gamezone_play_current(user=Depends(current_user)):
+    """The player's live session (or one that ended in the last 10 minutes), for the page to poll."""
+    inst = await db.instances.find_one({"user_id": user["id"], "kind": "game", "provider": "vast"},
+                                       {"_id": 0}, sort=[("created_at", -1)])
+    if not inst:
+        return {"session": None}
+    view = _play_view(inst)
+    if inst.get("status") == "running":
+        left = await spendable_credits(user["id"])
+        rate = float(inst.get("hourly_price") or 0) or 1
+        view["credits_left"] = round(left, 2)
+        view["minutes_left"] = max(0, int(left / rate * 60))
+        view["low_credit"] = view["minutes_left"] <= 10
+    elif inst.get("status") == "terminated":
+        ended = inst.get("terminated_at") or inst.get("created_at")
+        if ended and (datetime.now(timezone.utc) - datetime.fromisoformat(ended)).total_seconds() > 600:
+            return {"session": None}
+    return {"session": view}
+
+
+@api.post("/gamezone/play/{session_id}/end")
+async def gamezone_play_end(session_id: str, user=Depends(current_user)):
+    inst = await db.instances.find_one({"id": session_id, "kind": "game", "user_id": user["id"]}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "Session not found")
+    now = datetime.now(timezone.utc)
+    if inst.get("status") in ("finding", "starting"):
+        await finish_instance(inst, 0, 0.0, now.isoformat(), reason="ended by player before it was ready")
+    elif inst.get("status") == "running":
+        secs, cost = _live_usage(inst, now)
+        await finish_instance(inst, secs, cost, now.isoformat(), reason="ended by player")
+    return {"session": _play_view(await db.instances.find_one({"id": session_id}, {"_id": 0}))}
+
+
+async def gamezone_play_worker(session_id: str):
+    """Rent the chosen VM (or the next nearest if it was taken), wait for the kiosk, then start billing."""
+    inst = await db.instances.find_one({"id": session_id}, {"_id": 0})
+    if not inst:
+        return
+    deadline, vid = time.time() + gz_play.SETUP_TIMEOUT_S, None
+
+    async def wanted():
+        cur = await db.instances.find_one({"id": session_id}, {"_id": 0, "status": 1})
+        return cur and cur.get("status") in ("finding", "starting")
+
+    async def drop(v):
+        try:
+            await asyncio.to_thread(vast_market.destroy, v)
+        except Exception as e:
+            logger.warning(f"game {session_id}: couldn't destroy {v}; the reaper will: {e}")
+
+    try:
+        first = gz_play.find_offer(inst["offer_id"])
+        listed = await asyncio.to_thread(gz_play.machines_near, inst["country"])
+        options = [first] + [r for r in listed["machines"] if r["offer_id"] != inst["offer_id"]
+                             and r["price"] <= inst["hourly_price"] + 0.05][:2]
+        for row in [r for r in options if r]:
+            if not await wanted():
+                return
+            try:
+                vid = await asyncio.to_thread(gz_play.rent, row["offer_id"], f"pfy-{session_id}")
+            except Exception:
+                await _log(session_id, f"That {row['gpu']} was taken just now; trying the next nearest machine.")
+                continue
+            await _log(session_id, f"Rented a {row['gpu']} in {row['location']}. Setting it up (usually 5-10 minutes).",
+                       status="starting", vast_instance_id=vid, gpu=row["gpu"], location=row["location"],
+                       hourly_price=row["price"], base_price=row["price"])
+            break
+        if not vid:
+            raise RuntimeError("no machine could be rented")
+        while time.time() < deadline:
+            await asyncio.sleep(15)
+            if not await wanted():
+                await drop(vid)
+                return
+            try:
+                st = await asyncio.to_thread(vast_market.status, vid)
+            except Exception:
+                continue
+            msg = (st.get("status_msg") or "").lower()
+            if st.get("actual_status") in ("exited", "offline") or "error" in msg:
+                raise RuntimeError(f"the machine failed to start ({msg[:80]})")
+            ep = gz_play.endpoints(st)
+            if st.get("actual_status") != "running" or not ep:
+                continue
+            host, ssh_port, wg_port = ep
+            try:
+                ready = await asyncio.to_thread(gz_play.check_ready, host, ssh_port)
+            except Exception:
+                continue
+            if not ready["ready"]:
+                if ready["detail"]:
+                    await db.instances.update_one({"id": session_id}, {"$set": {"setup_detail": ready["detail"]}})
+                continue
+            cur = await db.instances.find_one({"id": session_id}, {"_id": 0, "hourly_price": 1})
+            price = float(cur.get("hourly_price") or inst["hourly_price"])
+            if st.get("dph_total"):  # Vast's real rate can differ from the listing; never below cost x markup
+                price = max(price, vast_market.renter_price(float(st["dph_total"])))
+            now_iso = datetime.now(timezone.utc).isoformat()
+            res = await db.instances.update_one({"id": session_id, "status": "starting"}, {"$set": {
+                "status": "running", "started_at": now_iso, "hourly_price": price, "base_price": price,
+                "vm_host": host, "vm_ssh_port": ssh_port, "wg_port": wg_port, "wg_host_key": ready["host_key"],
+                "setup_detail": None},
+                "$push": {"logs": f"[{now_iso[:19]}] Ready at ${price:.2f}/h. Billing started. Open PG Connect to play."}})
+            if getattr(res, "modified_count", 1) and inst.get("renter_email"):
+                spawn(emailer.instance_started(inst["renter_email"], inst.get("renter_name", "there"),
+                                               f"Gamezone {inst['gpu']}", price, session_id))
+            return
+        raise RuntimeError("setup took too long")
+    except Exception as e:
+        logger.warning(f"game {session_id} setup failed: {e}")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.instances.update_one({"id": session_id, "status": {"$in": ["finding", "starting"]}}, {"$set": {
+            "status": "terminated", "terminated_at": now_iso, "end_reason": "setup failed", "cost_accumulated": 0.0},
+            "$push": {"logs": f"[{now_iso[:19]}] We couldn't get a machine ready. You haven't been charged. Please try again."}})
+        if vid:
+            await drop(vid)
+
+
+async def gamezone_session_limit():
+    """End Vast game sessions after GZ_PLAY_SESSION_HOURS (called from the credit loop)."""
+    now = datetime.now(timezone.utc)
+    for inst in await db.instances.find({"kind": "game", "provider": "vast", "status": "running"}, {"_id": 0}).to_list(500):
+        secs, cost = _live_usage(inst, now)
+        if secs >= GZ_PLAY_SESSION_HOURS * 3600:
+            await finish_instance(inst, secs, cost, now.isoformat(), reason=f"reached the {GZ_PLAY_SESSION_HOURS}-hour session limit")
+
+
+# PG Connect's session API (contract in productify-connect docs/DESIGN.md). The session code is the
+# only credential PG Connect has; pairing state lives in memory for 10 minutes.
+GZ_PAIRINGS = {}  # code -> {"pin", "pair_token", "session_id", "device_name", "at"}
+
+
+class GzConnectInput(BaseModel):
+    wireguard_public_key: str = Field("", max_length=64)
+    client: dict = Field(default_factory=dict)
+
+
+def _norm_code(code: str) -> str:
     code = code.strip().upper().replace("-", "")
     if not re.fullmatch(r"[A-Z0-9]{6,16}", code):
         raise HTTPException(404, "unknown session code")
-    inst = await db.instances.find_one({"join_code": code, "kind": "game"}, {"_id": 0, "status": 1})
+    return code
+
+
+@api.post("/gamezone/sessions/{code}/connect")
+async def gamezone_connect(code: str, data: Optional[GzConnectInput] = None):
+    """PG Connect's join call: registers its tunnel key on the VM and returns host, PIN and network."""
+    code = _norm_code(code)
+    inst = await db.instances.find_one({"join_code": code, "kind": "game"}, {"_id": 0})
     if not inst:
         raise HTTPException(404, "unknown session code")
+    if inst.get("status") in ("finding", "starting"):
+        return JSONResponse(status_code=409, content={
+            "detail": "Your gaming machine is still starting. PG Connect will keep trying.", "retry_after": 30})
     if inst.get("status") != "running":
         raise HTTPException(410, "This session has ended.")
-    # TODO(Phase 3): return host address, Sunshine pairing PIN and network config once the VM
-    # runs Sunshine and is reachable (GAMEZONE_NODE_TASKS.md 3.1-3.3).
-    raise HTTPException(503, "Streaming from Productify Node machines isn't ready yet. Your session is running and you can stop it from the website.")
+    if inst.get("provider") != "vast":
+        raise HTTPException(503, "Streaming from Productify Node machines isn't ready yet. Your session is running and you can stop it from the website.")
+    data = data or GzConnectInput()
+    try:
+        await asyncio.to_thread(gz_play.add_peer, inst["vm_host"], inst["vm_ssh_port"], data.wireguard_public_key)
+    except ValueError:
+        raise HTTPException(400, "PG Connect didn't send a valid tunnel key. Update PG Connect and try again.")
+    except Exception as e:
+        logger.warning(f"game {inst['id']}: peer add failed: {e}")
+        raise HTTPException(502, "Couldn't reach your gaming machine. Try again in a moment.")
+    pin = f"{secrets.randbelow(10000):04d}"
+    session_ref = f"gzs-{secrets.token_hex(6)}"
+    pair_token = secrets.token_urlsafe(24)
+    GZ_PAIRINGS[code] = {"pin": pin, "pair_token": pair_token, "session_id": session_ref,
+                         "device_name": str((data.client or {}).get("device_name", ""))[:60], "at": time.time()}
+    return {
+        "session_id": session_ref,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(timespec="seconds"),
+        "host": {"name": "Productify Gamezone", "address": f"{gz_play.WG_NET}.1", "http_port": 47989},
+        "pairing": {"mode": "pin", "pin": pin, "pair_token": pair_token},
+        "app": {"name": gz_play.LAUNCHERS.get(inst.get("launcher"), "Steam")},
+        "network": gz_play.tunnel(inst["vm_host"], inst["wg_port"], inst["wg_host_key"]),
+    }
+
+
+class GzSessionCallInput(BaseModel):
+    session_id: str = Field(max_length=40)
+    pair_token: str = Field("", max_length=64)
+    event: str = Field("", max_length=40)
+    detail: str = Field("", max_length=300)
+
+
+@api.post("/gamezone/sessions/{code}/pairing")
+async def gamezone_pairing(code: str, data: GzSessionCallInput):
+    code = _norm_code(code)
+    p = GZ_PAIRINGS.get(code)
+    if not p or p["session_id"] != data.session_id or time.time() - p["at"] > 600:
+        raise HTTPException(404, "unknown session")
+    if not secrets.compare_digest(data.pair_token, p["pair_token"]):
+        raise HTTPException(403, "bad pair token")
+    inst = await db.instances.find_one({"join_code": code, "kind": "game", "status": "running"}, {"_id": 0})
+    if not inst or inst.get("provider") != "vast":
+        raise HTTPException(410, "This session has ended.")
+    spawn(asyncio.to_thread(gz_play.submit_pin, inst["vm_host"], inst["vm_ssh_port"], p["pin"], p["device_name"]))
+    return JSONResponse(status_code=202, content={"status": "submitting"})
+
+
+@api.post("/gamezone/sessions/{code}/events")
+async def gamezone_events(code: str, data: GzSessionCallInput):
+    code = _norm_code(code)
+    p = GZ_PAIRINGS.get(code)
+    if not p or p["session_id"] != data.session_id:
+        raise HTTPException(404, "unknown session")
+    logger.info(f"gamezone session event {data.event!r} {data.detail[:120]}")
+    return JSONResponse(status_code=202, content={"status": "ok"})
 
 
 @api.post("/instances/{inst_id}/exec")

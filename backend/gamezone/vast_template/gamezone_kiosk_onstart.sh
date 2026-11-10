@@ -8,7 +8,7 @@
 # Settings come from the template / launch env (written by Vast to /etc/environment):
 #   GZ_SUNSHINE_USER, GZ_SUNSHINE_PASS  Sunshine web-UI login (generate per session; never reuse)
 #   GZ_PLAYER_PASS                      password for the kiosk user (random per session)
-#   GZ_HEROIC_VERSION                   Heroic (Epic/GOG) AppImage version, e.g. 2.18.1 (optional)
+#   GZ_HEROIC_VERSION                   Heroic (Epic/GOG) AppImage version, e.g. 2.18.1 (default: latest)
 #   GZ_RESOLUTION                       e.g. 1920x1080 (default)
 #   GZ_WG_PORT                          WireGuard UDP port (optional; normally detected, see step 6)
 #   GZ_WG_NET                           tunnel /24, default 10.77.0 (host .1, client .2)
@@ -50,6 +50,11 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -o DPkg::Lock::Timeout=600 update -qq || true
 # picom: Steam's Big Picture UI fails to draw (GLXBadPixmap) without a compositor (2026-11-09).
 apt-get -o DPkg::Lock::Timeout=600 install -y -qq openbox x11-xserver-utils unclutter wireguard-tools iptables picom xdotool >/dev/null || true
+# 2026-11-10: always installed, so players can pick Epic as well as Steam.
+if [ -z "${GZ_HEROIC_VERSION:-}" ]; then
+  GZ_HEROIC_VERSION=$(curl -fsSL https://api.github.com/repos/Heroic-Games-Launcher/HeroicGamesLauncher/releases/latest \
+    | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)
+fi
 if [ -n "${GZ_HEROIC_VERSION:-}" ]; then
   mkdir -p /opt/heroic
   curl -fsSL -o /opt/heroic/Heroic.AppImage \
@@ -57,7 +62,9 @@ if [ -n "${GZ_HEROIC_VERSION:-}" ]; then
     && chmod 755 /opt/heroic/Heroic.AppImage || echo "[gamezone] Heroic download failed"
 fi
 
-# 4. Kiosk X session: Openbox with no menus or key bindings, Steam Big Picture kept running fullscreen.
+# 4. Kiosk X session: Openbox with no menus or key bindings and an empty screen. The launcher the
+#    player picked on the website (Steam or Epic) is started by Sunshine when PG Connect connects
+#    (step 5); 2026-11-10: Steam used to start here for everyone, even players who chose Epic.
 install -d -o "$PLAYER" -g "$PLAYER" /home/$PLAYER/.config/openbox
 cat > /home/$PLAYER/.config/openbox/rc.xml <<'EOF'
 <?xml version="1.0"?>
@@ -130,8 +137,7 @@ picom -b --backend xrender 2>/dev/null || true
 # started in testing, 2026-11-09).
 /usr/bin/sunshine > /tmp/sunshine.log 2>&1 &
 /usr/local/bin/gamezone-game-watchdog > /tmp/gamezone-watchdog.log 2>&1 &
-# Steam Big Picture is the "home screen"; restart it if the player quits it.
-while true; do /usr/games/steam -gamepadui -fulldesktopres; sleep 2; done
+while true; do sleep 3600; done
 EOF
 chmod 755 /usr/local/bin/gamezone-session
 cat > /usr/share/xsessions/gamezone.desktop <<'EOF'
@@ -177,10 +183,11 @@ capture = x11
 # 2026-11-09: with no panel to host it, the tray icon blocks session start (no RTSP reply, then a crash).
 system_tray = disabled
 EOF
-# Steam runs constantly in the kiosk session, so its app only shows the screen: launching
-# "steam://open/bigpicture" again blanked Steam's window (2026-11-09). Absolute paths only for others.
-APPS='{"env":{},"apps":[{"name":"Steam","image-path":"steam.png"}'
-[ -x /opt/heroic/Heroic.AppImage ] && APPS="$APPS"',{"name":"Epic Games (Heroic)","cmd":"/opt/heroic/Heroic.AppImage --no-sandbox --fullscreen","auto-detach":"true"}'
+# Each app starts its launcher (absolute paths only). The app name is what the backend sends to
+# PG Connect ("Steam" / "Epic Games"). Steam starts fresh here: re-opening Big Picture in an already
+# running Steam blanked its window (2026-11-09).
+APPS='{"env":{},"apps":[{"name":"Steam","image-path":"steam.png","detached":["/usr/games/steam -gamepadui -fulldesktopres"]}'
+[ -x /opt/heroic/Heroic.AppImage ] && APPS="$APPS"',{"name":"Epic Games","detached":["/opt/heroic/Heroic.AppImage --no-sandbox --fullscreen"]}'
 echo "$APPS]}" > "$SUNCONF/apps.json"
 chown -R "$PLAYER:$PLAYER" "$SUNCONF"
 SUNBIN=$(command -v sunshine || ls /usr/bin/sunshine* 2>/dev/null | head -1)

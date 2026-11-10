@@ -6,6 +6,7 @@ import { PLACEHOLDER_IMG, imgFallback } from "@/lib/image";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import GamePackageUploader from "@/components/GamePackageUploader";
+import GamezonePlay from "@/components/GamezonePlay";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
 
@@ -307,6 +308,8 @@ export default function Gamezone() {
         </div>
         </div>
       </section>
+
+      <GamezonePlay downloadUrl={PG_CONNECT_DOWNLOAD_URL} />
 
       <nav className="gz-tabs" aria-label="Gamezone sections">
         {[
