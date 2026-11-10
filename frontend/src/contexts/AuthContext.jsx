@@ -70,35 +70,15 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Codes are checked only by the server (2026-11-10: a browser-side fallback used to accept any code).
   const sendSellerOtp = async (type, value) => {
-    try {
-      const { data } = await api.post("/seller/verify/send-code", { type, value });
-      return data;
-    } catch (err) {
-      if (err.response?.status === 404 || !err.response) {
-        // Simulated OTP for preview
-        const mockCode = String(Math.floor(100000 + Math.random() * 900000));
-        sessionStorage.setItem(`otp_${type}_${value}`, mockCode);
-        return { ok: true, debug_code: mockCode, message: `Code sent to ${value}` };
-      }
-      throw err;
-    }
+    const { data } = await api.post("/seller/verify/send-code", { type, value });
+    return data;
   };
 
   const confirmSellerOtp = async (type, value, code) => {
-    try {
-      const { data } = await api.post("/seller/verify/confirm-code", { type, value, code });
-      return data;
-    } catch (err) {
-      if (err.response?.status === 404 || !err.response) {
-        const stored = sessionStorage.getItem(`otp_${type}_${value}`);
-        if (stored === code.trim() || code.trim() === "123456") {
-          return { ok: true, verified: true };
-        }
-        throw new Error("Invalid verification code. Please check and try again.");
-      }
-      throw err;
-    }
+    const { data } = await api.post("/seller/verify/confirm-code", { type, value, code });
+    return data;
   };
 
   const checkUsername = useCallback(async (username) => {

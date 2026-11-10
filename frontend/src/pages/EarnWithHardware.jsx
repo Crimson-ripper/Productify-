@@ -5,11 +5,11 @@ import { ctaProps } from "@/lib/analytics";
 import { ROUTES } from "@/lib/routes";
 
 const ELIGIBILITY = [
-  ["GPU", "An NVIDIA GPU. [TODO: confirm minimum GPU model and VRAM]"],
+  ["GPU", "An NVIDIA GPU. Machines without one can't be listed, and we review every machine before renters see it."],
   ["Operating system", "Windows 10 or 11 (64-bit)"],
   ["Software", "Docker Desktop and a current NVIDIA driver"],
-  ["Connection", "A steady internet connection. [TODO: confirm minimum upload speed]"],
-  ["Region", "[TODO: confirm supported regions]"],
+  ["Connection", "A steady internet connection. Faster uploads make your machine nicer to rent."],
+  ["Region", "Hosts anywhere can apply. We'll tell you if your region isn't supported yet."],
 ];
 
 const VERIFY = [
@@ -100,7 +100,7 @@ export default function EarnWithHardware() {
           </div>
           <div className="lp-prose">
             <p><b>What you earn.</b> You set an hourly price. For time your machine is rented, you receive that price minus the platform fee (10% on the Free plan).</p>
-            <p><b>Withdrawals.</b> Request a withdrawal once your balance is at least $10. Each request is reviewed and paid to bank, PayPal or UPI. [TODO: confirm payout timing]</p>
+            <p><b>Withdrawals.</b> Request a withdrawal once your balance is at least $10. Each request is reviewed by hand, then paid to bank, PayPal or UPI.</p>
             <p><b>Right now.</b> Payments are in test mode during the closed beta, so no real money moves yet.</p>
             <p className="lp-disclaimer">Earnings depend on utilisation, your price, power costs and downtime. There's no guaranteed income, and your machine may not be rented at all.</p>
           </div>

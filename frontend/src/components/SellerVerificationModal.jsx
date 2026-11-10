@@ -14,14 +14,8 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
   const [step, setStep] = useState(1); // 1: Email, 2: Phone, 3: Success & Recovery Key
   const [emailCode, setEmailCode] = useState("");
   const [emailSent, setEmailSent] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [emailDebugCode, setEmailDebugCode] = useState("");
 
   const [phone, setPhone] = useState(user?.phone || "");
-  const [phoneCode, setPhoneCode] = useState("");
-  const [phoneSent, setPhoneSent] = useState(false);
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [phoneDebugCode, setPhoneDebugCode] = useState("");
 
   const [recoveryKey, setRecoveryKey] = useState("");
   const [copied, setCopied] = useState(false);
@@ -43,8 +37,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
     try {
       const res = await sendSellerOtp("email", user?.email || "");
       setEmailSent(true);
-      if (res.debug_code) setEmailDebugCode(res.debug_code);
-      toast.success(`Verification code sent to ${user?.email}`);
+      toast.success(res.message || `We emailed a code to ${user?.email}`);
     } catch (err) {
       setErrorMsg(err.response?.data?.detail || err.message || "Failed to send email verification code");
     } finally {
@@ -58,7 +51,6 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
     setBusy(true); setErrorMsg("");
     try {
       await confirmSellerOtp("email", user?.email || "", emailCode.trim());
-      setEmailVerified(true);
       toast.success("Email verified successfully!");
       setStep(2);
     } catch (err) {
@@ -68,40 +60,21 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
     }
   };
 
-  // STEP 2: Phone OTP (Strict 1:1 Check)
-  const handleSendPhoneOtp = async () => {
+  // STEP 2: contact phone and activation. Phone numbers can't be verified yet (no SMS provider,
+  // 2026-11-10), so the number is saved as a contact detail; the confirmed email is what's checked.
+  const handleActivate = async (e) => {
+    e.preventDefault();
     if (!phone.trim() || phone.trim().length < 8) {
       setErrorMsg("Please enter a valid phone number with country code (e.g. +1 555-0199 or +91 9876543210)");
       return;
     }
     setBusy(true); setErrorMsg("");
     try {
-      const res = await sendSellerOtp("phone", phone.trim());
-      setPhoneSent(true);
-      if (res.debug_code) setPhoneDebugCode(res.debug_code);
-      toast.success(`SMS verification code sent to ${phone.trim()}`);
-    } catch (err) {
-      setErrorMsg(err.response?.data?.detail || err.message || "Could not send phone verification code");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleConfirmPhoneOtp = async (e) => {
-    e.preventDefault();
-    if (!phoneCode.trim()) return;
-    setBusy(true); setErrorMsg("");
-    try {
-      await confirmSellerOtp("phone", phone.trim(), phoneCode.trim());
-      setPhoneVerified(true);
-      toast.success("Phone number verified successfully!");
-      
-      // Now activate seller account
       const actRes = await activateSeller(phone.trim());
-      setRecoveryKey(actRes.recovery_key || "PROD-SEC-SAVED-SAFELY");
+      setRecoveryKey(actRes.recovery_key || "");
       setStep(3);
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || err.message || "Invalid verification code");
+      setErrorMsg(err.response?.data?.detail || err.message || "Could not activate your seller account");
     } finally {
       setBusy(false);
     }
@@ -235,12 +208,6 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                   </button>
                 </div>
 
-                {emailDebugCode && (
-                  <div style={{ fontSize: "0.8rem", color: "#277c50", background: "#e9f3e5", padding: "6px 10px", borderRadius: 0, marginBottom: "12px" }}>
-                    <b>Preview OTP code:</b> {emailDebugCode} (enter this below)
-                  </div>
-                )}
-
                 {emailSent && (
                   <form onSubmit={handleConfirmEmailOtp}>
                     <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "6px", color: "var(--muted, #747570)" }}>Enter 6-digit Email Verification Code</label>
@@ -266,68 +233,33 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
               </div>
             )}
 
-            {/* STEP 2: PHONE NUMBER VERIFICATION (1:1 Binding) */}
+            {/* STEP 2: CONTACT PHONE + ACTIVATE */}
             {step === 2 && (
-              <div>
+              <form onSubmit={handleActivate}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, marginBottom: "8px" }}>
-                  <Phone size={16} /> Step 2: Bind & Verify Unique Phone Number
+                  <Phone size={16} /> Step 2: Contact phone number
                 </div>
                 <p style={{ fontSize: "0.82rem", color: "var(--muted, #747570)", marginBottom: "12px" }}>
-                  Each seller account is strictly bound to 1 unique mobile phone number for payouts and 2FA.
+                  We save it so we can reach you about payouts. No SMS code is needed.
                 </p>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "6px", color: "var(--muted, #747570)" }}>Mobile Phone Number (with Country Code)</label>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+1 555-0199 or +91 9876543210"
-                      disabled={phoneSent}
-                      style={{ flex: 1, padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "0.95rem" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSendPhoneOtp}
-                      disabled={busy || phoneSent || !phone.trim()}
-                      className="primary-button"
-                      style={{ whiteSpace: "nowrap", padding: "10px 16px", fontSize: "0.85rem" }}
-                    >
-                      {phoneSent ? "Sent ✓" : "Send SMS OTP"}
-                    </button>
-                  </div>
-                </div>
-
-                {phoneDebugCode && (
-                  <div style={{ fontSize: "0.8rem", color: "#277c50", background: "#e9f3e5", padding: "6px 10px", borderRadius: 0, marginBottom: "12px" }}>
-                    <b>Preview SMS OTP code:</b> {phoneDebugCode} (enter this below)
-                  </div>
-                )}
-
-                {phoneSent && (
-                  <form onSubmit={handleConfirmPhoneOtp}>
-                    <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "6px", color: "var(--muted, #747570)" }}>Enter 6-digit SMS Code</label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={phoneCode}
-                      onChange={(e) => setPhoneCode(e.target.value)}
-                      placeholder="e.g. 654321"
-                      required
-                      style={{ width: "100%", padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "1.1rem", letterSpacing: "3px", textAlign: "center", marginBottom: "14px" }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={busy || phoneCode.length < 6}
-                      className="primary-button full"
-                      style={{ width: "100%", padding: "12px" }}
-                    >
-                      {busy ? "Verifying Phone…" : "Verify Phone & Activate Seller"} <ArrowRight size={16} />
-                    </button>
-                  </form>
-                )}
-              </div>
+                <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "6px", color: "var(--muted, #747570)" }}>Mobile Phone Number (with Country Code)</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 555-0199 or +91 9876543210"
+                  required
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 0, border: "1px solid var(--line, #dedfd9)", background: "#ffffff", color: "var(--ink, #101112)", fontSize: "0.95rem", marginBottom: "14px" }}
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !phone.trim()}
+                  className="primary-button full"
+                  style={{ width: "100%", padding: "12px" }}
+                >
+                  {busy ? "Activating…" : "Activate seller account"} <ArrowRight size={16} />
+                </button>
+              </form>
             )}
 
             {/* STEP 3: ACTIVATION COMPLETE & RECOVERY KEY */}
@@ -337,7 +269,7 @@ export default function SellerVerificationModal({ isOpen, onClose }) {
                   <CheckCircle2 size={44} color="#277c50" style={{ margin: "0 auto 8px" }} />
                   <h3 style={{ margin: 0, font: "600 20px 'Space Grotesk', sans-serif" }}>Seller Account Activated!</h3>
                   <p style={{ color: "var(--muted, #747570)", fontSize: "0.85rem", marginTop: 4 }}>
-                    Your email and phone number are officially verified and bound to your seller account.
+                    Your email is confirmed and your seller account is active.
                   </p>
                 </div>
 
