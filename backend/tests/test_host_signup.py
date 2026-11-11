@@ -128,6 +128,35 @@ class HostSignupTests(unittest.TestCase):
         admin = self.run_async(server.db.users.find_one({"role": "admin"}))
         self.assertFalse(server.email_unverified(admin))
 
+    def test_gpu_rental_earnings_reach_the_wallet(self):
+        h = self.register()
+        self.run_async(server.db.users.update_many({}, {"$set": {"email_verified": True}}))
+        me = self.c.get("/api/auth/me", headers=h).json()
+        # Two finished rentals of this host's machine ($1.00 + $0.50) and one still running.
+        for i, (status, cost) in enumerate([("terminated", 1.0), ("terminated", 0.5), ("running", 9.0)]):
+            self.run_async(server.db.instances.insert_one({"id": f"inst-{i}", "seller_id": me["id"], "status": status,
+                                                           "cost_accumulated": cost, "total_runtime_seconds": 3600}))
+        w = self.c.get("/api/seller/wallet", headers=h).json()
+        self.assertEqual(w["available_balance"], 1.35)  # $1.50 minus the 10% Free-plan fee; running jobs aren't paid yet
+        r = self.c.post("/api/seller/payout-withdraw", headers=h, json={"amount": 50})
+        self.assertEqual(r.status_code, 400)  # can't take more than was earned
+
+    def test_machine_without_docker_is_not_rentable(self):
+        rid = "r-test000001"
+        orig = server.host_tunnel_manager.is_connected
+        server.host_tunnel_manager.is_connected = lambda r: True
+        try:
+            server.node_hub.meta[rid] = {"transport": "node-v1", "live": True, "docker": False}
+            r = {"id": rid}
+            server.add_availability(r, set())
+            self.assertEqual(r["availability"], "not_ready")
+            server.node_hub.meta[rid]["docker"] = True
+            server.add_availability(r, set())
+            self.assertEqual(r["availability"], "available")
+        finally:
+            server.host_tunnel_manager.is_connected = orig
+            server.node_hub.meta.pop(rid, None)
+
 
 if __name__ == "__main__":
     unittest.main()

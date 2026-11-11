@@ -977,6 +977,13 @@ async def seller_analytics(user=Depends(current_user)):
     is_plus = user.get("seller_tier") == "plus"
     comm_rate = 0.0 if is_pro else (0.05 if is_plus else 0.10)
     net_earnings = round(total_gross * (1 - comm_rate), 2)
+    # GPU rentals of this seller's machines, once they've ended and been charged (finish_instance),
+    # minus the same platform fee finish_instance credits by. 2026-11-11: these were left out, so
+    # hosts never saw or could withdraw their compute earnings.
+    from currency_engine import get_commission_rate
+    ended = await db.instances.find({"seller_id": uid, "status": "terminated"}, {"_id": 0, "cost_accumulated": 1}).to_list(5000)
+    compute_net = round(sum(float(i.get("cost_accumulated", 0) or 0) for i in ended) * (1.0 - get_commission_rate(user.get("seller_tier"))), 2)
+    net_earnings = round(net_earnings + compute_net, 2)
     available_balance = max(0.0, round(net_earnings - total_withdrawn, 2))
     
     # Real GPU hours: runtime recorded on instances that renters ran on this seller's machines.
@@ -986,6 +993,7 @@ async def seller_analytics(user=Depends(current_user)):
     return {
         "total_gross": round(total_gross, 2),
         "net_earnings": net_earnings,
+        "compute_net_earnings": compute_net,
         "available_balance": available_balance,
         "total_withdrawn": round(total_withdrawn, 2),
         "items_sold": items_sold_count,
@@ -1291,7 +1299,8 @@ async def rental_detail(rid: str):
 
 
 def add_availability(r: dict, busy: set):
-    """availability: available | in_use | paused | offline -- what a renter can do right now."""
+    """availability: available | in_use | paused | not_ready | offline -- what a renter can do right now.
+    not_ready: online, but the machine says Docker isn't running, so a rental would fail (2026-11-11)."""
     rid = r.get("id")
     r["is_online"] = host_tunnel_manager.is_connected(rid)
     meta = node_hub.meta.get(rid) or {}
@@ -1303,6 +1312,8 @@ def add_availability(r: dict, busy: set):
         r["availability"] = "in_use"
     elif meta.get("live") is False:
         r["availability"] = "paused"
+    elif meta.get("docker") is False and meta.get("transport") == "node-v1":
+        r["availability"] = "not_ready"
     else:
         r["availability"] = "available"
 
@@ -2866,6 +2877,8 @@ async def node_v1_websocket(websocket: WebSocket):
             elif kind == "heartbeat":
                 m = node_hub.meta.setdefault(rental_id, {"transport": "node-v1"})
                 m.update({k: frame.get(k) for k in ("live", "jobs", "gpu_temp_c", "paused_reason")}, last_seen=time.time())
+                # Productify Node newer than 2.1.0 also reports these on each heartbeat; older ones only in hello.
+                m.update({k: frame[k] for k in ("docker", "gpu_in_docker") if k in frame})
                 await node_manager.record_heartbeat(rental_id, m, transport="node-v1")
                 spawn(reconcile_machine_jobs(rental_id, reported_job_ids(frame)))
             elif kind == "result":
