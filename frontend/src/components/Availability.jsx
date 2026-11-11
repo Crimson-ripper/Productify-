@@ -1,5 +1,5 @@
 // What a renter can do with a machine right now, from the backend's `availability`
-// field (available | in_use | paused | offline). Older responses only had is_online.
+// field (available | in_use | paused | not_ready | offline). Older responses only had is_online.
 export function availabilityOf(r) {
   if (r?.availability) return r.availability;
   return r?.is_online ? "available" : "offline";
@@ -9,12 +9,14 @@ const LABELS = {
   available: ["Available now", "online"],
   in_use: ["In use", "busy"],
   paused: ["Paused by owner", "busy"],
+  not_ready: ["Not ready", "busy"],
   offline: ["Offline", ""],
 };
 
 export const UNAVAILABLE_REASON = {
   in_use: "Another renter is using this machine right now. Try another machine, or check back later.",
   paused: "The owner has paused this machine, so it isn't taking new rentals right now.",
+  not_ready: "This machine is online but can't run jobs yet (its owner needs to start Docker). Try another machine.",
   offline: "This machine is offline right now, so nothing can run on it until its owner reconnects it.",
 };
 

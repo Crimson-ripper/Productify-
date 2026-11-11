@@ -11,7 +11,7 @@ import NearbyMachines from "@/components/NearbyMachines";
 import CreditBalance from "@/components/CreditBalance";
 
 const REFRESH_MS = 30_000;
-const STATUS_ORDER = { available: 0, in_use: 1, paused: 2, offline: 3 };
+const STATUS_ORDER = { available: 0, in_use: 1, paused: 2, not_ready: 3, offline: 4 };
 
 const vramGb = (r) => {
   const m = String(r.vram || "").match(/\d+(\.\d+)?/);
