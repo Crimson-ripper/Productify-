@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import SEO from "@/components/SEO";
+import EarningsCalculator from "@/components/EarningsCalculator";
 import { ctaProps } from "@/lib/analytics";
 import { ROUTES } from "@/lib/routes";
 
@@ -99,12 +100,14 @@ export default function EarnWithHardware() {
             <h2 id="lp-pay">How payouts will work</h2>
           </div>
           <div className="lp-prose">
-            <p><b>What you earn.</b> You set an hourly price. For time your machine is rented, you receive that price minus the platform fee (10% on the Free plan).</p>
+            <p><b>What you earn.</b> Productify sets a standard hourly rate for each GPU model, and you can set yours up to 20% lower or higher. For time your machine is rented, you receive that rate minus the platform fee (10% on the Free plan).</p>
             <p><b>Withdrawals.</b> Request a withdrawal once your balance is at least $10. Each request is reviewed by hand, then paid to bank, PayPal or UPI.</p>
             <p><b>Right now.</b> Payments are in test mode during the closed beta, so no real money moves yet.</p>
             <p className="lp-disclaimer">Earnings depend on utilisation, your price, power costs and downtime. There's no guaranteed income, and your machine may not be rented at all.</p>
           </div>
         </div>
+        <h3 id="lp-calc" className="ec-title">Estimate what you could keep</h3>
+        <EarningsCalculator />
       </section>
 
       <section className="lp-cta">
