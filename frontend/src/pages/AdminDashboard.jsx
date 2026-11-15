@@ -29,8 +29,11 @@ import { api, money, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
 import AdminCleanup from "@/components/AdminCleanup";
+import AdminGpuPrices from "@/components/AdminGpuPrices";
 import { AdminActivity, AdminOrders, AdminMachines, AdminInstances, AdminLeads } from "@/components/AdminData";
 import { toast } from "sonner";
+
+const USE_LABELS = { ai: "AI / Jupyter", basic: "Basic Python", gamezone: "Gamezone" };
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -63,6 +66,7 @@ export default function AdminDashboard() {
 
   // Reviews tab state
   const [pendingReviews, setPendingReviews] = useState([]);
+  const [reviewPrices, setReviewPrices] = useState({}); // machine id -> price typed at review
   const [reviewFilter, setReviewFilter] = useState("all"); // "all" | "product" | "rental"
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
@@ -399,7 +403,11 @@ export default function AdminDashboard() {
       if (item.kind === "product") {
         await api.post(`/admin/products/${item.id}/${decision}`);
       } else {
-        await api.post(`/admin/rentals/${item.id}/${decision}`);
+        // Productify sets machine prices (2026-11-15): the typed price, else the GPU table price.
+        const typed = reviewPrices[item.id];
+        const body = decision === "approved" && typed !== undefined && typed !== "" && Number(typed) !== Number(item.table_price)
+          ? { price: Number(typed) } : undefined;
+        await api.post(`/admin/rentals/${item.id}/${decision}`, body);
       }
       toast.success(`${item.kind === "product" ? "Product" : "GPU Rig"} was ${decision}!`);
       setPendingReviews((prev) => prev.filter((x) => x.id !== item.id));
@@ -457,12 +465,13 @@ export default function AdminDashboard() {
     { key: "leads", label: "Leads", icon: Inbox },
     { key: "orders", label: "Orders", icon: ShoppingBag },
     { key: "machines", label: "Machines", icon: Server },
+    { key: "gpu-prices", label: "GPU prices", icon: CreditCard },
     { key: "instances", label: "GPU instances", icon: Layers },
     { key: "users", label: "Users", icon: Users },
     { key: "catalog", label: "Catalog", icon: Search },
     { key: "gamezone", label: "Gamezone", icon: Gamepad2 },
   ];
-  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone", orders: "Orders", machines: "Machines", instances: "GPU instances" };
+  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone", orders: "Orders", machines: "Machines", "gpu-prices": "GPU prices", instances: "GPU instances" };
   const attention = [
     stats.pending_reviews_count > 0 && { text: `${stats.pending_reviews_count} listing${stats.pending_reviews_count === 1 ? "" : "s"} waiting for review (${stats.pending_products_count} products, ${stats.pending_rentals_count} GPUs).`, action: { label: "Review", onClick: () => setTab("reviews") } },
     stats.pending_payouts_count > 0 && { text: `${stats.pending_payouts_count} withdrawal request${stats.pending_payouts_count === 1 ? "" : "s"} totalling ${money(stats.pending_payouts_amount)}.`, action: { label: "Decide", onClick: () => setTab("payouts") } },
@@ -787,7 +796,7 @@ export default function AdminDashboard() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <h4 style={{ margin: 0, font: "600 17px 'Space Grotesk'" }}>{item.title}</h4>
                         <b style={{ font: "800 16px 'Space Grotesk'", color: "var(--ink)" }}>
-                          {item.kind === "product" ? `$${item.price}` : `$${item.price}/hr`}
+                          {item.kind === "product" ? `$${item.price}` : (item.table_price ? `$${item.table_price}/hr` : "No price yet")}
                         </b>
                       </div>
 
@@ -802,6 +811,20 @@ export default function AdminDashboard() {
                       <p style={{ fontSize: "0.82rem", color: "var(--ink)", lineHeight: 1.4, flex: 1, margin: "0 0 14px" }}>
                         {item.description ? item.description.substring(0, 140) + "…" : "No description provided."}
                       </p>
+
+                      {item.kind !== "product" && (
+                        <div style={{ fontSize: "0.8rem", margin: "0 0 12px", display: "grid", gap: 6 }}>
+                          {Object.entries(item.requirements_check || {}).map(([use, c]) => (
+                            <div key={use}>{c.ok ? "✓" : "✗"} <b>{USE_LABELS[use] || use}</b>{c.ok ? "" : `: needs ${c.missing.join(", ")}`}</div>
+                          ))}
+                          <label style={{ display: "grid", gap: 4, marginTop: 4 }}>
+                            Price per hour (USD) {item.table_price ? `· ${item.gpu_short} table price $${item.table_price}` : `· no table price for ${item.gpu_short || "this GPU"} yet`}
+                            <input type="number" min="0.01" max="100" step="0.01" placeholder={item.table_price ? String(item.table_price) : "0.30"}
+                              value={reviewPrices[item.id] ?? ""} onChange={(e) => setReviewPrices((p) => ({ ...p, [item.id]: e.target.value }))}
+                              style={{ padding: "8px 10px", border: "1px solid var(--line, #dedfd9)" }} />
+                          </label>
+                        </div>
+                      )}
 
                       {/* Approval Actions */}
                       <div style={{ display: "flex", gap: 10, borderTop: "1px solid var(--line, #dedfd9)", paddingTop: 14 }}>
@@ -1921,6 +1944,7 @@ export default function AdminDashboard() {
         {tab === "leads" && <AdminLeads />}
         {tab === "orders" && <AdminOrders />}
         {tab === "machines" && <AdminMachines />}
+        {tab === "gpu-prices" && <AdminGpuPrices />}
         {tab === "instances" && <AdminInstances />}
     </DashboardShell>
   );

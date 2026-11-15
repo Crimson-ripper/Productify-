@@ -59,7 +59,7 @@ export default function Sell() {
         <div className="pillar">
           <div className="pillar-icon"><Cpu size={20} /></div>
           <h3>GPU rental</h3>
-          <p>Install Productify Node on the machine, pair it with your account, and set an hourly price. Renters' jobs run in isolated containers, and each machine is reviewed before it's listed.</p>
+          <p>Install Productify Node on the machine, pair it with your account, and send it for review. Productify sets the hourly price for your GPU model. Renters' jobs run in isolated containers, and each machine is reviewed before it's listed.</p>
         </div>
       </section>
 

@@ -67,7 +67,7 @@ class _Coll:
 class _DB:
     def __init__(self):
         self.rentals = _Coll([
-            {"id": "r-ok", "status": "approved", "gpu": "RTX 4060", "price": 0.4, "owner_id": "seller-1",
+            {"id": "r-ok", "status": "approved", "gpu": "RTX 4060", "vram": "8 GB", "specs": {"ram": "32 GB", "cpu": "8 cores"}, "price": 0.4, "owner_id": "seller-1",
              "gamezone": {"eligible": True}},
             {"id": "r-home", "status": "approved", "gpu": "RTX 3060", "price": 0.3, "gamezone": {"eligible": False}},
         ])

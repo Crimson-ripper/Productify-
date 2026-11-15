@@ -37,7 +37,7 @@ const Empty = ({ loading, children }) => <p className="dash-empty">{loading ? "L
 
 const STATE_PILL = {
   approved: ["ok", "Live"], pending: ["wait", "In review"], rejected: ["bad", "Rejected"],
-  awaiting_pairing: ["muted", "Waiting to pair"], paired: ["wait", "Needs a price"],
+  awaiting_pairing: ["muted", "Waiting to pair"], paired: ["wait", "Not submitted yet"],
   completed: ["ok", "Completed"], refunded: ["bad", "Refunded"], running: ["ok", "Running"],
   stopped: ["muted", "Stopped"], terminated: ["muted", "Ended"],
 };
