@@ -18,7 +18,7 @@ const GROUPS = [
   ]],
   ["Providing", [
     ["What do I need?", "An NVIDIA GPU, Windows 10 or 11, Docker Desktop, a current NVIDIA driver and a steady internet connection."],
-    ["How much will I earn?", "We can't promise an amount. You set your price; earnings depend on how often your machine is rented, power costs and downtime. Productify keeps a 10% fee on the Free plan."],
+    ["How much will I earn?", "We can't promise an amount. Productify sets the price for each GPU model; earnings depend on how often your machine is rented, power costs and downtime. Productify keeps a 10% fee on the Free plan."],
     ["Can I use my computer while it's listed?", "Yes. You can pause renting or stop all jobs from the Productify Node app at any time."],
     ["How do I get paid?", "Once your balance reaches $10 you can request a withdrawal to bank, PayPal or UPI; each request is reviewed. Payments are in test mode during the beta."],
   ]],

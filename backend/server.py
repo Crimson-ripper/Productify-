@@ -39,6 +39,7 @@ from currency_engine import (
 import emailer
 import vast_market
 import gamezone.geo as pfy_geo
+import machine_rules
 from gamezone import (
     GameCreateInput,
     GameUpdatePriceInput,
@@ -1334,6 +1335,8 @@ async def create_rental(data: RentalInput, user=Depends(current_user)):
     status = "approved" if user.get("role") in ["admin", "sub-admin"] else "pending"
 
     item = data.model_dump() | {
+        # Prices are set by Productify admins (2026-11-15); a host's own figure is ignored.
+        **({} if user.get("role") in ["admin", "sub-admin"] else {"price": 0.0}),
         "id": rental_id,
         "node_id": node_id,
         "status": status,
@@ -1425,7 +1428,7 @@ async def create_machine(user=Depends(current_user)):
 
 
 class MachinePublishInput(BaseModel):
-    price: float = Field(gt=0, le=100)
+    price: Optional[float] = None  # ignored: Productify admins set prices (2026-11-15); kept so old pages still work
     title: Optional[str] = Field(default=None, max_length=120)
     location: Optional[str] = Field(default=None, max_length=80)
     description: Optional[str] = Field(default=None, max_length=2000)
@@ -1433,7 +1436,7 @@ class MachinePublishInput(BaseModel):
 
 @api.post("/seller/machines/{rid}/publish")
 async def publish_machine(rid: str, data: MachinePublishInput, user=Depends(current_user)):
-    """Set the price (and optional title/city) on a paired machine and send it for review."""
+    """Send a paired machine for review (optional title/city). Productify sets the price at review."""
     require_seller(user)
     r = await db.rentals.find_one({"id": rid, "owner_id": user["id"]}, {"_id": 0})
     if not r:
@@ -1446,15 +1449,19 @@ async def publish_machine(rid: str, data: MachinePublishInput, user=Depends(curr
         # 2026-11-10: renters book GPUs; a machine without a detected NVIDIA GPU can't be listed.
         raise HTTPException(400, "Productify Node didn't find an NVIDIA GPU on this machine. Install or update the "
                                  "NVIDIA driver, restart Productify Node, and try again once the GPU shows here.")
+    checks = machine_rules.check(r)
+    if not any(c["ok"] for c in checks.values()):
+        need = checks["basic"]["missing"]
+        raise HTTPException(400, "This machine is below Productify's minimum for any use. It needs " + ", ".join(need) + ".")
     update = {
-        "price": round(float(data.price), 2),
+        "uses": [u for u, c in checks.items() if c["ok"]],
         "title": (data.title or "").strip() or r.get("title") or r["gpu"],
         "location": (data.location or "").strip() or r.get("location", ""),
         "description": (data.description or "").strip() if data.description is not None else r.get("description", ""),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    # A price change on a live listing stays live; anything else goes to review.
-    update["status"] = "approved" if user.get("role") in ["admin", "sub-admin"] or r.get("status") == "approved" else "pending"
+    # Name/city changes on a live listing stay live; anything else goes to review (where the price is set).
+    update["status"] = "approved" if r.get("status") == "approved" else "pending"
     await db.rentals.update_one({"id": rid}, {"$set": update})
     return {**r, **update, "pairing_code": pairing_code(r)}
 
@@ -1483,7 +1490,7 @@ def vram_label(mb) -> str:
 
 async def record_machine_hardware(rental_id: str, hello: dict):
     """Called when a Productify Node v2 agent says hello: store what the machine reported."""
-    r = await db.rentals.find_one({"id": rental_id}, {"_id": 0, "status": 1, "title": 1})
+    r = await db.rentals.find_one({"id": rental_id}, {"_id": 0, "status": 1, "title": 1, "gamezone": 1})
     if not r:
         return
     gpu = str(hello.get("gpu") or "").strip()[:80]
@@ -1518,10 +1525,16 @@ async def record_machine_hardware(rental_id: str, hello: dict):
         update["status"] = "paired"
     if not r.get("title"):
         update["title"] = update["gpu"]
+    update["uses"] = machine_rules.uses_ok({**r, **update})
     await db.rentals.update_one({"id": rental_id}, {"$set": update})
 
 
 # ============== ADMIN ==============
+@api.get("/machines/requirements")
+async def machine_requirements():
+    return {"uses": machine_rules.public_requirements()}
+
+
 @api.get("/admin/pending")
 async def pending(user=Depends(current_user)):
     if user.get("role") not in ["admin", "sub-admin"]:
@@ -1529,12 +1542,96 @@ async def pending(user=Depends(current_user)):
     return await db.rentals.find({"status": "pending"}, {"_id": 0}).to_list(100)
 
 
+# ---------- Machine prices: set by Productify admins (2026-11-15) ----------
+# A price per GPU model (db.gpu_prices, key = e.g. "RTX 3060") plus an optional per-machine override.
+class GpuPriceInput(BaseModel):
+    gpu: str = Field(min_length=2, max_length=60)
+    price: float = Field(gt=0, le=100)
+
+
+class MachinePriceInput(BaseModel):
+    price: Optional[float] = Field(default=None, gt=0, le=100)  # None = use the GPU table price
+
+
+def require_admin(user: dict):
+    if user.get("role") not in ["admin", "sub-admin"]:
+        raise HTTPException(403, "Admin access required")
+
+
+async def table_price(gpu: str):
+    row = await db.gpu_prices.find_one({"key": machine_rules.price_key(gpu)}, {"_id": 0, "price": 1})
+    return float(row["price"]) if row else None
+
+
+@api.get("/admin/gpu-prices")
+async def admin_gpu_prices(user=Depends(current_user)):
+    require_admin(user)
+    return await db.gpu_prices.find({}, {"_id": 0}).sort("key", 1).to_list(500)
+
+
+@api.put("/admin/gpu-prices")
+async def admin_set_gpu_price(data: GpuPriceInput, user=Depends(current_user)):
+    """Set the hourly price for a GPU model; approved machines with that GPU and no override follow it."""
+    require_admin(user)
+    key = machine_rules.price_key(data.gpu)
+    price = round(float(data.price), 2)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.gpu_prices.update_one({"key": key}, {"$set": {"key": key, "gpu": machine_rules.short_gpu(data.gpu),
+                                                          "price": price, "updated_at": now_iso, "updated_by": user["id"]}},
+                                   upsert=True)
+    n = 0
+    for r in await db.rentals.find({"status": {"$in": ["approved", "pending"]}, "price_override": {"$ne": True}},
+                                   {"_id": 0, "id": 1, "gpu": 1}).to_list(2000):
+        if machine_rules.price_key(r.get("gpu") or "") == key:
+            await db.rentals.update_one({"id": r["id"]}, {"$set": {"price": price, "price_source": "table"}})
+            n += 1
+    return {"ok": True, "key": key, "price": price, "machines_updated": n}
+
+
+@api.delete("/admin/gpu-prices/{key}")
+async def admin_delete_gpu_price(key: str, user=Depends(current_user)):
+    require_admin(user)
+    await db.gpu_prices.delete_one({"key": key.upper()})
+    return {"ok": True}
+
+
+@api.post("/admin/rentals/{rid}/price")
+async def admin_set_machine_price(rid: str, data: MachinePriceInput, user=Depends(current_user)):
+    """Override one machine's price, or (price=None) go back to its GPU's table price."""
+    require_admin(user)
+    r = await db.rentals.find_one({"id": rid}, {"_id": 0, "gpu": 1})
+    if not r:
+        raise HTTPException(404, "Machine not found")
+    if data.price is None:
+        price = await table_price(r.get("gpu") or "")
+        if price is None:
+            raise HTTPException(400, "There's no table price for this GPU yet. Add one, or set a price for this machine.")
+        upd = {"price": price, "price_override": False, "price_source": "table"}
+    else:
+        upd = {"price": round(float(data.price), 2), "price_override": True, "price_source": "admin"}
+    await db.rentals.update_one({"id": rid}, {"$set": upd})
+    return {"ok": True, **upd}
+
+
 @api.post("/admin/rentals/{rid}/{decision}")
-async def decide(rid: str, decision: str, user=Depends(current_user)):
+async def decide(rid: str, decision: str, data: Optional[MachinePriceInput] = None, user=Depends(current_user)):
+    """Approve or reject a machine. Approving needs a price: the one sent here, else the GPU table price."""
     if user.get("role") not in ["admin", "sub-admin"] or decision not in ["approved", "rejected"]:
         raise HTTPException(403, "Admin access required")
-    await db.rentals.update_one({"id": rid}, {"$set": {"status": decision}})
-    return {"ok": True}
+    upd = {"status": decision}
+    if decision == "approved":
+        r = await db.rentals.find_one({"id": rid}, {"_id": 0}) or {}
+        if data and data.price:
+            upd.update({"price": round(float(data.price), 2), "price_override": True, "price_source": "admin"})
+        else:
+            price = await table_price(r.get("gpu") or "")
+            if price is None and not r.get("price_override"):
+                raise HTTPException(400, f"Set a price first: there's no table price for {machine_rules.short_gpu(r.get('gpu') or '') or 'this GPU'}.")
+            if price is not None and not r.get("price_override"):
+                upd.update({"price": price, "price_source": "table"})
+        upd["uses"] = machine_rules.uses_ok(r)
+    await db.rentals.update_one({"id": rid}, {"$set": upd})
+    return {"ok": True, **{k: v for k, v in upd.items() if k != "status"}}
 
 
 # ============== ADMIN OPERATIONS SUITE ==============
@@ -1703,9 +1800,12 @@ async def admin_pending_reviews(user=Depends(current_user)):
     for p in pending_prods:
         p["kind"] = "product"
         
-    pending_rents = await db.rentals.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    pending_rents = await db.rentals.find({"status": "pending"}, {"_id": 0, "pairing_token": 0}).sort("created_at", -1).to_list(100)
     for r in pending_rents:
         r["kind"] = "rental"
+        r["table_price"] = await table_price(r.get("gpu") or "")
+        r["gpu_short"] = machine_rules.short_gpu(r.get("gpu") or "")
+        r["requirements_check"] = machine_rules.check(r)
         
     all_reviews = pending_prods + pending_rents
     all_reviews.sort(key=lambda x: x.get("created_at", ""), reverse=True)
@@ -3222,8 +3322,16 @@ async def deploy_instance(data: InstanceDeployInput, user=Depends(current_user))
         raise HTTPException(404, "GPU rental node not found")
 
     template = next((t for t in INSTANCE_TEMPLATES if t["id"] == data.template_id), INSTANCE_TEMPLATES[0])
+    use = machine_rules.use_for_template(template["id"])
+    if use:
+        need = machine_rules.check(rental)[use]
+        if not need["ok"]:
+            raise HTTPException(409, f"This machine doesn't meet the minimum for {machine_rules.USES[use]['name']} "
+                                     f"(it needs {', '.join(need['missing'])}). Choose another machine.")
+    if not float(rental.get("price") or 0):
+        raise HTTPException(409, "This machine doesn't have a price yet, so it can't be rented.")
 
-    base_price = float(rental.get("price", 0.60))
+    base_price = float(rental.get("price"))
     disk_price = round(data.disk_size_gb * 0.0002, 4)
     hourly_price = round(base_price + disk_price, 4)
 
@@ -4008,6 +4116,9 @@ async def start_node_game_session(data: GameSessionInput, user=Depends(current_u
     gz = rental.get("gamezone") or {}
     if not gz.get("eligible"):
         raise HTTPException(409, "This machine can't host Gamezone sessions (it needs Windows Pro with Hyper-V and GPU sharing).")
+    gz_need = machine_rules.check(rental)["gamezone"]
+    if not gz_need["ok"]:
+        raise HTTPException(409, "This machine is below Gamezone's minimum (it needs " + ", ".join(gz_need["missing"]) + ").")
     if not node_hub.is_connected(rental["id"]):
         raise HTTPException(409, "This machine is offline right now. Choose another machine or try again later.")
     if await db.instances.find_one({"rental_id": rental["id"], "status": {"$in": ["running", "paused"]}}, {"_id": 0, "id": 1}):

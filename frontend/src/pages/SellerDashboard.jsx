@@ -11,6 +11,10 @@ import { toast } from "sonner";
 const CATS = ["Software", "Design", "Development", "Creative"];
 const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
 // Direct link to the installer file, so the browser downloads it instead of opening GitHub.
+// Hosts don't set prices (2026-11-15): Productify prices each GPU model; a machine is offered
+// only for the uses it meets (backend machine_rules.py).
+const USE_NAMES = { ai: "AI / Jupyter (PyTorch)", basic: "Basic Python", gamezone: "Gamezone" };
+
 const NODE_DOWNLOAD_URL = "https://github.com/Crimson-ripper/Productify-Node/releases/download/v2.2.0/ProductifyNode-Setup.exe";
 const PLANS = [
   { tier: "free", name: "Free", fee: "10%" },
@@ -23,7 +27,7 @@ const statusPill = (s) => {
   if (s === "approved" || s === true) return <span className="dash-pill ok">Live</span>;
   if (s === "rejected") return <span className="dash-pill bad">Rejected</span>;
   if (s === "awaiting_pairing") return <span className="dash-pill muted">Waiting to pair</span>;
-  if (s === "paired") return <span className="dash-pill wait">Needs a price</span>;
+  if (s === "paired") return <span className="dash-pill wait">Ready to submit</span>;
   return <span className="dash-pill wait">In review</span>;
 };
 
@@ -155,7 +159,6 @@ export default function SellerDashboard() {
     setBusy(true);
     try {
       const res = await api.post(`/seller/machines/${r.id}/publish`, {
-        price: Number(p.price ?? r.price),
         title: p.title ?? r.title,
         location: p.location ?? r.location,
       });
@@ -403,9 +406,12 @@ export default function SellerDashboard() {
             {r.specs && r.specs.docker === false && (
               <p className="dash-note">Docker Desktop wasn't running when this machine last connected. Renters can't start jobs until it is.</p>
             )}
+            <dl className="hw-grid machine-terms">
+              <div><dt>Can be rented for</dt><dd>{(r.uses || []).length ? r.uses.map((u) => USE_NAMES[u] || u).join(", ") : "Nothing yet: below Productify's minimum"}</dd></div>
+              <div><dt>Price</dt><dd>{Number(r.price) > 0 ? `${money(r.price)}/h · you get ${money(r.price * 0.9)}/h after the 10% fee` : "Set by Productify when your machine is reviewed"}</dd></div>
+            </dl>
             <form className="dash-form price-form" onSubmit={(e) => publishMachine(e, r)}>
-              <div className="three-col">
-                <label>Price per hour (USD)<input required type="number" min="0.01" max="100" step="0.01" value={draft.price ?? (r.price || "")} onChange={(e) => set("price", e.target.value)} placeholder="0.40" /></label>
+              <div className="two-col">
                 <label>Name shown to renters<input value={draft.title ?? r.title ?? ""} onChange={(e) => set("title", e.target.value)} maxLength={120} /></label>
                 <label>City (optional)<input value={draft.location ?? r.location ?? ""} onChange={(e) => set("location", e.target.value)} maxLength={80} placeholder="Delhi, IN" /></label>
               </div>

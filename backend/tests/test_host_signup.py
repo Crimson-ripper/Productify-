@@ -120,7 +120,7 @@ class HostSignupTests(unittest.TestCase):
         r = self.c.post(f"/api/seller/machines/{m['id']}/publish", headers=h, json={"price": 0.25})
         self.assertEqual(r.status_code, 400)
         self.assertIn("NVIDIA", r.json()["detail"])
-        self.run_async(server.db.rentals.update_one({"id": m["id"]}, {"$set": {"gpu": "RTX 3060", "vram": "12 GB"}}))
+        self.run_async(server.db.rentals.update_one({"id": m["id"]}, {"$set": {"gpu": "RTX 3060", "vram": "12 GB", "specs": {"ram": "16 GB", "cpu": "6 cores"}}}))
         self.assertEqual(self.c.post(f"/api/seller/machines/{m['id']}/publish", headers=h, json={"price": 0.25}).status_code, 200)
 
     def test_admin_seed_is_not_locked(self):
