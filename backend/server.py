@@ -4167,9 +4167,20 @@ def _inventory_origin(lat: Optional[float], lon: Optional[float], country: str):
     return pfy_geo.COUNTRIES.get((country or "").strip().upper()[:2])
 
 
+def _gz_flag_on() -> bool:
+    # Lenient (2026-11-18): " 1", "True", "yes", "on" all count; quotes from copy-paste are ignored.
+    return os.environ.get("GZ_PLAY_ENABLED", "").strip().strip("'\"").lower() in ("1", "true", "yes", "on")
+
+
 def _gz_play_enabled(user) -> bool:
-    return os.environ.get("GZ_PLAY_ENABLED", "").lower() in ("1", "true", "yes") or \
-        (user or {}).get("role") in ["admin", "sub-admin"]
+    return _gz_flag_on() or (user or {}).get("role") in ["admin", "sub-admin"]
+
+
+@api.get("/gamezone/play/status")
+async def gamezone_play_status():
+    """Yes/no setup check for Gamezone play. Never returns any setting's value."""
+    return {"flag_set": bool(os.environ.get("GZ_PLAY_ENABLED", "").strip()), "flag_on": _gz_flag_on(),
+            "ssh_key_set": gz_play.ssh_key_configured()}
 
 
 @api.get("/gamezone/play/machines")
