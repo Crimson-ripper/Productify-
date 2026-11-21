@@ -128,13 +128,35 @@ def _pkey():
         text = Path(os.environ["GZ_SSH_KEY_PATH"]).read_text()
     if not text:
         raise RuntimeError("GZ_SSH_PRIVATE_KEY is not set")
-    text = text.replace("\\n", "\n")
+    text = _normalise_pem(text)
     for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
         try:
-            return cls.from_private_key(io.StringIO(text + "\n"))
+            return cls.from_private_key(io.StringIO(text))
         except Exception:
             continue
     raise RuntimeError("GZ_SSH_PRIVATE_KEY isn't a usable private key")
+
+
+def _normalise_pem(text: str) -> str:
+    """Rebuild a private key whose line breaks were lost on the way into an env var (2026-11-21:
+    hosting dashboards may turn them into spaces or literal \\n). Header and footer stay; the
+    base64 body is re-wrapped at 70 characters."""
+    text = text.strip().strip("'\"").replace("\\r", "").replace("\\n", "\n").replace("\r", "")
+    m = re.search(r"(-----BEGIN [A-Z ]+-----)(.*?)(-----END [A-Z ]+-----)", text, flags=re.S)
+    if not m:
+        return text + "\n"
+    body = re.sub(r"\s+", "", m.group(2))
+    lines = [body[i:i + 70] for i in range(0, len(body), 70)]
+    return "\n".join([m.group(1), *lines, m.group(3)]) + "\n"
+
+
+def ssh_key_valid() -> bool:
+    """Whether the configured key parses (for the yes/no status check; never exposes the key)."""
+    try:
+        _pkey()
+        return True
+    except Exception:
+        return False
 
 
 def ssh_key_configured() -> bool:

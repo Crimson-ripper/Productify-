@@ -4180,7 +4180,7 @@ def _gz_play_enabled(user) -> bool:
 async def gamezone_play_status():
     """Yes/no setup check for Gamezone play. Never returns any setting's value."""
     return {"flag_set": bool(os.environ.get("GZ_PLAY_ENABLED", "").strip()), "flag_on": _gz_flag_on(),
-            "ssh_key_set": gz_play.ssh_key_configured()}
+            "ssh_key_set": gz_play.ssh_key_configured(), "ssh_key_valid": gz_play.ssh_key_valid()}
 
 
 @api.get("/gamezone/play/machines")
@@ -4342,7 +4342,11 @@ async def gamezone_play_worker(session_id: str):
             host, ssh_port, wg_port = ep
             try:
                 ready = await asyncio.to_thread(gz_play.check_ready, host, ssh_port)
-            except Exception:
+            except Exception as e:
+                # 2026-11-21: this used to retry silently, so a bad server key looked like slow setup.
+                why = f"Can't reach the machine yet ({type(e).__name__}: {str(e)[:80]})"
+                logger.warning(f"game {session_id}: readiness check failed: {why}")
+                await db.instances.update_one({"id": session_id}, {"$set": {"setup_detail": why}})
                 continue
             if not ready["ready"]:
                 if ready["detail"]:
