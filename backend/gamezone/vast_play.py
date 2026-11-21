@@ -226,9 +226,23 @@ WG_KEY_RE = re.compile(r"[A-Za-z0-9+/]{43}=")
 def add_peer(host: str, ssh_port: int, client_key: str) -> None:
     if not WG_KEY_RE.fullmatch(client_key or ""):
         raise ValueError("invalid WireGuard key")
-    rc, out = run(host, ssh_port, f"/usr/local/sbin/gamezone-wg-peer add {shlex.quote(client_key)}", 40)
+    rc, out = run(host, ssh_port, f"/usr/local/sbin/gamezone-wg-peer add {shlex.quote(client_key)} && {SUNSHINE_HEAL}", 60)
     if rc != 0:
         raise RuntimeError(f"peer add failed: {out[-160:]}")
+    if "sunshine-restarted" in out:
+        log.warning(f"{host}: Sunshine's HTTPS port was hung; restarted it before the join")
+
+
+# 2026-11-21: after an abandoned pairing attempt, Sunshine's HTTPS port (47984) can stop answering
+# while HTTP still works, so every later pairing times out. Without a client certificate a healthy
+# port refuses the TLS handshake at once (curl exits non-zero quickly); a hung one times out (28).
+# On a timeout, restart Sunshine inside the kiosk user's X session before PG Connect pairs.
+SUNSHINE_HEAL = (
+    "curl -sk -m 4 -o /dev/null https://localhost:47984/serverinfo; rc=$?; "
+    "if [ $rc -eq 28 ]; then pkill -x sunshine; sleep 2; U=$(id -u player); "
+    "sudo -u player env DISPLAY=:0 HOME=/home/player XDG_RUNTIME_DIR=/run/user/$U "
+    "sh -c 'nohup /usr/bin/sunshine > /tmp/sunshine.log 2>&1 &'; sleep 6; echo sunshine-restarted; fi; true"
+)
 
 
 def submit_pin(host: str, ssh_port: int, pin: str, device_name: str) -> bool:
