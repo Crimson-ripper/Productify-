@@ -285,6 +285,28 @@ EOF
   echo "[gamezone] wireguard ready on udp/$WG_PORT"
 fi
 
+# 8. Pre-update Steam (2026-11-21): the image's Steam downloads its client update on first start,
+#    so players waited on "Updating Steam" every session. Run it once here, as the player, on a
+#    virtual screen, until its web helper (the UI) has started, then shut it down. Before the
+#    ready mark, so it happens before billing. Capped at 15 minutes; a slow update never blocks setup.
+echo "[gamezone] updating Steam"
+apt-get -o DPkg::Lock::Timeout=600 install -y -qq xvfb xauth >/dev/null || true
+if command -v xvfb-run >/dev/null; then
+  sudo -u "$PLAYER" -H bash -c '
+    xvfb-run -a /usr/games/steam -silent -no-browser > /tmp/steam-preupdate.log 2>&1 &
+    for i in $(seq 1 180); do
+      pgrep -u "$(id -u)" -x steamwebhelper >/dev/null && { sleep 20; break; }
+      sleep 5
+    done
+    /usr/games/steam -shutdown >/dev/null 2>&1 || true
+    sleep 15
+    for n in steamwebhelper steam reaper Xvfb; do pkill -u "$(id -u)" -x "$n" >/dev/null 2>&1 || true; done
+  '
+  # pgrep/pkill -x match the process name exactly: with -f they matched the text of this very
+  # command (it contains the word steamwebhelper), which stopped the update at 40% (2026-11-21).
+  echo "[gamezone] Steam update step finished: $(ls /home/$PLAYER/.steam/debian-installation/ubuntu12_32/steamui.so >/dev/null 2>&1 && echo client ready || echo client not found)"
+fi
+
 echo "[gamezone] setup done $(date -Is); rebooting into kiosk session"
 touch /var/lib/gamezone-ready
 systemctl restart display-manager 2>/dev/null || reboot
