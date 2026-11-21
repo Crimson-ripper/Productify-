@@ -12,6 +12,7 @@ the server only ever asks for "a ready VM for this offer".
 SSH to the VMs uses Productify's key, attached to the Vast account. The private key comes from the
 environment (GZ_SSH_PRIVATE_KEY = the key text, or GZ_SSH_KEY_PATH = a file); it is never logged.
 """
+import base64
 import io
 import logging
 import os
@@ -142,6 +143,11 @@ def _normalise_pem(text: str) -> str:
     hosting dashboards may turn them into spaces or literal \\n). Header and footer stay; the
     base64 body is re-wrapped at 70 characters."""
     text = text.strip().strip("'\"").replace("\\r", "").replace("\\n", "\n").replace("\r", "")
+    if "BEGIN" not in text:  # the whole key as one base64 line (easiest to paste)
+        try:
+            text = base64.b64decode(re.sub(r"\s+", "", text), validate=True).decode().strip()
+        except Exception:
+            pass
     m = re.search(r"(-----BEGIN [A-Z ]+-----)(.*?)(-----END [A-Z ]+-----)", text, flags=re.S)
     if not m:
         return text + "\n"
