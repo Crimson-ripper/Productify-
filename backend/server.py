@@ -3532,6 +3532,14 @@ async def destroy_partner_machine(inst: dict):
     vid = inst.get("vast_instance_id")
     if not vid:
         return
+    if inst.get("kind") == "game" and inst.get("vm_host"):
+        # 2026-11-22: keep a short crash/diagnostics bundle before the machine (and its logs) is gone.
+        try:
+            diag = await asyncio.wait_for(asyncio.to_thread(
+                gz_play.collect_diagnostics, inst["vm_host"], inst["vm_ssh_port"]), timeout=45)
+            await db.instances.update_one({"id": inst["id"]}, {"$set": {"diagnostics": diag}})
+        except Exception as e:
+            logger.warning(f"game {inst.get('id')}: couldn't collect diagnostics: {e}")
     try:
         await asyncio.to_thread(vast_market.destroy, vid)
     except Exception as e:

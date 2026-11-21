@@ -196,6 +196,15 @@ class PlayTests(unittest.TestCase):
         self.assertTrue(cur["low_credit"])  # the page shows the top-up popup
         self.assertLessEqual(cur["minutes_left"], 10)
 
+    def test_setup_script_fits_vast_limit_and_unpacks(self):
+        import base64, gzip, re
+        self.assertLess(len(vast_play.ONSTART), vast_play.ONSTART_LIMIT)  # Vast refuses > 16 KB
+        self.assertTrue(vast_play.ONSTART.startswith("#!/bin/bash\n"))
+        packed = re.search(r"echo '([A-Za-z0-9+/=]+)'", vast_play.ONSTART).group(1)
+        script = gzip.decompress(base64.b64decode(packed)).decode()
+        self.assertIn("gamezone-game-watchdog", script)
+        self.assertNotIn(chr(13), script)
+
     def test_endpoints_need_identity_udp_port(self):
         self.assertIsNone(vast_play.endpoints({"public_ipaddr": "1.2.3.4", "ports": {"22/tcp": [{"HostPort": "22"}]}}))
         self.assertEqual(vast_play.endpoints({"public_ipaddr": "1.2.3.4", "ports": {

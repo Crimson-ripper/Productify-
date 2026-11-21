@@ -81,45 +81,71 @@ EOF
 # game started more than 2 minutes ago, close what is left of it. Games with a window are never touched.
 cat > /usr/local/bin/gamezone-game-watchdog <<'EOF'
 #!/bin/bash
-declare -A quiet
+# Gamezone game watchdog v2 (2026-11-22). Closes what's left of a game that has really finished
+# (e.g. a launcher + Proton still running, so Steam shows its loading screen forever).
+# v1 matched windows by process ID; inside Steam's runtime container a game's window can report a
+# different PID, so RUNNING games looked window-less and were killed (players saw "crashes").
+# v2 closes a game's processes only when, for 40 s in a row, BOTH are true:
+#   - no visible game window on screen at all (anything but Steam's, Heroic's or the desktop's own)
+#   - the game's processes are idle (almost no CPU time used)
+# Every decision is logged to /tmp/gamezone-watchdog.log.
+declare -A quiet last_ticks
+HZ=$(getconf CLK_TCK 2>/dev/null || echo 100)
+
 descendants() {
   local kids
   kids=$(pgrep -P "$1")
   for k in $kids; do echo "$k"; descendants "$k"; done
 }
+
+# CPU time (clock ticks) used so far by a list of PIDs.
+ticks() {
+  local total=0 p ut st
+  for p in "$@"; do
+    # utime/stime are fields 14/15; the name (field 2) can contain spaces, so count after its ")".
+    read -r ut st < <(sed 's/.*) //' "/proc/$p/stat" 2>/dev/null | cut -d' ' -f12,13) || continue
+    total=$(( total + ${ut:-0} + ${st:-0} ))
+  done
+  echo "$total"
+}
+
+# 1 if any visible window that isn't Steam/Heroic/desktop UI is on screen.
+game_window_on_screen() {
+  local w cls
+  for w in $(xdotool search --onlyvisible --name "" 2>/dev/null); do
+    cls=$(xprop -id "$w" WM_CLASS 2>/dev/null | tr 'A-Z' 'a-z')
+    case "$cls" in *'"'*) ;; *) continue ;; esac                 # no class: helper/compositor window
+    case "$cls" in *openbox*|*steamwebhelper*|*'"steam"'*|*heroic*|*picom*) continue ;; esac
+    echo 1; return
+  done
+  echo 0
+}
+
 while true; do
   sleep 10
+  on_screen=$(game_window_on_screen)
   for reaper in $(pgrep -u "$(id -u)" -f "reaper SteamLaunch"); do
     age=$(ps -o etimes= -p "$reaper" 2>/dev/null | tr -d ' ')
     [ -n "$age" ] || continue
-    has_window=0
-    for pid in $reaper $(descendants "$reaper"); do
-      if xdotool search --onlyvisible --pid "$pid" >/dev/null 2>&1; then has_window=1; break; fi
-    done
-    # Safety: an application window that doesn't say which process owns it (_NET_WM_PID; old X11
-    # programs) might be this game, so never close anything while one is on screen. The kiosk's own
-    # compositor/Openbox helper windows have no WM_CLASS (or are Openbox's) and are ignored.
-    if [ "$has_window" = 0 ]; then
-      for w in $(xdotool search --onlyvisible --name "" 2>/dev/null); do
-        xdotool getwindowpid "$w" >/dev/null 2>&1 && continue
-        cls=$(xprop -id "$w" WM_CLASS 2>/dev/null)
-        case "$cls" in *'"'*) ;; *) continue ;; esac
-        case "$cls" in *Openbox*|*openbox*) continue ;; esac
-        has_window=1; break
-      done
-    fi
-    if [ "$has_window" = 1 ] || [ "$age" -lt 120 ]; then
+    pids="$reaper $(descendants "$reaper")"
+    now=$(ticks $pids)
+    used=$(( now - ${last_ticks[$reaper]:-$now} ))
+    last_ticks[$reaper]=$now
+    idle=0
+    [ "$used" -le $(( HZ / 10 )) ] && idle=1   # <= 0.1 s of CPU in 10 s (1 %)
+    if [ "$age" -lt 120 ] || [ "$on_screen" = 1 ] || [ "$idle" = 0 ]; then
+      [ "${quiet[$reaper]:-0}" -gt 0 ] && echo "$(date -Is) reaper $reaper active again (window=$on_screen cpu_ticks=$used)"
       quiet[$reaper]=0
       continue
     fi
     quiet[$reaper]=$(( ${quiet[$reaper]:-0} + 10 ))
+    echo "$(date -Is) reaper $reaper quiet ${quiet[$reaper]}s (no game window, cpu_ticks=$used)"
     if [ "${quiet[$reaper]}" -ge 40 ]; then
-      echo "$(date -Is) closing leftovers of a finished game (reaper $reaper)"
-      pids="$(descendants "$reaper") $reaper"
+      echo "$(date -Is) closing leftovers of a finished game (reaper $reaper): $(ps -o comm= -p $pids 2>/dev/null | tr '\n' ' ')"
       kill -TERM $pids 2>/dev/null
       sleep 5
       kill -KILL $pids 2>/dev/null
-      unset "quiet[$reaper]"
+      unset "quiet[$reaper]" "last_ticks[$reaper]"
     fi
   done
 done

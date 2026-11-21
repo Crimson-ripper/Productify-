@@ -37,7 +37,19 @@ LIST_TTL_S = 120       # one Vast search per country every 2 minutes at most
 SETUP_TIMEOUT_S = 1200
 LAUNCHERS = {"steam": "Steam", "epic": "Epic Games"}  # our id -> Sunshine app name (kiosk apps.json)
 WG_NET = "10.77.0"
-ONSTART = (Path(__file__).parent / "vast_template" / "gamezone_kiosk_onstart.sh").read_text(encoding="utf-8")
+def _packed_onstart() -> str:
+    """The kiosk setup script, gzip+base64 packed behind a tiny unpacker (2026-11-22): Vast refuses
+    an onstart longer than 16 KB and the script outgrew it. VMs need the shebang line."""
+    import gzip
+    script = (Path(__file__).parent / "vast_template" / "gamezone_kiosk_onstart.sh").read_text(encoding="utf-8")
+    packed = base64.b64encode(gzip.compress(script.replace("\r\n", "\n").encode(), 9)).decode()
+    return ("#!/bin/bash\n"
+            f"echo '{packed}' | base64 -d | gunzip > /root/gamezone-setup.sh\n"
+            "exec bash /root/gamezone-setup.sh\n")
+
+
+ONSTART = _packed_onstart()
+ONSTART_LIMIT = 16000  # Vast's limit is 16384; tests keep a margin
 
 _lists, _lists_lock = {}, threading.Lock()
 
@@ -270,6 +282,24 @@ def submit_pin(host: str, ssh_port: int, pin: str, device_name: str) -> bool:
     if not ok:
         log.warning(f"pin submit: Sunshine answered {out[:120]!r}")
     return ok
+
+
+# What a session leaves behind for diagnosing crashes (2026-11-22): watchdog decisions, Sunshine
+# errors and client disconnects, kernel crash/out-of-memory/GPU messages, Steam/Proton crash lines.
+# No game data, no store logins. Capped so one session can't store much.
+DIAG_CMD = r"""
+echo '== watchdog'; tail -40 /tmp/gamezone-watchdog.log 2>/dev/null
+echo '== sunshine'; grep -aE 'Error|Fatal|CLIENT (DIS)?CONNECTED|Spawning|exited' /tmp/sunshine.log 2>/dev/null | grep -v 'SSL Verification' | tail -40
+echo '== kernel'; dmesg 2>/dev/null | grep -iE 'segfault|out of memory|oom|killed process|xid|nvrm.*error' | tail -20
+echo '== steam'; grep -ahiE 'crash|segfault|fatal|assert|minidump|Game process removed|Game process added' \
+  /home/player/.steam/steam/logs/console_log.txt /home/player/.steam/steam/logs/content_log.txt 2>/dev/null | tail -40
+echo '== memory'; free -m | head -2
+"""
+
+
+def collect_diagnostics(host: str, ssh_port: int) -> dict:
+    rc, out = run(host, ssh_port, DIAG_CMD, 30)
+    return {"collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "text": out[-20000:]}
 
 
 def tunnel(host: str, wg_port: int, host_key: str) -> dict:
