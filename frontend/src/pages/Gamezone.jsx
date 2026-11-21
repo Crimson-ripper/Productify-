@@ -12,6 +12,10 @@ import { track } from "@/lib/analytics";
 
 // PG Connect (Productify Game Connect): GPLv3 fork of Moonlight, published on GitHub Releases
 // like Productify Node. Direct file link so the browser downloads instead of opening GitHub.
+// Game library, game submissions and private game uploads are hidden until Productify can publish
+// indie games (2026-11-21). Players bring their own Steam/Epic games via the play panel above.
+const SHOW_GAME_LIBRARY = false;
+
 const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.1.6/PGConnect-Setup-0.1.6-x64.msi";
 
 export default function Gamezone() {
@@ -116,6 +120,7 @@ export default function Gamezone() {
   }, [user]);
 
   useEffect(() => {
+    if (!SHOW_GAME_LIBRARY) return;
     fetchGames();
     fetchRentals();
   }, [fetchGames, fetchRentals]);
@@ -271,7 +276,7 @@ export default function Gamezone() {
     <>
       <SEO
         title="Gamezone — Play games on a rented GPU · Productify"
-        description="Play games streamed from a GPU someone else owns, paid by the hour in Productify credits. Or run your own game build privately."
+        description="Rent a cloud gaming PC near you by the hour and play your own Steam or Epic games on it through PG Connect."
         path="/gamezone"
       />
 
@@ -311,6 +316,7 @@ export default function Gamezone() {
 
       <GamezonePlay downloadUrl={PG_CONNECT_DOWNLOAD_URL} />
 
+      {SHOW_GAME_LIBRARY && (<>
       <nav className="gz-tabs" aria-label="Gamezone sections">
         {[
           ["library", Gamepad2, "Game library"],
@@ -562,6 +568,7 @@ export default function Gamezone() {
           </div>
         </div>
       )}
+      </>)}
     </>
   );
 }
