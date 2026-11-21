@@ -156,6 +156,16 @@ def _normalise_pem(text: str) -> str:
     return "\n".join([m.group(1), *lines, m.group(3)]) + "\n"
 
 
+def ssh_key_fingerprint() -> str:
+    """SHA256 fingerprint of the configured key's PUBLIC half (safe to show; identifies which key it is)."""
+    try:
+        import hashlib
+        k = _pkey()
+        return "SHA256:" + base64.b64encode(hashlib.sha256(k.asbytes()).digest()).decode().rstrip("=")
+    except Exception:
+        return ""
+
+
 def ssh_key_valid() -> bool:
     """Whether the configured key parses (for the yes/no status check; never exposes the key)."""
     try:

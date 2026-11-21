@@ -4180,7 +4180,8 @@ def _gz_play_enabled(user) -> bool:
 async def gamezone_play_status():
     """Yes/no setup check for Gamezone play. Never returns any setting's value."""
     return {"flag_set": bool(os.environ.get("GZ_PLAY_ENABLED", "").strip()), "flag_on": _gz_flag_on(),
-            "ssh_key_set": gz_play.ssh_key_configured(), "ssh_key_valid": gz_play.ssh_key_valid()}
+            "ssh_key_set": gz_play.ssh_key_configured(), "ssh_key_valid": gz_play.ssh_key_valid(),
+            "ssh_key_fingerprint": gz_play.ssh_key_fingerprint()}
 
 
 @api.get("/gamezone/play/machines")
