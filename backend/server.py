@@ -4213,7 +4213,7 @@ async def gamezone_play_machines(request: Request, country: str = "", lat: Optio
 
 class GamePlayStartInput(BaseModel):
     offer_id: int = Field(ge=1)
-    launcher: str = Field(pattern="^(steam|epic)$")
+    launcher: str = Field("steam", pattern="^(steam|epic)$")  # default for old pages; chosen in PG Connect now
     country: str = Field("", max_length=2)
 
 
@@ -4474,7 +4474,10 @@ async def gamezone_connect(code: str, data: Optional[GzConnectInput] = None):
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(timespec="seconds"),
         "host": {"name": "Productify Gamezone", "address": f"{gz_play.WG_NET}.1", "http_port": 47989},
         "pairing": {"mode": "pin", "pin": pin, "pair_token": pair_token},
-        "app": {"name": gz_play.LAUNCHERS.get(inst.get("launcher"), "Steam")},
+        # name: what PG Connect up to 0.1.7 opens; choices: PG Connect 0.1.8+ lets the player pick and
+        # switch between these inside the app (2026-11-22).
+        "app": {"name": gz_play.LAUNCHERS.get(inst.get("launcher"), "Steam"),
+                "choices": list(gz_play.LAUNCHERS.values())},
         "network": gz_play.tunnel(inst["vm_host"], inst["wg_port"], inst["wg_host_key"]),
     }
 

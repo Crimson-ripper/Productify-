@@ -154,7 +154,8 @@ class PlayTests(unittest.TestCase):
                         json={"wireguard_public_key": KEY, "client": {"device_name": "DESK"}})
         self.assertEqual(j.status_code, 200, j.text)
         j = j.json()
-        self.assertEqual(j["app"]["name"], "Epic Games")  # only the launcher the player picked
+        self.assertEqual(j["app"]["name"], "Epic Games")  # what older PG Connect versions open
+        self.assertEqual(j["app"]["choices"], ["Steam", "Epic Games"])  # 0.1.8+: switch inside PG Connect
         self.assertEqual(j["host"]["address"], "10.77.0.1")
         self.assertEqual(j["network"]["wireguard"]["endpoint"], "203.0.113.9:41641")
         self.assertEqual(self.fake.peers, [KEY])

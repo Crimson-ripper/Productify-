@@ -21,11 +21,9 @@ export default function GamezonePlay({ downloadUrl }) {
   const [country, setCountry] = useState("");
   const [countries, setCountries] = useState([]);
   const [machines, setMachines] = useState([]);
-  const [launchers, setLaunchers] = useState([{ id: "steam", name: "Steam" }, { id: "epic", name: "Epic Games" }]);
   const [searched, setSearched] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [offerId, setOfferId] = useState(null);
-  const [launcher, setLauncher] = useState("steam");
   const [session, setSession] = useState(null);
   const [busy, setBusy] = useState(false);
   const [lowDismissed, setLowDismissed] = useState(false);
@@ -41,7 +39,6 @@ export default function GamezonePlay({ downloadUrl }) {
       setCountries(res.data.countries || []);
       setMachines(res.data.machines || []);
       setSearched(res.data.searched || []);
-      if (res.data.launchers) setLaunchers(res.data.launchers);
       setOfferId((cur) => (res.data.machines || []).some((m) => m.offer_id === cur) ? cur : (res.data.machines?.[0]?.offer_id ?? null));
     } catch (err) {
       setEnabled((e) => e ?? true);
@@ -76,10 +73,10 @@ export default function GamezonePlay({ downloadUrl }) {
     if (!offerId) return;
     setBusy(true);
     try {
-      const res = await api.post("/gamezone/play", { offer_id: offerId, launcher, country });
+      const res = await api.post("/gamezone/play", { offer_id: offerId, country });
       setSession(res.data);
       setLowDismissed(false);
-      track("cta_click", { cta_name: "gamezone_play", launcher });
+      track("cta_click", { cta_name: "gamezone_play" });
     } catch (err) {
       toast.error(getErrorMessage(err, "Couldn't start the session"));
       if (err?.response?.status === 409) loadMachines(country);
@@ -107,7 +104,6 @@ export default function GamezonePlay({ downloadUrl }) {
   };
 
   const picked = machines.find((m) => m.offer_id === offerId);
-  const launcherName = (id) => (launchers.find((l) => l.id === id) || {}).name || id;
 
   return (
     <section className="gz-play-wrap" aria-labelledby="gz-play-title">
@@ -145,7 +141,7 @@ export default function GamezonePlay({ downloadUrl }) {
                   <button className="secondary-button" onClick={end} disabled={busy}><Square size={14} /> End session</button>
                 </div>
                 <p className="gz-muted">
-                  {launcherName(session.launcher)} opens when you connect. No PG Connect yet? <a href={downloadUrl} download>Download it</a>, then enter the code.
+                  Choose Steam or Epic in PG Connect after it connects (PG Connect 0.1.8 or newer). No PG Connect yet? <a href={downloadUrl} download>Download it</a>, then enter the code.
                 </p>
                 <dl className="gz-meter">
                   <div><dt>Time</dt><dd>{fmtTime(session.runtime_seconds || 0)}</dd></div>
@@ -195,19 +191,10 @@ export default function GamezonePlay({ downloadUrl }) {
               ))}
             </div>
 
-            <fieldset className="gz-launchers">
-              <legend>Launcher</legend>
-              {launchers.map((l) => (
-                <label key={l.id} className={`gz-chip${launcher === l.id ? " on" : ""}`}>
-                  <input type="radio" name="gz-launcher" checked={launcher === l.id} onChange={() => setLauncher(l.id)} />
-                  {l.name}
-                </label>
-              ))}
-            </fieldset>
 
             <ul className="gz-terms">
-              <li>You sign in to your own {launcherName(launcher)} account and play games you own.</li>
-              <li>When the session ends, the machine is deleted with everything on it, including your sign-in. Progress is kept only through {launcherName(launcher)}'s cloud saves.</li>
+              <li>In PG Connect you choose Steam or Epic Games, and can switch between them while you play. You sign in to your own account and play games you own.</li>
+              <li>When the session ends, the machine is deleted with everything on it, including your sign-in. Progress is kept through Steam's and Epic's cloud saves.</li>
               <li>Billed per minute from your credits while the machine is ready. We warn you by popup and email when your credit is running low; the session ends when it runs out.</li>
             </ul>
 
