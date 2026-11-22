@@ -51,6 +51,7 @@ import CookieBanner from "@/components/CookieBanner";
 import VerifyEmailBar from "@/components/VerifyEmailBar";
 import VerifyEmail from "@/pages/VerifyEmail";
 import PolicyBumpModal from "@/components/PolicyBumpModal";
+import CreditGraceAlert from "@/components/CreditGraceAlert";
 
 export function AppRouter() {
   const location = useLocation();
@@ -127,6 +128,7 @@ export function AppRouter() {
       <Footer />
       <CookieBanner />
       <PolicyBumpModal />
+      <CreditGraceAlert />
       <Toaster position="bottom-center" richColors closeButton />
     </div>
   );

@@ -83,11 +83,14 @@ class PlayTests(unittest.TestCase):
         self._orig = {"db": server.db, "status": vast_market.status, "destroy": vast_market.destroy,
                       "sleep": server.asyncio.sleep, "spawn": server.spawn}
         self._play = {n: getattr(vast_play, n) for n in ("machines_near", "find_offer", "rent", "check_ready",
-                                                           "add_peer", "submit_pin", "ssh_key_configured")}
+                                                           "add_peer", "submit_pin", "ssh_key_configured",
+                                                           "player_connected")}
         server.db = self.db
         for n in ("machines_near", "find_offer", "rent", "check_ready", "add_peer", "submit_pin"):
             setattr(vast_play, n, getattr(self.fake, n))
         vast_play.ssh_key_configured = lambda: True
+        self.connected = False
+        vast_play.player_connected = lambda host, port, within=180: self.connected
         self.destroyed = []
         vast_market.status = lambda vid: {"actual_status": "running", "public_ipaddr": "203.0.113.9 ", "dph_total": 0.30,
                                           "ports": {"22/tcp": [{"HostPort": "40022"}], "41641/udp": [{"HostPort": "41641"}]}}
@@ -205,6 +208,104 @@ class PlayTests(unittest.TestCase):
         cur = self.c.get("/api/gamezone/play/current").json()["session"]
         self.assertTrue(cur["low_credit"])  # the page shows the top-up popup
         self.assertLessEqual(cur["minutes_left"], 10)
+
+    # --- zero balance: 5-minute grace, top-up of at least 30 minutes, then stop ---
+    def running_session(self):
+        self.assertEqual(self.start().status_code, 200)
+        self.run_spawned()
+        self.spawned.clear()
+        return self.db.instances.rows[0]
+
+    def enforce(self):
+        asyncio.run(server.enforce_credit_limits())
+
+    def ago(self, **kw):
+        return (server.datetime.now(server.timezone.utc) - server.timedelta(**kw)).isoformat()
+
+    def test_zero_balance_starts_grace_and_emails(self):
+        inst = self.running_session()
+        self.db.users.rows[0]["compute_credits"] = 0.0
+        self.enforce()
+        self.assertEqual(inst["status"], "running")  # not stopped yet
+        self.assertTrue(inst["credit_grace_until"])
+        self.assertTrue(any("credits_zero" in getattr(c, "__qualname__", "") for c in self.spawned))
+        cur = self.c.get("/api/gamezone/play/current").json()["session"]
+        self.assertGreater(cur["grace_seconds_left"], 240)
+        self.assertGreaterEqual(cur["min_topup"], 0.31)  # 30 min at $0.62/h
+        self.assertEqual(self.c.get("/api/credits/alert").json()["grace_until"], inst["credit_grace_until"])
+        st = self.c.get(f"/api/gamezone/sessions/{inst['join_code']}/status").json()
+        self.assertIn("grace_seconds_left", st)
+
+    def test_no_topup_stops_after_grace(self):
+        inst = self.running_session()
+        self.db.users.rows[0]["compute_credits"] = 0.0
+        self.enforce()
+        inst["credit_grace_until"] = self.ago(seconds=1)
+        self.enforce()
+        self.assertEqual(inst["status"], "terminated")
+        self.assertIn("weren't topped up", inst["end_reason"])
+
+    def test_small_topup_does_not_save_the_machine(self):
+        inst = self.running_session()
+        self.db.users.rows[0]["compute_credits"] = 0.0
+        self.enforce()
+        self.db.users.rows[0]["compute_credits"] = 0.10  # ~10 min: under the 30-minute minimum
+        self.enforce()
+        self.assertTrue(inst["credit_grace_until"])
+        inst["credit_grace_until"] = self.ago(seconds=1)
+        self.enforce()
+        self.assertEqual(inst["status"], "terminated")
+
+    def test_enough_topup_ends_grace_and_keeps_running(self):
+        inst = self.running_session()
+        inst["started_at"] = self.ago(minutes=3)  # 3 grace minutes used: still charged from the new balance
+        self.db.users.rows[0]["compute_credits"] = 0.0
+        self.enforce()
+        self.db.users.rows[0]["compute_credits"] = 0.40
+        self.enforce()
+        self.assertFalse(inst["credit_grace_until"])
+        self.assertEqual(inst["status"], "running")
+        self.assertEqual(self.c.get("/api/credits/alert").json(), {})
+
+    # --- nobody connected through PG Connect for 10 minutes ---
+    def idle_check(self, inst):
+        asyncio.run(server.gamezone_idle_check(inst, server.datetime.now(server.timezone.utc)))
+
+    def test_never_connected_ends_after_10_minutes(self):
+        inst = self.running_session()
+        inst["started_at"] = self.ago(minutes=9)
+        self.idle_check(inst)
+        self.assertEqual(inst["status"], "running")
+        self.assertLessEqual(self.c.get("/api/gamezone/play/current").json()["session"]["idle_seconds_left"], 60)
+        inst["started_at"] = self.ago(minutes=10, seconds=5)
+        self.idle_check(inst)
+        self.assertEqual(inst["status"], "terminated")
+        self.assertIn("nobody was connected", inst["end_reason"])
+
+    def test_connected_player_is_never_idle_stopped(self):
+        inst = self.running_session()
+        inst["started_at"] = self.ago(hours=2)
+        self.connected = True
+        self.idle_check(inst)
+        self.assertEqual(inst["status"], "running")
+        self.assertIsNone(self.c.get("/api/gamezone/play/current").json()["session"]["idle_seconds_left"])
+
+    def test_closed_pg_connect_ends_10_minutes_after_last_seen(self):
+        inst = self.running_session()
+        inst["started_at"] = self.ago(hours=1)
+        inst["player_seen_at"] = self.ago(minutes=5)
+        self.idle_check(inst)
+        self.assertEqual(inst["status"], "running")
+        inst["player_seen_at"] = self.ago(minutes=11)
+        self.idle_check(inst)
+        self.assertEqual(inst["status"], "terminated")
+
+    def test_unreachable_vm_is_not_counted_as_idle(self):
+        inst = self.running_session()
+        inst["started_at"] = self.ago(hours=1)
+        self.connected = None
+        self.idle_check(inst)
+        self.assertEqual(inst["status"], "running")
 
     def test_host_that_never_accepts_our_key_fails_fast_and_is_left_out(self):
         self.fake.ready = "auth-fails"

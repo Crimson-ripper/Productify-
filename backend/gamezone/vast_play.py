@@ -331,6 +331,21 @@ def collect_diagnostics(host: str, ssh_port: int) -> dict:
     return {"collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "text": out[-20000:]}
 
 
+def player_connected(host: str, ssh_port: int, within: int = 180):
+    """True if PG Connect's tunnel had a WireGuard handshake in the last `within` seconds (it keeps
+    the tunnel alive every 25 s, which renews the handshake about every 2 minutes), False if not,
+    None if the VM couldn't be asked. Times are compared on the VM, so clock drift doesn't matter."""
+    try:
+        rc, out = run(host, ssh_port, "date +%s; wg show wg0 latest-handshakes", 20)
+    except Exception:
+        return None
+    lines = out.split()
+    if rc != 0 or not lines or not lines[0].isdigit():
+        return None
+    now, stamps = int(lines[0]), [int(x) for x in lines[2::2] if x.isdigit()]
+    return any(t and now - t <= within for t in stamps)
+
+
 def tunnel(host: str, wg_port: int, host_key: str) -> dict:
     """The `network` block PG Connect expects (productify-connect DESIGN.md)."""
     return {"mode": "wireguard", "wireguard": {

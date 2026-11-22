@@ -140,6 +140,11 @@ export default function GamezonePlay({ downloadUrl }) {
                   </a>
                   <button className="secondary-button" onClick={end} disabled={busy}><Square size={14} /> End session</button>
                 </div>
+                {session.idle_seconds_left != null && (
+                  <p className="gz-idle" role="status">
+                    <AlertTriangle size={14} /> Not connected. This session ends in about {Math.max(1, Math.ceil(session.idle_seconds_left / 60))} min unless you connect with PG Connect, so it doesn't use up your credit.
+                  </p>
+                )}
                 <p className="gz-muted">
                   Choose Steam or Epic in PG Connect after it connects (PG Connect 0.1.8 or newer). No PG Connect yet? <a href={downloadUrl} download>Download it</a>, then enter the code.
                 </p>
@@ -205,7 +210,7 @@ export default function GamezonePlay({ downloadUrl }) {
         )}
       </div>
 
-      {session?.status === "running" && session.low_credit && !lowDismissed && (
+      {session?.status === "running" && session.low_credit && !session.grace_until && !lowDismissed && (
         <div className="gz-modal" role="alertdialog" aria-modal="true" aria-labelledby="gz-low-title">
           <div className="gz-modal-box">
             <h3 id="gz-low-title"><AlertTriangle size={18} /> Your credit is running low</h3>

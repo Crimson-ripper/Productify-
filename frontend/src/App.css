@@ -2140,3 +2140,4 @@ header.topbar,.footer-grid{border:0!important}
 .gz-modal-box{background:var(--surface);color:var(--ink);max-width:420px;width:100%;padding:20px;border:1px solid var(--line)}
 .gz-modal-box h3{display:flex;align-items:center;gap:8px;margin:0 0 8px}
 @media (max-width:560px){.gz-play{padding:16px}.gz-field select{min-width:0;width:100%}.gz-picker-row .gz-field{flex:1}}
+.gz-idle{display:flex;align-items:center;gap:6px;margin:8px 0;padding:8px 10px;border:1px solid var(--line);background:var(--surface);font-size:14px}

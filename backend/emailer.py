@@ -128,6 +128,18 @@ async def credits_low(to: str, name: str, remaining: float, minutes_left: int):
                "When it runs out your instance stops and its files are deleted.")
 
 
+async def credits_zero(to: str, name: str, grace_minutes: int, min_topup: float):
+    await send(to, f"Your balance is zero: your machine stops in {grace_minutes} minutes",
+               _layout("Your credit balance is zero",
+                       _p(f"Hi {name}, your Productify credits have run out. Your rented machine will be shut down "
+                          f"automatically in {grace_minutes} minutes, and its files deleted.") +
+                       _p(f"To keep it running, top up at least {money(min_topup)} within {grace_minutes} minutes. "
+                          f"That covers the {grace_minutes} extra minutes and at least 30 more minutes of use."),
+                       ("Top up credits", f"{SITE}/pricing")),
+               f"Hi {name},\n\nYour credits have run out. Your machine will be shut down automatically in "
+               f"{grace_minutes} minutes. Top up at least {money(min_topup)} to keep it running: {SITE}/pricing")
+
+
 async def gpu_available(to: str, gpu: str, rental_id: str):
     url = f"{SITE}/rental/{rental_id}"
     await send(to, f"A {gpu} is available on Productify",

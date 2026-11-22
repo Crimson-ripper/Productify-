@@ -4,7 +4,7 @@ import asyncio
 import os
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:1")
@@ -222,7 +222,12 @@ class OrderTests(unittest.TestCase):
         self.db.users.rows[0]["compute_credits"] = 2.0
         self._running("a", 1.2)
         self._running("b", 1.2)     # each is under $2, together over it
-        asyncio.run(server.enforce_credit_limits())
+        asyncio.run(server.enforce_credit_limits())  # balance used up: 5-minute grace for both
+        self.assertEqual([i["status"] for i in self.db.instances.rows], ["running", "running"])
+        self.assertTrue(all(i["credit_grace_until"] for i in self.db.instances.rows))
+        for i in self.db.instances.rows:
+            i["credit_grace_until"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        asyncio.run(server.enforce_credit_limits())  # grace over, no top-up: both stop
         self.assertEqual([i["status"] for i in self.db.instances.rows], ["terminated", "terminated"])
 
     def test_machines_under_balance_keep_running(self):

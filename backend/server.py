@@ -4031,8 +4031,25 @@ async def spendable_credits(user_id: str) -> float:
     return float(renter.get("compute_credits", 0.0)) - sum(_live_usage(i, now)[1] for i in running)
 
 
+CREDIT_GRACE_MINUTES = 5      # machines keep running this long after the balance reaches zero
+GRACE_MIN_TOPUP_MINUTES = 30  # a top-up during the grace period must cover this much more time
+
+
+def _grace_status(insts: list, remaining: float, now: datetime) -> dict:
+    """Grace-period numbers for a renter's running instances (shown on the site and in PG Connect)."""
+    until = min((i["credit_grace_until"] for i in insts if i.get("credit_grace_until")), default=None)
+    if not until:
+        return {}
+    rate = sum(float(i.get("hourly_price", 0.5) or 0) for i in insts) or 0.5
+    return {"grace_until": until,
+            "grace_seconds_left": max(0, int((datetime.fromisoformat(until) - now).total_seconds())),
+            # credits still needed so that 30 minutes are left after the grace minutes are paid for
+            "min_topup": round(max(0.01, rate * GRACE_MIN_TOPUP_MINUTES / 60 - remaining), 2)}
+
+
 async def enforce_credit_limits():
-    """Stop a renter's running instances once together they've used up the renter's balance."""
+    """Warn renters whose credits are low; at zero give them CREDIT_GRACE_MINUTES to top up (by at
+    least GRACE_MIN_TOPUP_MINUTES of time), then stop their running instances."""
     now = datetime.now(timezone.utc)
     running = await db.instances.find({"status": "running"}, {"_id": 0}).to_list(1000)
     by_user = {}
@@ -4044,11 +4061,24 @@ async def enforce_credit_limits():
             used = sum(cost for _, cost in usage.values())
             renter = await db.users.find_one({"id": user_id}) or {}
             remaining = float(renter.get("compute_credits", 0.0)) - used
-            if remaining <= 0:
+            rate = sum(float(i.get("hourly_price", 0.5) or 0) for i in insts) or 0.5
+            in_grace = any(i.get("credit_grace_until") for i in insts)
+            if in_grace:
+                if remaining >= rate * GRACE_MIN_TOPUP_MINUTES / 60:  # topped up enough: carry on
+                    for inst in insts:
+                        await db.instances.update_one({"id": inst["id"]}, {"$set": {"credit_grace_until": None, "low_credit_warned": False}})
+                elif now >= datetime.fromisoformat(_grace_status(insts, remaining, now)["grace_until"]):
+                    for inst in insts:
+                        await finish_instance(inst, usage[inst["id"]][0], usage[inst["id"]][1], now.isoformat(),
+                                              reason=f"credits ran out and weren't topped up within {CREDIT_GRACE_MINUTES} minutes")
+            elif remaining <= 0:
+                until = (now + timedelta(minutes=CREDIT_GRACE_MINUTES)).isoformat()
                 for inst in insts:
-                    await finish_instance(inst, usage[inst["id"]][0], usage[inst["id"]][1], now.isoformat(), reason="credits ran out")
+                    await db.instances.update_one({"id": inst["id"]}, {"$set": {"credit_grace_until": until}})
+                if renter.get("email"):
+                    spawn(emailer.credits_zero(renter["email"], renter.get("name", "there"), CREDIT_GRACE_MINUTES,
+                                               round(rate * GRACE_MIN_TOPUP_MINUTES / 60 - remaining, 2)))
             elif renter.get("email"):
-                rate = sum(float(i.get("hourly_price", 0.5) or 0) for i in insts) or 0.5
                 minutes_left = int(remaining / rate * 60)
                 unwarned = [i for i in insts if not i.get("low_credit_warned")]
                 if minutes_left <= 10 and unwarned:
@@ -4276,11 +4306,46 @@ async def gamezone_play_current(user=Depends(current_user)):
         view["credits_left"] = round(left, 2)
         view["minutes_left"] = max(0, int(left / rate * 60))
         view["low_credit"] = view["minutes_left"] <= 10
+        view.update(await credit_alert_for(user["id"]))
+        view["idle_seconds_left"] = _idle_seconds_left(inst, datetime.now(timezone.utc))
     elif inst.get("status") == "terminated":
         ended = inst.get("terminated_at") or inst.get("created_at")
         if ended and (datetime.now(timezone.utc) - datetime.fromisoformat(ended)).total_seconds() > 600:
             return {"session": None}
     return {"session": view}
+
+
+async def credit_alert_for(user_id: str) -> dict:
+    """Grace-period state of a renter's running instances ({} when there is none)."""
+    now = datetime.now(timezone.utc)
+    running = await db.instances.find({"user_id": user_id, "status": "running"}, {"_id": 0}).to_list(100)
+    if not running:
+        return {}
+    return _grace_status(running, await spendable_credits(user_id), now)
+
+
+@api.get("/credits/alert")
+async def credits_alert(user=Depends(current_user)):
+    """For the site-wide popup: is the renter in the zero-balance grace period?"""
+    return await credit_alert_for(user["id"])
+
+
+@api.get("/gamezone/sessions/{code}/status")
+async def gamezone_session_status(code: str):
+    """For PG Connect 0.1.9+ to show warnings over the stream. Only the session code is needed,
+    and it reveals nothing beyond timers and the top-up amount."""
+    code = _norm_code(code)
+    inst = await db.instances.find_one({"join_code": code, "kind": "game"}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "unknown session code")
+    out = {"status": inst.get("status"), "end_reason": inst.get("end_reason") if inst.get("status") == "terminated" else None}
+    if inst.get("status") == "running":
+        left = await spendable_credits(inst["user_id"])
+        rate = float(inst.get("hourly_price") or 0) or 1
+        out["minutes_left"] = max(0, int(left / rate * 60))
+        out.update(await credit_alert_for(inst["user_id"]))
+        out["topup_url"] = f"{emailer.SITE}/pricing"
+    return out
 
 
 @api.post("/gamezone/play/{session_id}/end")
@@ -4423,6 +4488,42 @@ async def gamezone_session_limit():
         secs, cost = _live_usage(inst, now)
         if secs >= GZ_PLAY_SESSION_HOURS * 3600:
             await finish_instance(inst, secs, cost, now.isoformat(), reason=f"reached the {GZ_PLAY_SESSION_HOURS}-hour session limit")
+            continue
+        await gamezone_idle_check(inst, now)
+
+
+GZ_IDLE_MINUTES = 10  # end a session after this long with nobody connected through PG Connect
+
+
+async def gamezone_idle_check(inst: dict, now: datetime):
+    """End a running game session nobody has been connected to for GZ_IDLE_MINUTES (never joined,
+    or PG Connect was closed without ending the session), so it doesn't eat the player's credits."""
+    if not (inst.get("vm_host") and inst.get("vm_ssh_port")):
+        return
+    connected = await asyncio.to_thread(gz_play.player_connected, inst["vm_host"], int(inst["vm_ssh_port"]))
+    if connected is None:  # VM didn't answer: don't count it against the player
+        return
+    if connected:
+        await db.instances.update_one({"id": inst["id"]}, {"$set": {"player_seen_at": now.isoformat()}})
+        return
+    since = datetime.fromisoformat(inst.get("player_seen_at") or inst.get("started_at") or now.isoformat())
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    if (now - since).total_seconds() >= GZ_IDLE_MINUTES * 60:
+        secs, cost = _live_usage(inst, now)
+        await finish_instance(inst, secs, cost, now.isoformat(),
+                              reason=f"nobody was connected through PG Connect for {GZ_IDLE_MINUTES} minutes")
+
+
+def _idle_seconds_left(inst: dict, now: datetime):
+    """Seconds until the idle stop, or None while a player is connected."""
+    seen = inst.get("player_seen_at")
+    if seen and (now - datetime.fromisoformat(seen)).total_seconds() < 150:
+        return None
+    since = datetime.fromisoformat(seen or inst.get("started_at") or now.isoformat())
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    return max(0, int(GZ_IDLE_MINUTES * 60 - (now - since).total_seconds()))
 
 
 # PG Connect's session API (contract in productify-connect docs/DESIGN.md). The session code is the
