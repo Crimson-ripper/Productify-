@@ -2110,6 +2110,7 @@ header.topbar,.footer-grid{border:0!important}
 .gz-machine input{position:absolute;opacity:0;pointer-events:none}
 .gz-machine-gpu{display:flex;align-items:center;gap:6px;font-weight:700}
 .gz-machine-gpu small{color:var(--subtle);font-weight:500}
+.gz-best{font-style:normal;font-size:11px;font-weight:700;background:var(--lime);color:var(--ink);padding:2px 6px;margin-left:4px}
 .gz-machine-meta{grid-column:1;color:var(--muted);font-size:13px}
 .gz-machine-price{grid-column:2;grid-row:1/3;align-self:center;font-weight:800;font-size:18px}
 .gz-machine-price small{font-weight:500;font-size:12px;color:var(--subtle)}

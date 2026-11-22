@@ -188,8 +188,8 @@ export default function GamezonePlay({ downloadUrl }) {
               {machines.map((m) => (
                 <label key={m.offer_id} className={`gz-machine${m.offer_id === offerId ? " on" : ""}`}>
                   <input type="radio" name="gz-machine" checked={m.offer_id === offerId} onChange={() => setOfferId(m.offer_id)} />
-                  <span className="gz-machine-gpu"><Cpu size={14} /> {m.gpu} <small>{m.vram_gb} GB</small></span>
-                  <span className="gz-machine-meta">{m.location}{m.distance_km != null ? ` · ~${m.distance_km.toLocaleString()} km` : ""} · {m.cpu_cores} cores · {m.ram_gb} GB RAM</span>
+                  <span className="gz-machine-gpu"><Cpu size={14} /> {m.gpu} <small>{m.vram_gb} GB</small>{m.recommended && <em className="gz-best">Best value</em>}</span>
+                  <span className="gz-machine-meta">{m.location}{m.ping_ms != null ? ` · ~${m.ping_ms} ms delay` : ""} · {m.cpu_cores} cores · {m.ram_gb} GB RAM</span>
                   <span className="gz-machine-price">{money(m.price)}<small>/h</small></span>
                 </label>
               ))}

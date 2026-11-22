@@ -53,6 +53,28 @@ ONSTART_LIMIT = 16000  # Vast's limit is 16384; tests keep a margin
 
 _lists, _lists_lock = {}, threading.Lock()
 
+# Hosts that failed a session's setup (no SSH keys installed, vanished, never ready; 2026-11-22: 4
+# of 6 test rentals hit one). machine_id -> unix time until which it's left out. The server loads and
+# saves this in db.gz_bad_machines so it survives restarts.
+BAD_MACHINES = {}
+DISTANCE_COST_PER_1000_KM = 0.08  # $/h a player would pay to be 1,000 km closer (ranking only)
+
+
+def is_bad(machine_id) -> bool:
+    return machine_id is not None and BAD_MACHINES.get(int(machine_id), 0) > time.time()
+
+
+def ping_estimate_ms(km):
+    """Rough round-trip time over fibre plus routing overhead; shown to players as a guide."""
+    return None if km is None else int(km / 100 * 1.5 + 10)
+
+
+def value_score(row: dict) -> float:
+    """Lower is better: hourly price plus a distance penalty (2026-11-21: 'nearest first' picked a
+    $1.90/h machine over a $0.23/h one only a little farther away)."""
+    km = row["distance_km"] if row["distance_km"] is not None else 15000
+    return round(row["price"] + DISTANCE_COST_PER_1000_KM * km / 1000, 3)
+
 
 # ---------------------------------------------------------------- machines near the player
 
@@ -71,6 +93,7 @@ def _row(o: dict, origin) -> dict:
         "location": o.get("geolocation") or "", "country": geo.country_code(o.get("geolocation") or ""),
         "distance_km": km, "down_mbps": round(o.get("inet_down") or 0), "up_mbps": round(o.get("inet_up") or 0),
         "price": price_of(o), "score": gpu_score(o.get("gpu_name")) or 0,
+        "machine_id": o.get("machine_id"), "ping_ms": ping_estimate_ms(km),
     }
 
 
@@ -85,12 +108,14 @@ def _search(countries: list) -> list:
         q["geolocation"] = {"in": countries}
     offers = vast_market._request("POST", "/bundles/", q).get("offers", [])
     return [o for o in offers if (gpu_score(o.get("gpu_name")) or 0) >= GPU_FLOOR
-            and not any(x in str(o.get("cpu_name")) for x in OLD_CPUS)]
+            and not any(x in str(o.get("cpu_name")) for x in OLD_CPUS)
+            and not is_bad(o.get("machine_id"))]
 
 
 def machines_near(country: str, origin=None, limit: int = 12) -> dict:
-    """Gaming VMs in `country`, or in the nearest countries if it has none. Nearest first, then
-    better GPU, then cheaper. Cached per country for LIST_TTL_S."""
+    """Gaming VMs in `country`, or in the nearest countries if it has none. Best value first (price
+    plus a distance penalty), then better GPU; the first one is marked recommended. Cached per
+    country for LIST_TTL_S."""
     country = (country or "").upper()[:2]
     with _lists_lock:
         hit = _lists.get(country)
@@ -107,7 +132,11 @@ def machines_near(country: str, origin=None, limit: int = 12) -> dict:
                 break
     origin = origin or geo.COUNTRIES.get(country)
     rows = [_row(o, origin) for o in offers]
-    rows.sort(key=lambda r: (r["distance_km"] if r["distance_km"] is not None else 1e9, -r["score"], r["price"]))
+    for r in rows:
+        r["value"] = value_score(r)
+    rows.sort(key=lambda r: (r["value"], -r["score"]))
+    if rows:
+        rows[0]["recommended"] = True
     data = {"country": country, "searched": used, "machines": rows[:limit], "at": time.time()}
     with _lists_lock:
         _lists[country] = {"at": time.time(), "data": data}

@@ -18,12 +18,18 @@ from gamezone import vast_play  # noqa: E402
 from tests.test_gamezone_node_sessions import _Coll as _BaseColl, _match  # noqa: E402
 
 KEY = "A" * 43 + "="
-OFFER = {"offer_id": 77, "gpu": "RTX 4070", "vram_gb": 12, "cpu": "Ryzen 9", "cpu_cores": 8, "ram_gb": 32,
+OFFER = {"offer_id": 77, "machine_id": 501, "gpu": "RTX 4070", "vram_gb": 12, "cpu": "Ryzen 9", "cpu_cores": 8, "ram_gb": 32,
          "location": "Tokyo, JP", "country": "JP", "distance_km": 5800, "down_mbps": 900, "up_mbps": 800,
          "price": 0.62, "score": 170}
 
 
 class _Coll(_BaseColl):
+    async def update_one(self, query, update, upsert=False):
+        res = await super().update_one(query, update)
+        if upsert and not res.modified_count:
+            await self.insert_one({**query, **update.get("$set", {})})
+        return res
+
     async def find_one(self, query, projection=None, sort=None):
         rows = [r for r in self.rows if _match(r, query)]
         if sort:
@@ -37,6 +43,7 @@ class _DB:
         self.instances = _Coll()
         self.rentals = _Coll()
         self.users = _Coll([{"id": "u1", "name": "Player", "email": "p@example.com", "compute_credits": credits}])
+        self.gz_bad_machines = _Coll()
 
 
 class _FakePlay:
@@ -56,6 +63,8 @@ class _FakePlay:
         return 9001
 
     def check_ready(self, host, port):
+        if self.ready == "auth-fails":
+            raise type("AuthenticationException", (Exception,), {})("Authentication failed.")
         return {"ready": self.ready, "host_key": KEY, "detail": "installing Steam"}
 
     def add_peer(self, host, port, key):
@@ -195,6 +204,28 @@ class PlayTests(unittest.TestCase):
         cur = self.c.get("/api/gamezone/play/current").json()["session"]
         self.assertTrue(cur["low_credit"])  # the page shows the top-up popup
         self.assertLessEqual(cur["minutes_left"], 10)
+
+    def test_host_that_never_accepts_our_key_fails_fast_and_is_left_out(self):
+        self.fake.ready = "auth-fails"
+        vast_play.BAD_MACHINES.clear()
+        s = self.start().json()
+        self.run_spawned()
+        cur = [r for r in self.db.instances.rows if r["id"] == s["id"]][0]
+        self.assertEqual((cur["status"], cur["cost_accumulated"]), ("terminated", 0.0))  # not charged
+        self.assertEqual(self.destroyed, [9001])
+        self.assertTrue(vast_play.is_bad(501))  # this Vast machine is left out of the list now
+        doc = self.db.gz_bad_machines.rows[0]
+        self.assertEqual(doc["machine_id"], 501)
+        vast_play.BAD_MACHINES.clear()
+
+    def test_value_ranking_prefers_cheap_and_reasonably_close(self):
+        far_cheap = {"price": 0.23, "distance_km": 5800}
+        near_pricey = {"price": 1.90, "distance_km": 4000}
+        self.assertLess(vast_play.value_score(far_cheap), vast_play.value_score(near_pricey))
+        same_price_closer = {"price": 0.30, "distance_km": 1000}
+        same_price_farther = {"price": 0.30, "distance_km": 6000}
+        self.assertLess(vast_play.value_score(same_price_closer), vast_play.value_score(same_price_farther))
+        self.assertEqual(vast_play.ping_estimate_ms(1000), 25)
 
     def test_setup_script_fits_vast_limit_and_unpacks(self):
         import base64, gzip, re

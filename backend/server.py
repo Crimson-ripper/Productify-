@@ -4302,7 +4302,8 @@ async def gamezone_play_worker(session_id: str):
     inst = await db.instances.find_one({"id": session_id}, {"_id": 0})
     if not inst:
         return
-    deadline, vid = time.time() + gz_play.SETUP_TIMEOUT_S, None
+    deadline, vid, machine_id = time.time() + gz_play.SETUP_TIMEOUT_S, None, None
+    auth_fails = 0
 
     async def wanted():
         cur = await db.instances.find_one({"id": session_id}, {"_id": 0, "status": 1})
@@ -4327,9 +4328,10 @@ async def gamezone_play_worker(session_id: str):
             except Exception:
                 await _log(session_id, f"That {row['gpu']} was taken just now; trying the next nearest machine.")
                 continue
+            machine_id = row.get("machine_id")
             await _log(session_id, f"Rented a {row['gpu']} in {row['location']}. Setting it up (usually 5-10 minutes).",
                        status="starting", vast_instance_id=vid, gpu=row["gpu"], location=row["location"],
-                       hourly_price=row["price"], base_price=row["price"])
+                       hourly_price=row["price"], base_price=row["price"], vast_machine_id=machine_id)
             break
         if not vid:
             raise RuntimeError("no machine could be rented")
@@ -4353,6 +4355,10 @@ async def gamezone_play_worker(session_id: str):
                 ready = await asyncio.to_thread(gz_play.check_ready, host, ssh_port)
             except Exception as e:
                 # 2026-11-21: this used to retry silently, so a bad server key looked like slow setup.
+                if type(e).__name__ == "AuthenticationException":
+                    auth_fails += 1
+                    if auth_fails >= 20:  # ~5 minutes: this host never installed our SSH key (2026-11-22)
+                        raise RuntimeError("the machine never accepted our SSH key")
                 why = f"Can't reach the machine yet ({type(e).__name__}: {str(e)[:80]})"
                 logger.warning(f"game {session_id}: readiness check failed: {why}")
                 await db.instances.update_one({"id": session_id}, {"$set": {"setup_detail": why}})
@@ -4378,12 +4384,36 @@ async def gamezone_play_worker(session_id: str):
         raise RuntimeError("setup took too long")
     except Exception as e:
         logger.warning(f"game {session_id} setup failed: {e}")
+        if vid and machine_id:
+            await mark_bad_machine(machine_id, str(e)[:120])
         now_iso = datetime.now(timezone.utc).isoformat()
         await db.instances.update_one({"id": session_id, "status": {"$in": ["finding", "starting"]}}, {"$set": {
             "status": "terminated", "terminated_at": now_iso, "end_reason": "setup failed", "cost_accumulated": 0.0},
             "$push": {"logs": f"[{now_iso[:19]}] We couldn't get a machine ready. You haven't been charged. Please try again."}})
         if vid:
             await drop(vid)
+
+
+async def mark_bad_machine(machine_id, reason: str):
+    """Leave a Vast host out of the Gamezone list after it failed a session's setup: 24 h, or 7 days
+    if it failed before within 30 days (2026-11-22)."""
+    now = time.time()
+    doc = await db.gz_bad_machines.find_one({"machine_id": int(machine_id)}, {"_id": 0}) or {}
+    recent = [t for t in doc.get("failures", []) if t > now - 30 * 86400] + [now]
+    until = now + (7 * 86400 if len(recent) >= 2 else 86400)
+    await db.gz_bad_machines.update_one({"machine_id": int(machine_id)}, {"$set": {
+        "machine_id": int(machine_id), "failures": recent[-10:], "until": until, "reason": reason}}, upsert=True)
+    gz_play.BAD_MACHINES[int(machine_id)] = until
+    gz_play._lists.clear()  # drop cached lists that may still show it
+    logger.warning(f"gamezone: leaving Vast machine {machine_id} out until {datetime.fromtimestamp(until, timezone.utc):%Y-%m-%d %H:%M} ({reason})")
+
+
+async def load_bad_machines():
+    try:
+        async for d in db.gz_bad_machines.find({"until": {"$gt": time.time()}}, {"_id": 0}):
+            gz_play.BAD_MACHINES[int(d["machine_id"])] = float(d["until"])
+    except Exception as e:
+        logger.warning(f"couldn't load the Gamezone bad-host list: {e}")
 
 
 async def gamezone_session_limit():
@@ -5711,6 +5741,7 @@ async def startup():
     asyncio.create_task(credit_limit_loop())
     asyncio.create_task(gpu_watch_loop())
     asyncio.create_task(recover_partner_orders())
+    asyncio.create_task(load_bad_machines())
     asyncio.create_task(vast_reaper_loop())
 
 
