@@ -4580,6 +4580,9 @@ async def gamezone_connect(code: str, data: Optional[GzConnectInput] = None):
         "app": {"name": gz_play.LAUNCHERS.get(inst.get("launcher"), "Steam"),
                 "choices": list(gz_play.LAUNCHERS.values())},
         "network": gz_play.tunnel(inst["vm_host"], inst["wg_port"], inst["wg_host_key"]),
+        # PG Connect 0.2.0's Session panel
+        "machine": {"gpu": inst.get("gpu") or "", "location": inst.get("location") or "",
+                    "hourly_price": float(inst.get("hourly_price") or 0)},
     }
 
 
