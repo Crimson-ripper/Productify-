@@ -16,7 +16,7 @@ import { track } from "@/lib/analytics";
 // indie games (2026-11-21). Players bring their own Steam/Epic games via the play panel above.
 const SHOW_GAME_LIBRARY = false;
 
-const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.1.9/PGConnect-Setup-0.1.9-x64.msi";
+const PG_CONNECT_DOWNLOAD_URL = "https://github.com/Crimson-ripper/PG-Connect/releases/download/pfy-v0.2.0/PGConnect-Setup-0.2.0-x64.msi";
 
 export default function Gamezone() {
   const { user } = useAuth();
