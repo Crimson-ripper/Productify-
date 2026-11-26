@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import ImageUpload from "@/components/ImageUpload";
 import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
 import { toast } from "sonner";
+import { MARKETPLACE_ENABLED } from "@/lib/features";
 
 const CATS = ["Software", "Design", "Development", "Creative"];
 const REASON_LABEL = { illegal: "Illegal", infringing: "IP infringement", malware: "Malware", scam: "Scam", csam: "CSAM", other: "Other" };
@@ -231,7 +232,7 @@ export default function SellerDashboard() {
     offlineMachines.length > 0 && { text: `${offlineMachines.length} live machine${offlineMachines.length === 1 ? " is" : "s are"} offline, so renters can't use ${offlineMachines.length === 1 ? "it" : "them"}.`, action: { label: "Fix", onClick: () => setSection("machines") } },
     openReports > 0 && { text: `${openReports} open report${openReports === 1 ? "" : "s"} on your listings.`, action: { label: "Review", onClick: () => setSection("reports") } },
     !hasPayoutMethod && wallet && { text: "Add a bank, PayPal or UPI account so you can withdraw earnings.", action: { label: "Add", onClick: () => setSection("earnings") } },
-    listingsLoaded && !listings.products.length && !listings.rentals.length && { text: "You haven't listed anything yet.", action: { label: "Create a listing", onClick: () => { setSection("listings"); setNewListing("product"); } } },
+    listingsLoaded && !listings.products.length && !listings.rentals.length && { text: "You haven't listed anything yet.", action: { label: "Create a listing", onClick: () => { setSection("listings"); if (MARKETPLACE_ENABLED) setNewListing("product"); } } },
   ].filter(Boolean);
 
   const overview = (
@@ -350,9 +351,9 @@ export default function SellerDashboard() {
 
   const listingsSection = (
     <>
-      {newListing === "product" && productForm}
+      {MARKETPLACE_ENABLED && newListing === "product" && productForm}
       {gpuPanel}
-      <Panel
+      {MARKETPLACE_ENABLED && (<Panel
         title="Products"
         flush
         actions={!newListing && <button className="secondary-button" onClick={() => setNewListing("product")}><Plus size={14} /> Add a product</button>}
@@ -376,7 +377,7 @@ export default function SellerDashboard() {
             </table>
           </div>
         )}
-      </Panel>
+      </Panel>)}
     </>
   );
 
@@ -621,7 +622,7 @@ export default function SellerDashboard() {
       subtitle={section === "overview" ? `${user?.storename || user?.name || ""}${user?.username ? ` · @${user.username}` : ""} · ${PLANS.find((p) => p.tier === tier)?.name || "Free"} plan` : null}
       actions={section === "overview" && (
         <>
-          <button className="secondary-button" onClick={() => { setSection("listings"); setNewListing("product"); }}><Plus size={14} /> New listing</button>
+          <button className="secondary-button" onClick={() => { setSection("listings"); if (MARKETPLACE_ENABLED) setNewListing("product"); }}><Plus size={14} /> New listing</button>
           <button className="primary-button" onClick={() => setSection("earnings")}>Withdraw</button>
         </>
       )}

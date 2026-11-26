@@ -26,10 +26,10 @@ Planning period: **19 Oct 2026 – 10 Jan 2027** (a validation plan, not a publi
 | Next | Blender / 3D rendering, CPU instances, remote dev workspaces | "Coming later" / register interest only |
 | Later | Full remote PCs, gaming, Adobe/Autodesk workstations | Do not advertise |
 
-**Open decision — ask the user before acting:** the live site currently describes Productify as
-"a marketplace for digital products and hourly GPU rentals" (software and templates from
-independent sellers + GPU rentals). The roadmap focuses only on GPU compute. Do **not** remove or
-hide the digital-products marketplace until the user confirms what to do with it.
+**Digital-products marketplace: paused (2026-11-26).** Shop, Sell, the bag, checkout for products
+and orders are switched off "until further notice" behind `MARKETPLACE_ENABLED` (backend env) and
+`REACT_APP_MARKETPLACE_ENABLED` (frontend build env), both off by default. Old links redirect to
+the homepage. GPU hosting in Seller Studio is unaffected. Ask the user before turning it back on.
 
 ## 3. Honesty rules for all copy and UI (non-negotiable)
 
@@ -135,6 +135,7 @@ Answers the user has already given. Don't ask these again; ask if circumstances 
 | 2026-11-17 | One working branch | **All work goes to `main`**, unfinished features behind env flags (e.g. `GZ_PLAY_ENABLED`). The `gamezone-library` preview branch is frozen: it had drifted (duplicate commits, missing main features); its only unique files (Gamezone docs, `backend/gamezone/inventory.py` + test, `vast_template/create_template.py`) were copied to main. GitHub Actions runs the backend tests and the production build on every push (`.github/workflows/ci.yml`). |
 | 2026-11-15 | Host machine prices and minimums | **Productify admins set prices, not hosts:** one hourly price per GPU model (Admin → GPU prices) plus an optional per-machine price at review. **Minimums per use:** AI/Jupyter 8 GB VRAM, 16 GB RAM, 4 cores; Basic Python 6 GB VRAM, 8 GB RAM, 4 cores; Gamezone RTX 3060 class, 16 GB RAM, 6 cores, Windows Pro + Hyper-V (disk/upload not checked yet). Machines are offered only for the uses they meet (`backend/machine_rules.py`). Ideas for later: phone app to monitor/control machines; phone verification via phone.email. |
 | 2026-11-10 | Gamezone user flow | **On-demand rental (option A), built so a warm pool can be added later; slot booking later, not for beta.** Region defaults from the player's IP and can be switched; machines nearest the player are shown. Player signs in to their own Steam/Epic; the VM is wiped and destroyed after each session; saves rely on store cloud saves. **Prices are shown** (Vast cost incl. disk × 2.05, rounded up). Low credits: popup warning plus an email asking to top up. Player picks Steam or Epic; only that launcher opens. |
+| 2026-11-26 | Shop and Sell | **Paused until further notice** (replaces the 2026-10-19 "keep it" decision). Hidden everywhere: nav, footer, dashboard, Seller Studio product parts, sitemap, pre-render; `/shop`, `/product/*`, `/sell`, `/cart`, `/checkout`, `/orders` redirect home; backend refuses new products and product checkouts and returns no products/orders. Past buyers' orders are hidden too. Re-enable with `MARKETPLACE_ENABLED=true` (Render) + `REACT_APP_MARKETPLACE_ENABLED=true` (Vercel) and re-add `/shop`, `/sell` to `public/sitemap.xml`. |
 | 2026-11-09 | PG Connect download on the live site | **Public now.** The live `/gamezone` page offers "Download for Windows" (latest PG Connect, with a note that WireGuard is needed until it is built in). Mac and Android apps are on hold. Next: build WireGuard into the Windows installer (DESIGN.md "phase 2"). |
 
 ## 9. Codebase notes (from the Task 0 audit)

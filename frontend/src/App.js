@@ -1,5 +1,9 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { MARKETPLACE_ENABLED } from "@/lib/features";
+
+// Shop, Sell, bag and orders are paused: their old links go to the homepage.
+const market = (page) => (MARKETPLACE_ENABLED ? page : <Navigate to="/" replace />);
 import { track } from "@/lib/analytics";
 import { Toaster } from "sonner";
 import "@/App.css";
@@ -88,18 +92,18 @@ export function AppRouter() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/security" element={<Security />} />
           <Route path="/faq" element={<Faq />} />
-          <Route path="/shop" element={<Shop />} />
+          <Route path="/shop" element={market(<Shop />)} />
           <Route path="/rentals" element={<Rentals />} />
           <Route path="/gamezone" element={<Gamezone />} />
           <Route path="/gamezone/select-host/:gameId" element={<ProtectedRoute><GameHostSelect /></ProtectedRoute>} />
           <Route path="/gamezone/session/:id" element={<ProtectedRoute><GameSession /></ProtectedRoute>} />
           <Route path="/rentals/reserve/:id" element={<ProtectedRoute><GpuRentalSpace /></ProtectedRoute>} />
           <Route path="/rental/reserve/:id" element={<ProtectedRoute><GpuRentalSpace /></ProtectedRoute>} />
-          <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/product/:id" element={market(<ProductDetail />)} />
           <Route path="/rental/:id" element={<RentalDetail />} />
-          <Route path="/sell" element={<Sell />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+          <Route path="/sell" element={market(<Sell />)} />
+          <Route path="/cart" element={market(<Cart />)} />
+          <Route path="/checkout" element={market(<ProtectedRoute><Checkout /></ProtectedRoute>)} />
           <Route path="/payment/processing" element={<ProtectedRoute><PaymentProcessing /></ProtectedRoute>} />
           <Route path="/payment/success" element={<PaymentSuccess />} />
           <Route path="/payment/cancel" element={<PaymentCancel />} />
@@ -107,7 +111,7 @@ export function AppRouter() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/register" element={<Register />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="/orders" element={market(<ProtectedRoute><Orders /></ProtectedRoute>)} />
           <Route path="/instances" element={<ProtectedRoute><MyInstances /></ProtectedRoute>} />
           <Route path="/instances/:id" element={<ProtectedRoute><InstanceDetail /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />

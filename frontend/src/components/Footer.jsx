@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { OPEN_COOKIE_SETTINGS } from "@/components/CookieBanner";
+import { MARKETPLACE_ENABLED } from "@/lib/features";
 
 export default function Footer() {
   return (
@@ -18,14 +19,16 @@ export default function Footer() {
           <Link to="/security">Security</Link>
           <Link to="/faq">FAQ</Link>
         </div>
-        <div className="footer-col">
-          <h5>Shop</h5>
-          <Link to="/shop">All products</Link>
-          <Link to="/shop?category=Software">Software</Link>
-          <Link to="/shop?category=Design">Design</Link>
-          <Link to="/shop?category=Development">Development</Link>
-          <Link to="/shop?category=Creative">Creative</Link>
-        </div>
+        {MARKETPLACE_ENABLED && (
+          <div className="footer-col">
+            <h5>Shop</h5>
+            <Link to="/shop">All products</Link>
+            <Link to="/shop?category=Software">Software</Link>
+            <Link to="/shop?category=Design">Design</Link>
+            <Link to="/shop?category=Development">Development</Link>
+            <Link to="/shop?category=Creative">Creative</Link>
+          </div>
+        )}
         <div className="footer-col">
           <h5>Compute</h5>
           <Link to="/rentals">GPU rentals</Link>
@@ -34,7 +37,7 @@ export default function Footer() {
         </div>
         <div className="footer-col">
           <h5>Sellers</h5>
-          <Link to="/sell">How selling works</Link>
+          {MARKETPLACE_ENABLED && <Link to="/sell">How selling works</Link>}
           <Link to="/seller-studio">Seller studio</Link>
           <Link to="/legal/contact">Contact</Link>
         </div>

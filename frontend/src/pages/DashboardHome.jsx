@@ -7,6 +7,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import DashboardShell, { Stat, Panel } from "@/components/DashboardShell";
 import TemplateIcon from "@/components/TemplateIcon";
 import { api, money } from "@/lib/api";
+import { MARKETPLACE_ENABLED } from "@/lib/features";
 
 const shortDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 
@@ -31,15 +32,18 @@ function BuyerDashboard({ user }) {
       eyebrow="Your account"
       title={`Hi, ${user.name.split(" ")[0]}`}
       subtitle={user.email}
-      actions={<Link to="/shop" className="secondary-button">Browse the shop</Link>}
+      actions={MARKETPLACE_ENABLED
+        ? <Link to="/shop" className="secondary-button">Browse the shop</Link>
+        : <Link to="/rentals" className="secondary-button">Browse GPU rentals</Link>}
     >
       <dl className="dash-stats">
-        <Stat label="Orders" value={orders ? orders.length : "—"} note={orders?.length ? `${money(spent)} in total` : null} />
+        {MARKETPLACE_ENABLED && <Stat label="Orders" value={orders ? orders.length : "—"} note={orders?.length ? `${money(spent)} in total` : null} />}
         <Stat label="GPU instances running" value={instances ? running.length : "—"} tone={running.length ? "good" : undefined} />
         <Stat label="Credits" value={credits == null ? "—" : Number(credits).toFixed(2)} note="for Gamezone and GPU time" />
       </dl>
 
       <div className="dash-grid">
+        {MARKETPLACE_ENABLED && (
         <Panel title="Recent orders" flush actions={<Link className="link-button" to="/orders">All orders</Link>}>
           {!orders ? <p className="dash-empty">Loading…</p> : !orders.length ? (
             <p className="dash-empty">No orders yet. <Link className="link-button" to="/shop">Find something in the shop</Link></p>
@@ -61,6 +65,7 @@ function BuyerDashboard({ user }) {
             </div>
           )}
         </Panel>
+        )}
 
         <div>
           <Panel title="GPU instances" actions={<Link className="link-button" to="/instances">All instances</Link>}>
@@ -80,7 +85,7 @@ function BuyerDashboard({ user }) {
           </Panel>
 
           <Panel title="Sell on Productify">
-            <p className="dash-clear" style={{ marginBottom: 14 }}>List digital products, or rent out a GPU you're not using. Opening a seller account is free.</p>
+            <p className="dash-clear" style={{ marginBottom: 14 }}>{MARKETPLACE_ENABLED ? "List digital products, or rent out a GPU you're not using." : "Rent out a GPU you're not using."} Opening a seller account is free.</p>
             <Link to="/seller/onboarding" className="primary-button" data-testid="tile-seller-studio">Open a seller account <ArrowRight size={15} /></Link>
           </Panel>
 

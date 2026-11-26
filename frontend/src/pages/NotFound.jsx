@@ -12,7 +12,7 @@ export default function NotFound() {
         <p>The link may be old, or the listing may have been taken down.</p>
         <div className="status-actions">
           <Link to="/" className="primary-button"><ArrowLeft size={16} /> Home</Link>
-          <Link to="/shop" className="text-button text-button-dark">Browse the shop</Link>
+          <Link to="/rentals" className="text-button text-button-dark">Browse GPU rentals</Link>
         </div>
       </section>
     </>

@@ -1167,8 +1167,17 @@ async def upgrade_seller_subscription(data: SubscriptionInput, user=Depends(curr
 
 
 # ============== PRODUCTS & RENTALS ==============
+# Digital-products marketplace (shop, sell, product orders): paused by the owner on 2026-11-26
+# "until further notice". Set MARKETPLACE_ENABLED=true to bring it back. GPU rentals and machine
+# hosting are not affected.
+MARKETPLACE_ENABLED = os.environ.get("MARKETPLACE_ENABLED", "").strip().lower() == "true"
+MARKETPLACE_PAUSED_MSG = "The shop is paused for now."
+
+
 @api.get("/products")
 async def products(q: str = "", category: str = "all", sort: str = "recent", min_price: float = 0, max_price: float = 100000):
+    if not MARKETPLACE_ENABLED:
+        return []
     query = {"approved": True, "price": {"$gte": min_price, "$lte": max_price}}
     if category != "all":
         query["category"] = category
@@ -1185,6 +1194,8 @@ async def products(q: str = "", category: str = "all", sort: str = "recent", min
 
 @api.get("/products/{pid}")
 async def product_detail(pid: str):
+    if not MARKETPLACE_ENABLED:
+        raise HTTPException(404, "Product not found")
     r = await db.products.find_one({"id": pid}, {"_id": 0})
     if not r:
         raise HTTPException(404, "Product not found")
@@ -1193,6 +1204,8 @@ async def product_detail(pid: str):
 
 @api.post("/products")
 async def create_product(data: ProductInput, user=Depends(current_user)):
+    if not MARKETPLACE_ENABLED:
+        raise HTTPException(403, MARKETPLACE_PAUSED_MSG)
     if user.get("role") not in ["seller", "admin", "sub-admin"]:
         raise HTTPException(403, "Seller access required")
     item = data.model_dump() | {
@@ -2358,6 +2371,8 @@ async def create_checkout(data: CheckoutInput, user=Depends(current_user)):
     subtotal = 0.0
     resolved_items = []
     for it in data.items:
+        if it.kind == "product" and not MARKETPLACE_ENABLED:
+            raise HTTPException(403, MARKETPLACE_PAUSED_MSG)
         if it.kind == "product":
             src = await db.products.find_one({"id": it.id, "approved": True}, {"_id": 0})
         else:
@@ -2436,11 +2451,15 @@ async def payment_status(session_id: str):
 
 @api.get("/orders")
 async def orders(user=Depends(current_user)):
+    if not MARKETPLACE_ENABLED:
+        return []
     return await db.orders.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
 
 
 @api.get("/orders/{oid}")
 async def order_detail(oid: str, user=Depends(current_user)):
+    if not MARKETPLACE_ENABLED:
+        raise HTTPException(404, "Order not found")
     o = await db.orders.find_one({"id": oid, "user_id": user["id"]}, {"_id": 0})
     if not o:
         raise HTTPException(404, "Order not found")

@@ -3,6 +3,7 @@ import { Search, ShoppingBag, UserRound, Menu, X, LogOut, LayoutDashboard, Shiel
 import { useAuth } from "@/contexts/AuthContext";
 import { useCart } from "@/contexts/CartContext";
 import { useEffect, useRef, useState } from "react";
+import { MARKETPLACE_ENABLED } from "@/lib/features";
 
 // Compute journey first, then the marketplace.
 const NAV = [
@@ -11,8 +12,10 @@ const NAV = [
   { to: "/earn-with-hardware", label: "Earn with hardware", testid: "nav-earn-link" },
 ];
 const MARKET = [
-  { to: "/shop", label: "Shop", testid: "nav-shop-link" },
-  { to: "/sell", label: "Sell", testid: "nav-sell-link" },
+  ...(MARKETPLACE_ENABLED ? [
+    { to: "/shop", label: "Shop", testid: "nav-shop-link" },
+    { to: "/sell", label: "Sell", testid: "nav-sell-link" },
+  ] : []),
   { to: "/gamezone", label: "Gamezone", testid: "nav-gamezone-link" },
 ];
 
@@ -79,10 +82,12 @@ export default function Navbar() {
             </button>
           </form>
 
-          <Link to="/cart" className="nb-icon nb-bag bag-button" data-testid="cart-button" aria-label={`Bag, ${cart.length} item${cart.length === 1 ? "" : "s"}`}>
-            <ShoppingBag size={19} />
-            {cart.length > 0 && <b>{cart.length}</b>}
-          </Link>
+          {MARKETPLACE_ENABLED && (
+            <Link to="/cart" className="nb-icon nb-bag bag-button" data-testid="cart-button" aria-label={`Bag, ${cart.length} item${cart.length === 1 ? "" : "s"}`}>
+              <ShoppingBag size={19} />
+              {cart.length > 0 && <b>{cart.length}</b>}
+            </Link>
+          )}
 
           <div className="account-wrap nb-account" ref={accountRef}>
             {user ? (
@@ -102,7 +107,7 @@ export default function Navbar() {
               <div className="account-menu" data-testid="account-menu" role="menu">
                 <div className="nb-menu-head"><b>{user.name || "Your account"}</b><small>{user.email}</small></div>
                 <Link to="/profile" role="menuitem" data-testid="menu-profile-link"><UserRound size={15} /> Profile</Link>
-                <Link to="/orders" role="menuitem" data-testid="menu-orders-link"><ShoppingBag size={15} /> Orders</Link>
+                {MARKETPLACE_ENABLED && <Link to="/orders" role="menuitem" data-testid="menu-orders-link"><ShoppingBag size={15} /> Orders</Link>}
                 <Link to="/instances" role="menuitem" data-testid="menu-instances-link"><Zap size={15} /> My instances</Link>
                 {isAdmin ? (
                   <Link to="/dashboard" role="menuitem" className="menu-admin" data-testid="menu-admin-link"><ShieldCheck size={15} /> Admin console</Link>
@@ -133,7 +138,7 @@ export default function Navbar() {
           {user ? (
             <>
               <Link to="/profile" onClick={close}>Profile</Link>
-              <Link to="/orders" onClick={close}>Orders</Link>
+              {MARKETPLACE_ENABLED && <Link to="/orders" onClick={close}>Orders</Link>}
               <Link to="/instances" onClick={close}>My instances</Link>
               <Link to="/dashboard" onClick={close} className={isAdmin ? "menu-admin" : undefined}>{isAdmin ? "Admin console" : "Dashboard"}</Link>
               <Link to="/seller-studio" onClick={close}>Seller studio</Link>

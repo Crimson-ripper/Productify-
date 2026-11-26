@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const ROUTES = [
   "/", "/rent-compute", "/earn-with-hardware", "/waitlist", "/apply",
-  "/pricing", "/security", "/faq", "/shop", "/rentals", "/sell",
+  "/pricing", "/security", "/faq", "/rentals",
   "/legal/privacy", "/legal/terms", "/legal/refunds", "/legal/cookies",
   "/legal/acceptable-use", "/legal/contact",
 ];
@@ -31,6 +31,8 @@ for (const f of [".env", ".env.production", ".env.local", ".env.production.local
   }
 }
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("REACT_APP_")) env[k] = v;
+// The shop and sell pages are only pre-rendered while the marketplace is on (lib/features.js).
+if (env.REACT_APP_MARKETPLACE_ENABLED === "true") ROUTES.push("/shop", "/sell");
 
 await build({
   entryPoints: [path.join(root, "scripts", "prerender-entry.jsx")],
