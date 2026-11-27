@@ -267,7 +267,7 @@ WG_KEY_RE = re.compile(r"[A-Za-z0-9+/]{43}=")
 def add_peer(host: str, ssh_port: int, client_key: str) -> None:
     if not WG_KEY_RE.fullmatch(client_key or ""):
         raise ValueError("invalid WireGuard key")
-    rc, out = run(host, ssh_port, f"/usr/local/sbin/gamezone-wg-peer add {shlex.quote(client_key)} && {SUNSHINE_HEAL}", 60)
+    rc, out = run(host, ssh_port, f"/usr/local/sbin/gamezone-wg-peer add {shlex.quote(client_key)} && {SUNSHINE_UNPAIR} && {SUNSHINE_HEAL}", 60)
     if rc != 0:
         raise RuntimeError(f"peer add failed: {out[-160:]}")
     if "sunshine-restarted" in out:
@@ -278,6 +278,14 @@ def add_peer(host: str, ssh_port: int, client_key: str) -> None:
 # while HTTP still works, so every later pairing times out. Without a client certificate a healthy
 # port refuses the TLS handshake at once (curl exits non-zero quickly); a hung one times out (28).
 # On a timeout, restart Sunshine inside the kiosk user's X session before PG Connect pairs.
+# 2026-11-27: PG Connect pairs again on every join with the same client certificate, and Sunshine
+# 2026.914+ refuses a certificate that matches more than one saved pairing ("Client certificate
+# identity is not enabled"), so the second join to a reused machine always failed. One player per
+# machine: forget earlier pairings before this join pairs.
+SUNSHINE_UNPAIR = ("(set -a; . /root/gamezone-secrets; curl -sk -m 5 -o /dev/null -u \"$SUNSHINE_USER:$SUNSHINE_PASS\" "
+                   "-X POST https://localhost:47990/api/clients/unpair-all; true)")
+
+
 # The E2E image runs the kiosk (X + Sunshine) as the systemd unit gamezone-kiosk: restart that instead.
 SUNSHINE_HEAL = (
     "curl -sk -m 4 -o /dev/null https://localhost:47984/serverinfo; rc=$?; "

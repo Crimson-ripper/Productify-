@@ -131,6 +131,18 @@ class SubmitPinCommandTests(unittest.TestCase):
         self.assertIn('"pairing_id"', cmd)
         self.assertIn(f"{vast_play.WG_NET}.2", cmd)
 
+    def test_join_forgets_earlier_pairings(self):
+        # Same certificate paired twice = refused by Sunshine 2026.914 ("identity is not enabled").
+        seen = []
+        orig = vast_play.run
+        vast_play.run = lambda host, port, cmd, timeout=60: seen.append(cmd) or (0, "")
+        try:
+            vast_play.add_peer("203.0.113.9", 22, KEY)
+        finally:
+            vast_play.run = orig
+        cmd = seen[0]
+        self.assertLess(cmd.index("gamezone-wg-peer add"), cmd.index("/api/clients/unpair-all"))
+
 
 if __name__ == "__main__":
     unittest.main()
