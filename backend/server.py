@@ -4359,7 +4359,7 @@ async def gamezone_session_status(code: str):
     if not inst:
         raise HTTPException(404, "unknown session code")
     out = {"status": inst.get("status"), "end_reason": inst.get("end_reason") if inst.get("status") == "terminated" else None}
-    if inst.get("status") == "running":
+    if inst.get("status") == "running" and not inst.get("test_machine"):  # test codes: no credit timers
         left = await spendable_credits(inst["user_id"])
         rate = float(inst.get("hourly_price") or 0) or 1
         out["minutes_left"] = max(0, int(left / rate * 60))

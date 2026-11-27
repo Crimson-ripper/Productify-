@@ -98,6 +98,13 @@ class TestMachineTests(unittest.TestCase):
         self.assertEqual(doc["status"], "running")
         self.assertFalse(doc.get("credit_grace_until"))
 
+    def test_status_has_no_credit_timers(self):
+        code = self.create().json()["join_code"]
+        j = self.c.get(f"/api/gamezone/sessions/{code}/status").json()
+        self.assertEqual(j["status"], "running")
+        self.assertNotIn("minutes_left", j)
+        self.assertNotIn("grace_seconds_left", j)
+
     def test_end_retires_the_code_and_disconnects(self):
         s = self.create().json()
         r = self.c.post(f"/api/admin/gamezone/test-sessions/{s['id']}/end")
