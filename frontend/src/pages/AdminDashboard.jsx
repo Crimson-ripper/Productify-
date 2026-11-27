@@ -30,6 +30,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell, { Stat, Panel, Attention } from "@/components/DashboardShell";
 import AdminCleanup from "@/components/AdminCleanup";
 import AdminGpuPrices from "@/components/AdminGpuPrices";
+import AdminGzTestMachines from "@/components/AdminGzTestMachines";
 import { AdminActivity, AdminOrders, AdminMachines, AdminInstances, AdminLeads } from "@/components/AdminData";
 import { toast } from "sonner";
 
@@ -470,8 +471,9 @@ export default function AdminDashboard() {
     { key: "users", label: "Users", icon: Users },
     { key: "catalog", label: "Catalog", icon: Search },
     { key: "gamezone", label: "Gamezone", icon: Gamepad2 },
+    { key: "gz-test", label: "Gamezone test codes", icon: Gamepad2 },
   ];
-  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone", orders: "Orders", machines: "Machines", "gpu-prices": "GPU prices", instances: "GPU instances" };
+  const sectionTitle = { overview: "Overview", users: "Users", reviews: "Review queue", payouts: "Payouts", catalog: "Catalog", reports: "Reports", gamezone: "Gamezone", orders: "Orders", machines: "Machines", "gpu-prices": "GPU prices", instances: "GPU instances", "gz-test": "Gamezone test codes" };
   const attention = [
     stats.pending_reviews_count > 0 && { text: `${stats.pending_reviews_count} listing${stats.pending_reviews_count === 1 ? "" : "s"} waiting for review (${stats.pending_products_count} products, ${stats.pending_rentals_count} GPUs).`, action: { label: "Review", onClick: () => setTab("reviews") } },
     stats.pending_payouts_count > 0 && { text: `${stats.pending_payouts_count} withdrawal request${stats.pending_payouts_count === 1 ? "" : "s"} totalling ${money(stats.pending_payouts_amount)}.`, action: { label: "Decide", onClick: () => setTab("payouts") } },
@@ -1945,6 +1947,7 @@ export default function AdminDashboard() {
         {tab === "orders" && <AdminOrders />}
         {tab === "machines" && <AdminMachines />}
         {tab === "gpu-prices" && <AdminGpuPrices />}
+        {tab === "gz-test" && <AdminGzTestMachines />}
         {tab === "instances" && <AdminInstances />}
     </DashboardShell>
   );

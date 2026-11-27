@@ -278,9 +278,12 @@ def add_peer(host: str, ssh_port: int, client_key: str) -> None:
 # while HTTP still works, so every later pairing times out. Without a client certificate a healthy
 # port refuses the TLS handshake at once (curl exits non-zero quickly); a hung one times out (28).
 # On a timeout, restart Sunshine inside the kiosk user's X session before PG Connect pairs.
+# The E2E image runs the kiosk (X + Sunshine) as the systemd unit gamezone-kiosk: restart that instead.
 SUNSHINE_HEAL = (
     "curl -sk -m 4 -o /dev/null https://localhost:47984/serverinfo; rc=$?; "
-    "if [ $rc -eq 28 ]; then pkill -x sunshine; sleep 2; U=$(id -u player); "
+    "if [ $rc -eq 28 ] && systemctl -q is-enabled gamezone-kiosk 2>/dev/null; then "
+    "systemctl restart gamezone-kiosk; sleep 10; echo sunshine-restarted; "
+    "elif [ $rc -eq 28 ]; then pkill -x sunshine; sleep 2; U=$(id -u player); "
     "sudo -u player env DISPLAY=:0 HOME=/home/player XDG_RUNTIME_DIR=/run/user/$U "
     "sh -c 'nohup /usr/bin/sunshine > /tmp/sunshine.log 2>&1 &'; sleep 6; echo sunshine-restarted; fi; true"
 )
@@ -296,12 +299,18 @@ def submit_pin(host: str, ssh_port: int, pin: str, device_name: str) -> bool:
     # PIN is lost or used by the next attempt ("PIN didn't match", 2026-11-10). So submit once, only after
     # PG Connect's pairing request (a held-open HTTP call to port 47989 from the tunnel) has arrived.
     # Seen twice 0.5 s apart, so a short status request (serverinfo) on the same port doesn't count.
+    # Newer Sunshine (2026.914+, the E2E image) also wants the waiting request's pairing_id, read from
+    # GET /api/pin; older Sunshine has no such list, so the id stays empty and the old body is sent.
+    find_id = ("python3 -c 'import sys,json\ntry: d=json.load(sys.stdin)\nexcept Exception: d={}\n"
+               f"print(next((p.get(\"id\",\"\") for p in d.get(\"pairings\") or [] if p.get(\"address\")==\"{WG_NET}.2\"),\"\"))'")
     cmd = (f"hits=0; for i in $(seq 1 60); do "
            f"if ss -Htn state established '( sport = :47989 )' | grep -q '{WG_NET}.2:'; then hits=$((hits+1)); else hits=0; fi; "
            "[ $hits -ge 2 ] && break; sleep 0.5; done; "
-           "set -a; . /root/gamezone-secrets; curl -sk -u \"$SUNSHINE_USER:$SUNSHINE_PASS\" "
-           "-H 'Content-Type: application/json' "
-           f"-d '{{\"pin\":\"{pin}\",\"name\":\"{name}\"}}' https://localhost:47990/api/pin")
+           "set -a; . /root/gamezone-secrets; A=\"$SUNSHINE_USER:$SUNSHINE_PASS\"; "
+           f"ID=$(curl -sk -m 5 -u \"$A\" https://localhost:47990/api/pin 2>/dev/null | {find_id} 2>/dev/null); "
+           f"if [ -n \"$ID\" ]; then BODY='{{\"pairing_id\":\"'\"$ID\"'\",\"pin\":\"{pin}\",\"name\":\"{name}\"}}'; "
+           f"else BODY='{{\"pin\":\"{pin}\",\"name\":\"{name}\"}}'; fi; "
+           "curl -sk -u \"$A\" -H 'Content-Type: application/json' -d \"$BODY\" https://localhost:47990/api/pin")
     try:
         _, out = run(host, ssh_port, cmd, 45)
     except Exception as e:

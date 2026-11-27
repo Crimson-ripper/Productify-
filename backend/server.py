@@ -4071,6 +4071,7 @@ async def enforce_credit_limits():
     least GRACE_MIN_TOPUP_MINUTES of time), then stop their running instances."""
     now = datetime.now(timezone.utc)
     running = await db.instances.find({"status": "running"}, {"_id": 0}).to_list(1000)
+    running = [i for i in running if not i.get("test_machine")]  # never billed (Gamezone test machines)
     by_user = {}
     for inst in running:
         by_user.setdefault(inst.get("user_id"), []).append(inst)
@@ -4285,7 +4286,7 @@ async def gamezone_play_start(data: GamePlayStartInput, user=Depends(current_use
         raise HTTPException(503, "Gamezone isn't set up on this server yet.")
     if await spendable_credits(user["id"]) < MIN_CREDITS_TO_START:
         raise HTTPException(402, f"You need at least ${MIN_CREDITS_TO_START:.2f} of credits to start a session.")
-    if await db.instances.find_one({"user_id": user["id"], "kind": "game",
+    if await db.instances.find_one({"user_id": user["id"], "kind": "game", "test_machine": {"$ne": True},
                                     "status": {"$in": ["finding", "starting", "running"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "You already have a Gamezone session. End it before starting another.")
     row = gz_play.find_offer(data.offer_id)
@@ -4545,6 +4546,11 @@ def _idle_seconds_left(inst: dict, now: datetime):
     return max(0, int(GZ_IDLE_MINUTES * 60 - (now - since).total_seconds()))
 
 
+# VMs that PG Connect's join flow can stream from: Vast rentals, and E2E Networks VMs made from the
+# Gamezone E2E image (same layout: gamezone-wg-peer, /root/gamezone-secrets, wg0, the kiosk user).
+GZ_STREAM_PROVIDERS = ("vast", "e2e")
+
+
 # PG Connect's session API (contract in productify-connect docs/DESIGN.md). The session code is the
 # only credential PG Connect has; pairing state lives in memory for 10 minutes.
 GZ_PAIRINGS = {}  # code -> {"pin", "pair_token", "session_id", "device_name", "at"}
@@ -4574,7 +4580,7 @@ async def gamezone_connect(code: str, data: Optional[GzConnectInput] = None):
             "detail": "Your gaming machine is still starting. PG Connect will keep trying.", "retry_after": 30})
     if inst.get("status") != "running":
         raise HTTPException(410, "This session has ended.")
-    if inst.get("provider") != "vast":
+    if inst.get("provider") not in GZ_STREAM_PROVIDERS:
         raise HTTPException(503, "Streaming from Productify Node machines isn't ready yet. Your session is running and you can stop it from the website.")
     data = data or GzConnectInput()
     try:
@@ -4621,7 +4627,7 @@ async def gamezone_pairing(code: str, data: GzSessionCallInput):
     if not secrets.compare_digest(data.pair_token, p["pair_token"]):
         raise HTTPException(403, "bad pair token")
     inst = await db.instances.find_one({"join_code": code, "kind": "game", "status": "running"}, {"_id": 0})
-    if not inst or inst.get("provider") != "vast":
+    if not inst or inst.get("provider") not in GZ_STREAM_PROVIDERS:
         raise HTTPException(410, "This session has ended.")
     spawn(asyncio.to_thread(gz_play.submit_pin, inst["vm_host"], inst["vm_ssh_port"], p["pin"], p["device_name"]))
     return JSONResponse(status_code=202, content={"status": "submitting"})
@@ -4635,6 +4641,92 @@ async def gamezone_events(code: str, data: GzSessionCallInput):
         raise HTTPException(404, "unknown session")
     logger.info(f"gamezone session event {data.event!r} {data.detail[:120]}")
     return JSONResponse(status_code=202, content={"status": "ok"})
+
+
+# ---------- Gamezone test machines (2026-11-27) ----------
+# A VM we already run outside the rental flow (e.g. an E2E Networks image-build VM) gets a PG Connect
+# session code, so a tester joins with the code alone: PG Connect's built-in tunnel, automatic
+# pairing, then Steam. Never billed (price 0), never destroyed by Productify, no time or idle limit.
+# The VM must have the Gamezone image layout and accept the backend's Gamezone SSH key.
+class GzTestMachineInput(BaseModel):
+    host: str = Field(min_length=7, max_length=15)  # public IPv4
+    ssh_port: int = Field(22, ge=1, le=65535)
+    wg_port: int = Field(51820, ge=1, le=65535)
+    gpu: str = Field("", max_length=40)
+    location: str = Field("", max_length=60)
+    launcher: str = Field("steam", max_length=10)
+
+
+def _test_session_view(inst: dict) -> dict:
+    out = {k: inst.get(k) for k in ("id", "join_code", "status", "gpu", "location", "launcher", "vm_host", "created_at")}
+    out["connect_url"] = f"productify://connect?code={inst['join_code']}"
+    return out
+
+
+@api.get("/admin/gamezone/test-sessions")
+async def admin_list_test_sessions(user=Depends(current_user)):
+    require_admin(user)
+    rows = await db.instances.find({"test_machine": True, "status": "running"}, {"_id": 0}).to_list(50)
+    return [_test_session_view(i) for i in rows]
+
+
+@api.post("/admin/gamezone/test-sessions")
+async def admin_create_test_session(data: GzTestMachineInput, user=Depends(current_user)):
+    require_admin(user)
+    import ipaddress
+    try:
+        ip = ipaddress.IPv4Address(data.host.strip())
+    except ValueError:
+        raise HTTPException(400, "Enter the machine's public IPv4 address.")
+    if not ip.is_global:
+        raise HTTPException(400, "Enter the machine's public IPv4 address.")
+    if data.launcher not in gz_play.LAUNCHERS:
+        raise HTTPException(400, "Unknown launcher.")
+    host = str(ip)
+    old = await db.instances.find_one({"test_machine": True, "status": "running", "vm_host": host}, {"_id": 0})
+    if old:
+        raise HTTPException(409, f"This machine already has session code {old['join_code']}. End it first.")
+    try:
+        ready = await asyncio.to_thread(gz_play.check_ready, host, data.ssh_port)
+    except Exception as e:
+        logger.warning(f"test machine {host}: check failed: {e}")
+        raise HTTPException(502, "Couldn't reach the machine over SSH with the Gamezone key.")
+    if not ready.get("ready"):
+        raise HTTPException(409, f"The machine isn't ready for Gamezone yet. {ready.get('detail') or ''}".strip())
+    now_iso = datetime.now(timezone.utc).isoformat()
+    join_code = "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(8))
+    doc = {
+        "id": f"gt-{uuid.uuid4().hex[:10]}", "kind": "game", "provider": "e2e", "test_machine": True,
+        "join_code": join_code, "launcher": data.launcher,
+        "gpu": data.gpu.strip() or "GPU", "location": data.location.strip(),
+        "user_id": user["id"], "renter_name": user.get("name", "Admin"),
+        "template_id": "gamezone-test", "template_name": "Gamezone test machine",
+        "hourly_price": 0.0, "base_price": 0.0, "storage_price": 0.0,
+        "status": "running", "created_at": now_iso, "started_at": now_iso,
+        "total_runtime_seconds": 0, "cost_accumulated": 0.0,
+        "vm_host": host, "vm_ssh_port": data.ssh_port, "wg_port": data.wg_port, "wg_host_key": ready["host_key"],
+        "logs": [f"[{now_iso[:19]}] Test machine {host} added by {user.get('email', 'an admin')}. Not billed."],
+    }
+    await db.instances.insert_one(doc)
+    return _test_session_view(doc)
+
+
+@api.post("/admin/gamezone/test-sessions/{session_id}/end")
+async def admin_end_test_session(session_id: str, user=Depends(current_user)):
+    """Retire the session code and disconnect the tester. The VM itself keeps running."""
+    require_admin(user)
+    inst = await db.instances.find_one({"id": session_id, "test_machine": True, "status": "running"}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "No running test session with that id.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.instances.update_one({"id": session_id}, {"$set": {"status": "terminated", "terminated_at": now_iso,
+                                                                 "end_reason": "ended by an admin"}})
+    GZ_PAIRINGS.pop(inst["join_code"], None)
+    try:
+        await asyncio.to_thread(gz_play.run, inst["vm_host"], int(inst["vm_ssh_port"]), "/usr/local/sbin/gamezone-wg-peer remove-all", 30)
+    except Exception as e:
+        logger.warning(f"test session {session_id}: couldn't remove tunnel peers: {e}")
+    return {"status": "terminated"}
 
 
 @api.post("/instances/{inst_id}/exec")
