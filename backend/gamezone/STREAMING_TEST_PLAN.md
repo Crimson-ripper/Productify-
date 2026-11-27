@@ -97,6 +97,48 @@ and with Sunshine + Moonlight (A4, B1) on the same VM.
 **Conclusion so far:** Sunshine + Moonlight needs the **Vast VM template** (real virtual machine:
 uinput, own ports, Docker allowed). Containers are fine for Mode A with browser streaming (Selkies).
 
+### E2E Networks Delhi, Sunshine + PG Connect on L4 and T4 VMs (2026-11-27)
+
+VMs: 1x **L4** (`GDC3-25vCPU-110RAM-250DISK…L4…Ubuntu22`, ₹49/hr, Xeon Gold 6348) and 1x **T4**
+(`G-12vCPU-50RAM-900DISK-GDC.T4…Ubuntu22`, ₹30/hr, AMD EPYC 7542, 12 vCPU, 45 GB RAM). Image script:
+`backend/gamezone/e2e_image/bake.sh` (one-time bake, no secrets) + per-VM first boot. Client: owner's PC
+in Delhi, and a remote friend. Logs kept outside the repo (`.work/test-logs/2026-11-27-e2e/`).
+
+Fixes the E2E image needs (all in `bake.sh`):
+
+| Problem | Fix |
+|---|---|
+| Image ships a compute-only NVIDIA driver (570 on L4, 550 on T4): no X driver; Sunshine "CUDA driver version is insufficient" | Install the full **580.105.08** driver (`--kernel-module-type=open --install-libglvnd`) |
+| Sunshine: `libOpenGL.so.0: undefined symbol _glapi_tls_Current` | Reinstall Ubuntu's libglvnd packages after NVIDIA's installer |
+| Sunshine stops at "Starting system tray" | `system_tray = disabled` |
+| Mouse/keyboard ignored ("No input driver specified") | `xserver-xorg-input-libinput` + `-evdev`, then restart X |
+| Steam exits (`rm: cannot remove steam-runtime.tar.xz`), "Can't find session bus", black Big Picture (GLXBadPixmap) | App `working-dir` = player's home, run the session under `dbus-run-session`, Steam flags `-gamepadui -cef-disable-gpu -cef-disable-gpu-compositing` |
+| **Full-screen Proton games: sound but black picture** (Witcher 3) — the game flips straight to the display and X11 capture sees black | `nvidia-settings -a AllowFlipping=0` at session start |
+| Tunnel never connects on the T4 image: saved iptables firewall, `INPUT` policy DROP | Firewall script also accepts the WireGuard UDP port |
+| Ubuntu's Steam lives in `~/.steam/debian-installation` (login in `local.vdf`, `config/config.vdf`, `userdata`) | Image clean-up wipes those paths |
+| Cloud firewall | Shared security group `pfy-gz-wireguard`: only UDP 51820 inbound; Sunshine's ports are reachable only inside wg0 |
+
+Backend fixes (on main): PG Connect's join flow accepts `provider: "e2e"`; PIN submit sends the
+`pairing_id` that Sunshine 2026.914+ requires; **each join unpairs earlier clients** (PG Connect re-pairs
+with the same certificate every join, and Sunshine 2026.914 refuses a certificate saved twice — logged
+as "Client certificate identity is not enabled"); admin **test session codes** for VMs we already run.
+
+Results (owner's PC on Wi-Fi + phone tethering, Delhi → Delhi):
+
+| | L4 | T4 (720p60, 6 Mbps) | T4 (1080p60, 15 Mbps) |
+|---|---|---|---|
+| Ready for SSH after create | ~6 min | ~16 min | |
+| Full bake (driver, Sunshine, Steam pre-update, Heroic) | — | 38 min (Steam update 15 min) | |
+| Stream | Steam Big Picture, input OK | **60.35 FPS, 0.00% dropped** | **60.13 FPS, 0.00% dropped** |
+| Host encode | — | 5.9 ms | 8.1 ms |
+| Network round trip | — | 29 ms (±14) | 24 ms (±9) |
+| Game | — | Sky: smooth, sound OK, GPU 38% | Witcher 3 (2026 build, DX12 only): runs once ray tracing is off; T4 at 98%, power-capped at 70 W (clock 1080/1590 MHz) |
+
+A remote friend joined with **only a session code in PG Connect 0.2.0** (built-in tunnel, automatic
+pairing) and played. Still open: L4 image (L4 stock sold out most of the day), saved E2E images,
+on-demand E2E rentals from the website, a 120 Hz mode for fast monitors, PG Connect's stream window
+still says "Moonlight" in its title.
+
 ---
 
 ## 2. Test cases
