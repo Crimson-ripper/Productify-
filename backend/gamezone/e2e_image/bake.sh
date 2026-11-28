@@ -22,6 +22,9 @@ $A update >/dev/null 2>&1
 $A install xserver-xorg-core xserver-xorg-input-libinput xserver-xorg-input-evdev x11-xserver-utils x11-utils \
   xdotool mesa-utils openbox unclutter pulseaudio dbus-x11 ffmpeg curl wget wireguard-tools iptables \
   xvfb xauth libfuse2 > /tmp/apt1.log 2>&1; echo "apt rc=$?"
+# Heroic (Epic) is an Electron AppImage and uses the system's libraries: without these it exits at
+# "libnspr4.so: cannot open shared object file" (A40, 2026-11-28). Steam brings its own.
+$A install libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libxss1 \n  libxshmfence1 libdrm2 libxkbcommon0 libsecret-1-0 > /tmp/apt-heroic.log 2>&1; echo "heroic libs rc=$?"
 
 log "NVIDIA 580 DRIVER"
 # The E2E image ships a compute-only 570 driver: no X driver, and its CUDA is too old for Sunshine.
