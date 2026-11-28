@@ -108,7 +108,7 @@ export default function RequestGpu() {
 
       <section className="lp-section rq">
         <h1 className="rq-h1">Request a GPU</h1>
-        <p className="rq-lede">GPUs are limited, so we arrange each one for you. Book at least {opt?.lead_hours || 12} hours ahead for ₹{opt?.hourly_rate || 70}/hour, or ask at short notice for ₹{opt?.urgent_rate || 100}/hour. We'll remind you when it's ready, and you pay only then.</p>
+        <p className="rq-lede">Pick your GPU and time, and we'll have it set up for you. Book at least {opt?.lead_hours || 12} hours ahead for ₹{opt?.hourly_rate || 70}/hour, or ask at short notice for ₹{opt?.urgent_rate || 100}/hour. We'll remind you when it's ready, and you pay only then.</p>
 
         <div className="rq-grid">
           <form className="rq-form" onSubmit={submit} noValidate>

@@ -64,7 +64,7 @@ export default function NearbyMachines() {
             : data.paused ? "Showing the last list we have; new searches are paused for now."
               : `Prices are a range; you see the exact price when your machine is ready.${data.age_s != null ? ` List checked ${Math.round(data.age_s / 60)} min ago.` : ""}`}
       </p>
-      {!loading && machines.length === 0 && <p className="od-none">No machines available here right now. Try another country, or order by class below.</p>}
+      {!loading && machines.length === 0 && <p className="od-none">Reserve a GPU and we'll arrange one for you, or try another country.</p>}
       <div className="od-grid">
         {machines.map((m) => (
           <div key={m.offer_id} className="od-card">

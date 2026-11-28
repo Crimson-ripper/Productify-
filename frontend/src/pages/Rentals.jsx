@@ -86,13 +86,13 @@ export default function Rentals() {
         <div className="eyebrow">GPU rentals · live</div>
         <h1>Rent a GPU by the hour</h1>
         <p aria-live="polite">
-          {loading ? "Checking which machines are available…"
+          {loading ? "Checking machines…"
             : availableCount > 0
               ? <><b className="rx-live-count">{availableCount} GPU{availableCount === 1 ? "" : "s"} available now</b> · {rows.length} listed</>
-              : `No GPUs are available right now · ${rows.length} listed. This page updates by itself.`}
+              : "Reserve your GPU and we'll have it ready when you need it."}
         </p>
-        <p className="rx-request-note">GPUs are limited, so we arrange each one for you. ₹70/hour booked 12+ hours ahead, or ₹100/hour at short notice.</p>
-        <div className="hero-actions"><Link to="/request-gpu" className="primary-button">Request a GPU</Link></div>
+        <p className="rx-request-note">Tell us the GPU and the time. We set it up, remind you when it's ready, and you pay only then. <b>₹70/hour</b> when you book 12+ hours ahead, or <b>₹100/hour</b> when you need it within the hour.</p>
+        <div className="hero-actions"><Link to="/request-gpu" className="primary-button">Reserve your GPU</Link></div>
         <CreditBalance />
       </section>
 
@@ -145,7 +145,9 @@ export default function Rentals() {
           <div className="empty-block">
             {filtered && rows.length > 0
               ? <>No machines match those filters right now. <button type="button" className="rx-link" onClick={() => setSp(new URLSearchParams(), { replace: true })}>Clear filters</button></>
-              : "No machines match that search."}
+              : rows.length === 0
+                ? <>Every GPU is arranged on request. <Link to="/request-gpu" className="rx-link">Reserve yours</Link> and we'll have it ready at your time.</>
+                : "No machines match that search."}
           </div>
         ) : (
           <div className="rental-grid">
