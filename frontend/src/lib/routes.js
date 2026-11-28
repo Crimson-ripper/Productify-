@@ -10,4 +10,5 @@ export const ROUTES = {
   contact: "/legal/contact",
   privacy: "/legal/privacy",
   rentals: "/rentals",
+  requestGpu: "/request-gpu",
 };

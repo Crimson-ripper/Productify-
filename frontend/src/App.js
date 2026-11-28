@@ -23,6 +23,7 @@ import Security from "@/pages/Security";
 import Faq from "@/pages/Faq";
 import Shop from "@/pages/Shop";
 import Rentals from "@/pages/Rentals";
+import RequestGpu from "@/pages/RequestGpu";
 import ProductDetail from "@/pages/ProductDetail";
 import RentalDetail from "@/pages/RentalDetail";
 import Sell from "@/pages/Sell";
@@ -94,6 +95,7 @@ export function AppRouter() {
           <Route path="/faq" element={<Faq />} />
           <Route path="/shop" element={market(<Shop />)} />
           <Route path="/rentals" element={<Rentals />} />
+          <Route path="/request-gpu" element={<ProtectedRoute><RequestGpu /></ProtectedRoute>} />
           <Route path="/gamezone" element={<Gamezone />} />
           <Route path="/gamezone/select-host/:gameId" element={<ProtectedRoute><GameHostSelect /></ProtectedRoute>} />
           <Route path="/gamezone/session/:id" element={<ProtectedRoute><GameSession /></ProtectedRoute>} />

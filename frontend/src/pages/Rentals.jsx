@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import SEO from "@/components/SEO";
@@ -91,7 +91,8 @@ export default function Rentals() {
               ? <><b className="rx-live-count">{availableCount} GPU{availableCount === 1 ? "" : "s"} available now</b> · {rows.length} listed</>
               : `No GPUs are available right now · ${rows.length} listed. This page updates by itself.`}
         </p>
-        {!loading && availableCount === 0 && <NotifyButton rentalId="any" label="Email me when any GPU is free" />}
+        <p className="rx-request-note">GPUs are limited, so request one at least 12 hours ahead. ₹70/hour for 4 hours or more, or ₹100 for a single hour.</p>
+        <div className="hero-actions"><Link to="/request-gpu" className="primary-button">Request a GPU</Link></div>
         <CreditBalance />
       </section>
 

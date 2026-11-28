@@ -54,12 +54,10 @@ export default function RentalDetail() {
           </dl>
           {availabilityOf(r) === "available" ? (
             <div className="detail-actions">
-              <Link to={`/rentals/reserve/${r.id}`} className="primary-button" data-testid="rental-detail-reserve-button">
-                Reserve this GPU <ArrowRight size={16} />
+              {/* Advance requests replace instant reserve (2026-11-28): supply is limited. */}
+              <Link to={`/request-gpu?gpu=${encodeURIComponent(r.gpu || "")}`} className="primary-button" data-testid="rental-detail-request-button">
+                Request this GPU <ArrowRight size={16} />
               </Link>
-              <button type="button" className="text-button text-button-dark" onClick={() => setDeployModalOpen(true)} data-testid="rental-detail-deploy-button">
-                Start an instance
-              </button>
             </div>
           ) : (
             <>

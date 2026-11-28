@@ -45,7 +45,7 @@ export default function RentCompute() {
         <h1>A GPU for your AI work</h1>
         <p>For developers, researchers and students whose laptop can't train or test the model they're working on.</p>
         <div className="hero-actions">
-          <Link to={ROUTES.waitlist} className="primary-button" {...ctaProps("rent_hero_waitlist")}>Join renter waitlist <ArrowRight size={17} /></Link>
+          <Link to={ROUTES.requestGpu} className="primary-button" {...ctaProps("rent_hero_request")}>Request a GPU <ArrowRight size={17} /></Link>
           <Link to={ROUTES.rentals} className="text-button" {...ctaProps("rent_hero_browse")}>Browse machines <ArrowRight size={15} /></Link>
         </div>
       </section>

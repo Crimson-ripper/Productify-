@@ -5891,6 +5891,9 @@ async def admin_list_active_game_sessions(user=Depends(current_user)):
     }
 
 
+import gpu_requests  # advance GPU requests (2026-11-28)
+api.include_router(gpu_requests.build_router(lambda: db, current_user, require_staff))
+
 app.include_router(api)
 DEFAULT_ORIGINS = [
     "http://localhost:3000",

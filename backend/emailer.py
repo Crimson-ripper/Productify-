@@ -148,3 +148,9 @@ async def gpu_available(to: str, gpu: str, rental_id: str):
                        _p("You asked to be told once; we won't email you about this machine again unless you ask."),
                        ("Rent it now", url)),
                f"The {gpu} you asked about is available now: {url}")
+
+
+async def gpu_request_update(to: str, name: str, subject: str, text: str):
+    url = f"{SITE}/request-gpu"
+    hi = f"Hi {name}," if name else "Hi,"
+    await send(to, subject, _layout(subject, _p(hi) + _p(text), ("Open my requests", url)), f"{hi}\n\n{text}\n\n{url}")
