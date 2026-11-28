@@ -4,8 +4,10 @@ Productify has limited GPU supply: we rent machines from a partner and lend them
 So renters request a GPU at least 12 hours ahead, our team arranges it, the renter is notified,
 pays (test mode during the beta) and then gets the access details.
 
-Prices (INR): 1-hour session = Rs 100. Longer bookings: at least 4 hours at Rs 70/hour.
-2 and 3 hour bookings are not offered. If we can't arrange the requested time, staff offer
+Prices (INR, decided 2026-11-28):
+  - Booked at least 12 hours ahead: Rs 70/hour, at least 4 hours.
+  - Short notice (start from 1 hour ahead, less than 12): Rs 100/hour, at least 1 hour.
+If we can't arrange the requested time, staff offer
 another start time, which the renter accepts or declines.
 
 Statuses:
@@ -29,9 +31,11 @@ from pydantic import BaseModel
 import emailer
 
 CURRENCY = "INR"
-HOURLY_RATE = 70          # per hour for bookings of MIN_HOURS or more
-SINGLE_HOUR_PRICE = 100   # flat price for a 1-hour session
-MIN_HOURS = 4
+HOURLY_RATE = 70          # per hour, booked LEAD_HOURS or more ahead
+URGENT_RATE = 100         # per hour, short notice (URGENT_LEAD_HOURS to LEAD_HOURS ahead)
+MIN_HOURS = 4             # minimum for advance bookings
+URGENT_MIN_HOURS = 1      # minimum for short-notice bookings
+URGENT_LEAD_HOURS = 1
 MAX_HOURS = 72
 LEAD_HOURS = 12
 NOTIFY_CHANNELS = {"email", "site", "whatsapp", "sms"}
@@ -56,14 +60,18 @@ LABEL = {
 }
 
 
-def price_for(hours: int) -> int:
-    if hours == 1:
-        return SINGLE_HOUR_PRICE
-    if hours < MIN_HOURS:
-        raise HTTPException(422, f"Book 1 hour, or at least {MIN_HOURS} hours.")
+def quote(start: datetime, hours: int) -> dict:
+    """Price a booking from how far ahead it starts. Raises 422 with a clear reason."""
+    lead = start - datetime.now(timezone.utc)
+    if lead < timedelta(hours=URGENT_LEAD_HOURS):
+        raise HTTPException(422, f"Please choose a start time at least {URGENT_LEAD_HOURS} hour from now.")
+    urgent = lead < timedelta(hours=LEAD_HOURS)
+    rate, min_h = (URGENT_RATE, URGENT_MIN_HOURS) if urgent else (HOURLY_RATE, MIN_HOURS)
+    if hours < min_h:
+        raise HTTPException(422, f"Bookings made {LEAD_HOURS}+ hours ahead are at least {MIN_HOURS} hours.")
     if hours > MAX_HOURS:
         raise HTTPException(422, f"Book at most {MAX_HOURS} hours in one request.")
-    return hours * HOURLY_RATE
+    return {"urgent": urgent, "rate": rate, "price": rate * hours}
 
 
 def parse_when(s: str) -> datetime:
@@ -74,11 +82,6 @@ def parse_when(s: str) -> datetime:
     if d.tzinfo is None:
         raise HTTPException(422, "Start time must include a time zone.")
     return d.astimezone(timezone.utc)
-
-
-def check_lead(d: datetime):
-    if d < datetime.now(timezone.utc) + timedelta(hours=LEAD_HOURS):
-        raise HTTPException(422, f"Please request at least {LEAD_HOURS} hours before you need the GPU.")
 
 
 class GpuRequestInput(BaseModel):
@@ -133,8 +136,9 @@ def build_router(db, current_user, require_staff) -> APIRouter:
 
     @r.get("/gpu-requests/options")
     async def options():
-        return {"currency": CURRENCY, "hourly_rate": HOURLY_RATE, "single_hour_price": SINGLE_HOUR_PRICE,
-                "min_hours": MIN_HOURS, "max_hours": MAX_HOURS, "lead_hours": LEAD_HOURS,
+        return {"currency": CURRENCY, "hourly_rate": HOURLY_RATE, "urgent_rate": URGENT_RATE,
+                "min_hours": MIN_HOURS, "urgent_min_hours": URGENT_MIN_HOURS, "max_hours": MAX_HOURS,
+                "lead_hours": LEAD_HOURS, "urgent_lead_hours": URGENT_LEAD_HOURS,
                 "gpus": GPU_OPTIONS, "channels": sorted(NOTIFY_CHANNELS)}
 
     @r.post("/gpu-requests")
@@ -142,8 +146,8 @@ def build_router(db, current_user, require_staff) -> APIRouter:
         if body.gpu not in GPU_OPTIONS:
             raise HTTPException(422, "Please choose a GPU from the list.")
         start = parse_when(body.start_at)
-        check_lead(start)
-        price = price_for(body.hours)
+        q = quote(start, body.hours)
+        price = q["price"]
         notify_ch = [c for c in dict.fromkeys(body.notify) if c in NOTIFY_CHANNELS]
         if not notify_ch:
             raise HTTPException(422, "Choose at least one way for us to remind you.")
@@ -156,7 +160,7 @@ def build_router(db, current_user, require_staff) -> APIRouter:
         doc = {
             "id": str(uuid.uuid4()), "user_id": user["id"], "email": user.get("email", ""),
             "name": user.get("name", ""), "gpu": body.gpu, "start_at": start.isoformat(),
-            "hours": body.hours, "price": price, "currency": CURRENCY,
+            "hours": body.hours, "price": price, "rate": q["rate"], "urgent": q["urgent"], "currency": CURRENCY,
             "notify": notify_ch, "phone": phone, "notes": (body.notes or "").strip()[:1000],
             "status": "requested", "offered_start": None, "access": "", "staff_note": "",
             "unread": False, "manual_messages": [], "created_at": now, "updated_at": now,

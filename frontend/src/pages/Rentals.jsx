@@ -91,7 +91,7 @@ export default function Rentals() {
               ? <><b className="rx-live-count">{availableCount} GPU{availableCount === 1 ? "" : "s"} available now</b> · {rows.length} listed</>
               : `No GPUs are available right now · ${rows.length} listed. This page updates by itself.`}
         </p>
-        <p className="rx-request-note">GPUs are limited, so request one at least 12 hours ahead. ₹70/hour for 4 hours or more, or ₹100 for a single hour.</p>
+        <p className="rx-request-note">GPUs are limited, so we arrange each one for you. ₹70/hour booked 12+ hours ahead, or ₹100/hour at short notice.</p>
         <div className="hero-actions"><Link to="/request-gpu" className="primary-button">Request a GPU</Link></div>
         <CreditBalance />
       </section>

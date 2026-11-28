@@ -41,3 +41,11 @@
 .rq-link{background:none;border:0;padding:0;color:var(--rq-fg2);text-decoration:underline;cursor:pointer;font:inherit;font-size:14px;justify-self:start}
 .rq-link:hover{color:var(--rq-fg)}
 .rq-access{margin:0;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Consolas,monospace;font-size:13px;color:var(--rq-fg)}
+.rq-modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:480px){.rq-modes{grid-template-columns:1fr}}
+.rq-mode{display:grid;gap:4px;text-align:left;padding:14px;background:var(--rq-in);border:1px solid var(--rq-line);color:var(--rq-fg);cursor:pointer;font:inherit}
+.rq-mode b{font-size:16px}
+.rq-mode span{font-size:13px;color:var(--rq-fg2)}
+.rq-mode em{font-style:normal;font-size:14px;font-weight:700;color:var(--rq-fg)}
+.rq-mode[aria-pressed=true]{border-color:var(--rq-acc);box-shadow:inset 0 0 0 1px var(--rq-acc)}
+.rq-mode[aria-pressed=true] em{color:var(--rq-acc)}

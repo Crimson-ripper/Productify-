@@ -54,15 +54,17 @@ class GpuRequestTests(unittest.TestCase):
         return self.c.post("/api/gpu-requests", json=body)
 
     def test_prices(self):
-        self.assertEqual(self.req(hours=1).json()["price"], 100)
         self.assertEqual(self.req(hours=4).json()["price"], 280)
         self.assertEqual(self.req(hours=10).json()["price"], 700)
-        self.assertEqual(self.req(hours=2).status_code, 422)
+        self.assertEqual(self.req(hours=1).status_code, 422)   # advance bookings: 4 hours minimum
         self.assertEqual(self.req(hours=3).status_code, 422)
 
-    def test_twelve_hour_rule(self):
-        self.assertEqual(self.req(start_at=at(11)).status_code, 422)
-        self.assertEqual(self.req(start_at=at(13)).status_code, 200)
+    def test_short_notice(self):
+        d = self.req(start_at=at(2), hours=1).json()
+        self.assertEqual((d["price"], d["urgent"], d["rate"]), (100, True, 100))
+        self.assertEqual(self.req(start_at=at(11), hours=3).json()["price"], 300)
+        self.assertFalse(self.req(start_at=at(13)).json()["urgent"])
+        self.assertEqual(self.req(start_at=at(0.5), hours=1).status_code, 422)
 
     def test_phone_needed_for_whatsapp(self):
         self.assertEqual(self.req(notify=["whatsapp"]).status_code, 422)

@@ -41,7 +41,7 @@ function Row({ r, onChange }) {
   return (
     <div style={{ border: "1px solid var(--line)", padding: 16, display: "grid", gap: 10, background: "var(--surface)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <b>{r.gpu} · {r.hours} h · {rupees(r.price)}</b>
+        <b>{r.gpu} · {r.hours} h · {rupees(r.price)}{r.urgent && <span style={{ marginLeft: 8, background: "var(--warn-bg)", color: "var(--warn-text)", padding: "2px 8px", fontSize: 12 }}>SHORT NOTICE</span>}</b>
         <span style={{ fontWeight: 700 }}>{r.status_label}</span>
       </div>
       <div style={{ fontSize: 14, color: "var(--muted)" }}>

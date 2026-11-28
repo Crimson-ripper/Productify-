@@ -26,6 +26,7 @@ export default function RequestGpu() {
   const [gpu, setGpu] = useState(params.get("gpu") || "");
   const [start, setStart] = useState(() => toLocalInput(new Date(Date.now() + 24 * 3600e3)));
   const [hours, setHours] = useState(4);
+  const [mode, setMode] = useState("ahead"); // "ahead" (12h+, Rs 70/h) | "soon" (1h+, Rs 100/h)
   const [notify, setNotify] = useState(["email", "site"]);
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -53,10 +54,22 @@ export default function RequestGpu() {
     if (rows.some((r) => r.unread)) api.post("/gpu-requests/mine/seen").catch(() => {});
   }, [rows]);
 
-  const minStart = useMemo(() => toLocalInput(new Date(Date.now() + ((opt?.lead_hours || 12) * 3600e3) + 5 * 60e3)), [opt]);
-  const price = !opt ? 0 : hours === 1 ? opt.single_hour_price : hours * opt.hourly_rate;
+  const lead = mode === "ahead" ? (opt?.lead_hours || 12) : (opt?.urgent_lead_hours || 1);
+  const minStart = useMemo(() => toLocalInput(new Date(Date.now() + lead * 3600e3 + 5 * 60e3)), [lead]);
+  const rate = mode === "ahead" ? (opt?.hourly_rate || 70) : (opt?.urgent_rate || 100);
+  const minH = mode === "ahead" ? (opt?.min_hours || 4) : (opt?.urgent_min_hours || 1);
+  const price = hours * rate;
+  const pickMode = (m) => {
+    setMode(m);
+    const l = m === "ahead" ? (opt?.lead_hours || 12) : (opt?.urgent_lead_hours || 1);
+    setStart(toLocalInput(new Date(Date.now() + (m === "ahead" ? 24 : l + 0.25) * 3600e3)));
+    const mh = m === "ahead" ? (opt?.min_hours || 4) : (opt?.urgent_min_hours || 1);
+    setHours((h) => Math.max(h, mh));
+  };
+  // A short-notice start picked 12+ hours ahead is really an advance booking, and the reverse.
+  const startLead = (new Date(start) - Date.now()) / 3600e3;
   const needsPhone = notify.includes("whatsapp") || notify.includes("sms");
-  const hourChoices = opt ? [1, ...Array.from({ length: 21 }, (_, i) => opt.min_hours + i)] : [1, 4];
+  const hourChoices = Array.from({ length: 25 - minH }, (_, i) => minH + i);
 
   const toggle = (k) => setNotify((n) => (n.includes(k) ? n.filter((x) => x !== k) : [...n, k]));
 
@@ -64,7 +77,8 @@ export default function RequestGpu() {
     e.preventDefault();
     setErr("");
     if (!notify.length) return setErr("Choose at least one way for us to remind you.");
-    if (new Date(start) < new Date(Date.now() + (opt?.lead_hours || 12) * 3600e3)) return setErr(`Please pick a start time at least ${opt?.lead_hours || 12} hours from now.`);
+    if (startLead < lead) return setErr(`Please pick a start time at least ${lead} hour${lead === 1 ? "" : "s"} from now.`);
+    if (mode === "soon" && startLead >= (opt?.lead_hours || 12)) return setErr(`That's ${opt?.lead_hours || 12}+ hours away, so choose "Book ahead" for the lower price.`);
     setBusy(true);
     try {
       await api.post("/gpu-requests", { gpu, start_at: new Date(start).toISOString(), hours, notify, phone, notes });
@@ -94,10 +108,22 @@ export default function RequestGpu() {
 
       <section className="lp-section rq">
         <h1 className="rq-h1">Request a GPU</h1>
-        <p className="rq-lede">GPUs are limited, so we arrange each one for you. Request at least {opt?.lead_hours || 12} hours before you need it. We'll remind you when it's ready, and you pay only then.</p>
+        <p className="rq-lede">GPUs are limited, so we arrange each one for you. Book at least {opt?.lead_hours || 12} hours ahead for ₹{opt?.hourly_rate || 70}/hour, or ask at short notice for ₹{opt?.urgent_rate || 100}/hour. We'll remind you when it's ready, and you pay only then.</p>
 
         <div className="rq-grid">
           <form className="rq-form" onSubmit={submit} noValidate>
+            <fieldset className="rq-field">
+              <legend>When do you need it?</legend>
+              <div className="rq-modes">
+                <button type="button" className="rq-mode" aria-pressed={mode === "ahead"} onClick={() => pickMode("ahead")}>
+                  <b>Book ahead</b><span>{opt?.lead_hours || 12}+ hours from now</span><em>₹{opt?.hourly_rate || 70}/hour · {opt?.min_hours || 4} h minimum</em>
+                </button>
+                <button type="button" className="rq-mode" aria-pressed={mode === "soon"} onClick={() => pickMode("soon")}>
+                  <b>Short notice</b><span>From {opt?.urgent_lead_hours || 1} hour from now</span><em>₹{opt?.urgent_rate || 100}/hour · {opt?.urgent_min_hours || 1} h minimum</em>
+                </button>
+              </div>
+              {mode === "soon" && <span className="rq-hint">Short-notice GPUs depend on what our partner has free. If we can't get one in time, we'll offer you another time.</span>}
+            </fieldset>
             <div className="rq-field">
               <label htmlFor="rq-gpu">GPU</label>
               <select id="rq-gpu" value={gpu} onChange={(e) => setGpu(e.target.value)}>
@@ -108,14 +134,14 @@ export default function RequestGpu() {
               <div className="rq-field">
                 <label htmlFor="rq-start">Start date and time</label>
                 <input id="rq-start" type="datetime-local" min={minStart} value={start} onChange={(e) => setStart(e.target.value)} />
-                <span className="rq-hint">At least {opt?.lead_hours || 12} hours from now. Your local time.</span>
+                <span className="rq-hint">At least {lead} hour{lead === 1 ? "" : "s"} from now. Your local time.</span>
               </div>
               <div className="rq-field">
                 <label htmlFor="rq-hours">How long</label>
                 <select id="rq-hours" value={hours} onChange={(e) => setHours(+e.target.value)}>
-                  {hourChoices.map((h) => <option key={h} value={h}>{h === 1 ? "1 hour (single session)" : `${h} hours`}</option>)}
+                  {hourChoices.map((h) => <option key={h} value={h}>{h === 1 ? "1 hour" : `${h} hours`}</option>)}
                 </select>
-                <span className="rq-hint">1 hour, or {opt?.min_hours || 4} hours or more.</span>
+                <span className="rq-hint">{minH} hour{minH === 1 ? "" : "s"} minimum. Need more than 24? Add it in the note.</span>
               </div>
             </div>
 
@@ -146,7 +172,7 @@ export default function RequestGpu() {
                 <div className="rq-hint">Price</div>
                 <div className="rq-price-val">{rupees(price)}</div>
               </div>
-              <div className="rq-hint rq-right">{hours === 1 ? "1-hour session" : `${hours} h × ${rupees(opt?.hourly_rate || 70)}/hour`}<br />You pay once it's arranged.</div>
+              <div className="rq-hint rq-right">{hours} h × {rupees(rate)}/hour{mode === "soon" ? " (short notice)" : ""}<br />You pay once it's arranged.</div>
             </div>
             {err && <p className="rq-err" role="alert">{err}</p>}
             <button type="submit" className="primary-button" disabled={busy || !opt} {...ctaProps("request_gpu_submit")}>{busy ? "Sending…" : <>Send request <ArrowRight size={17} /></>}</button>
@@ -162,7 +188,7 @@ export default function RequestGpu() {
                   <b>{r.gpu}</b>
                   <span className="rq-pill">{r.unread && <i className="rq-dot" aria-label="New update" />}{r.status_label}</span>
                 </div>
-                <div className="rq-meta">{fmtWhen(r.start_at)} · {r.hours} h · {rupees(r.price)}</div>
+                <div className="rq-meta">{fmtWhen(r.start_at)} · {r.hours} h · {rupees(r.price)}{r.urgent ? " · short notice" : ""}</div>
                 {r.status === "new_time" && r.offered_start && (
                   <div className="rq-box">
                     We couldn't arrange your original time. We can offer <b>{fmtWhen(r.offered_start)}</b> instead.
