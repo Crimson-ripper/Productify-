@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import SEO from "@/components/SEO";
@@ -17,13 +18,19 @@ const CHANNELS = [
 ];
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN");
 const fmtWhen = (iso) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+// Used until the backend answers, so the page is complete even if it's slow or unreachable.
+const DEFAULT_OPT = { currency: "INR", hourly_rate: 70, urgent_rate: 100, min_hours: 4, urgent_min_hours: 1, max_hours: 72, lead_hours: 12, urgent_lead_hours: 1,
+  gpus: ["RTX 3090", "RTX 4090", "RTX A6000", "A100 40GB", "A100 80GB", "L4", "T4", "Any available GPU"] };
 const toLocalInput = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
 export default function RequestGpu() {
   const [params] = useSearchParams();
-  const [opt, setOpt] = useState(null);
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [opt, setOpt] = useState(DEFAULT_OPT);
   const [rows, setRows] = useState([]);
-  const [gpu, setGpu] = useState(params.get("gpu") || "");
+  const [gpu, setGpu] = useState(() => (DEFAULT_OPT.gpus.includes(params.get("gpu")) ? params.get("gpu") : DEFAULT_OPT.gpus[0]));
   const [start, setStart] = useState(() => toLocalInput(new Date(Date.now() + 24 * 3600e3)));
   const [hours, setHours] = useState(4);
   const [mode, setMode] = useState("ahead"); // "ahead" (12h+, Rs 70/h) | "soon" (1h+, Rs 100/h)
@@ -45,9 +52,9 @@ export default function RequestGpu() {
     api.get("/gpu-requests/options").then((r) => {
       setOpt(r.data);
       setGpu((g) => (r.data.gpus.includes(g) ? g : r.data.gpus[0]));
-    }).catch(() => setErr("Couldn't load GPU options. Please refresh the page."));
-    load();
-  }, [load]);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => { if (user) load(); }, [user, load]);
 
   // Opening the page counts as seeing the on-site reminders.
   useEffect(() => {
@@ -76,6 +83,7 @@ export default function RequestGpu() {
   const submit = async (e) => {
     e.preventDefault();
     setErr("");
+    if (!user) return navigate("/login", { state: { from: location } });
     if (!notify.length) return setErr("Choose at least one way for us to remind you.");
     if (startLead < lead) return setErr(`Please pick a start time at least ${lead} hour${lead === 1 ? "" : "s"} from now.`);
     if (mode === "soon" && startLead >= (opt?.lead_hours || 12)) return setErr(`That's ${opt?.lead_hours || 12}+ hours away, so choose "Book ahead" for the lower price.`);
@@ -175,13 +183,14 @@ export default function RequestGpu() {
               <div className="rq-hint rq-right">{hours} h × {rupees(rate)}/hour{mode === "soon" ? " (short notice)" : ""}<br />You pay once it's arranged.</div>
             </div>
             {err && <p className="rq-err" role="alert">{err}</p>}
-            <button type="submit" className="primary-button" disabled={busy || !opt} {...ctaProps("request_gpu_submit")}>{busy ? "Sending…" : <>Send request <ArrowRight size={17} /></>}</button>
+            <button type="submit" className="primary-button" disabled={busy || !opt} {...ctaProps("request_gpu_submit")}>{busy ? "Sending…" : user ? <>Send request <ArrowRight size={17} /></> : <>Sign in to send request <ArrowRight size={17} /></>}</button>
             <p className="rq-hint">Payments are in test mode during the closed beta.</p>
           </form>
 
           <div className="rq-list">
             <h2 className="rq-h2">Your requests</h2>
-            {rows.length === 0 && <p className="rq-empty">No requests yet. When you send one, it shows up here with its status.</p>}
+            {!user && !authLoading && <p className="rq-empty"><Link to="/login" state={{ from: location }} className="rq-signin">Sign in</Link> to see your requests and their status.</p>}
+            {user && rows.length === 0 && <p className="rq-empty">No requests yet. When you send one, it shows up here with its status.</p>}
             {rows.map((r) => (
               <article key={r.id} className={`rq-card st-${r.status}`}>
                 <div className="rq-card-top">

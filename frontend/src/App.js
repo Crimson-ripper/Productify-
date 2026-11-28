@@ -95,7 +95,7 @@ export function AppRouter() {
           <Route path="/faq" element={<Faq />} />
           <Route path="/shop" element={market(<Shop />)} />
           <Route path="/rentals" element={<Rentals />} />
-          <Route path="/request-gpu" element={<ProtectedRoute><RequestGpu /></ProtectedRoute>} />
+          <Route path="/request-gpu" element={<RequestGpu />} />
           <Route path="/gamezone" element={<Gamezone />} />
           <Route path="/gamezone/select-host/:gameId" element={<ProtectedRoute><GameHostSelect /></ProtectedRoute>} />
           <Route path="/gamezone/session/:id" element={<ProtectedRoute><GameSession /></ProtectedRoute>} />

@@ -49,3 +49,4 @@
 .rq-mode em{font-style:normal;font-size:14px;font-weight:700;color:var(--rq-fg)}
 .rq-mode[aria-pressed=true]{border-color:var(--rq-acc);box-shadow:inset 0 0 0 1px var(--rq-acc)}
 .rq-mode[aria-pressed=true] em{color:var(--rq-acc)}
+.rq-signin{color:var(--rq-acc);text-decoration:underline;font-weight:700}
